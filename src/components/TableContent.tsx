@@ -38,14 +38,62 @@ export function TableContent({ data, isLoading, tableName }: TableContentProps) 
     );
   }
 
-  // Parse and pretty-print JSON
-  let formattedJson: string;
+  // Parse and check if it's outline data
+  let parsed: any;
   try {
-    const parsed = JSON.parse(data);
-    formattedJson = JSON.stringify(parsed, null, 2);
+    parsed = JSON.parse(data);
   } catch {
-    formattedJson = data; // Fallback to raw data
+    parsed = null;
   }
+
+  // Render outline glyphs if this is an outline table
+  if (parsed && parsed.type === 'outline' && parsed.glyphs) {
+    return (
+      <ScrollArea className="h-[calc(100vh-320px)]">
+        <div className="p-6">
+          <div className="mb-4">
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Showing {parsed.num_glyphs} glyphs
+            </h3>
+          </div>
+          <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+            {parsed.glyphs.map((glyph: any) => (
+              <div
+                key={glyph.glyph_id}
+                className="flex flex-col items-center p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+              >
+                <svg
+                  viewBox="0 -1000 1000 1000"
+                  className="w-full h-20 mb-2"
+                >
+                  <path
+                    d={glyph.svg_path}
+                    fill="currentColor"
+                    className="text-foreground"
+                  />
+                </svg>
+                <div className="text-center">
+                  <div className="text-xs font-mono text-muted-foreground">
+                    #{glyph.glyph_id}
+                  </div>
+                  {glyph.glyph_name && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {glyph.glyph_name}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </ScrollArea>
+    );
+  }
+
+  // Otherwise show JSON
+  const formattedJson = parsed
+    ? JSON.stringify(parsed, null, 2)
+    : data;
 
   return (
     <ScrollArea className="h-[calc(100vh-320px)]">
