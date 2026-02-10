@@ -57,13 +57,19 @@ export function TableContent({ data, isLoading, tableName }: TableContentProps) 
             </h3>
           </div>
           <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
-            {parsed.glyphs.map((glyph: any) => (
+            {parsed.glyphs.map((glyph: any) => {
+              const bounds = glyph.bounds;
+              const padding = 50;
+              const viewBox = bounds
+                ? `${bounds.x_min - padding} ${-bounds.y_max - padding} ${bounds.x_max - bounds.x_min + padding * 2} ${bounds.y_max - bounds.y_min + padding * 2}`
+                : `0 ${-parsed.units_per_em} ${parsed.units_per_em} ${parsed.units_per_em}`;
+              return (
               <div
                 key={glyph.glyph_id}
                 className="flex flex-col items-center p-3 border rounded-lg hover:bg-muted/50 transition-colors"
               >
                 <svg
-                  viewBox="0 -1000 1000 1000"
+                  viewBox={viewBox}
                   className="w-full h-20 mb-2"
                 >
                   <path
@@ -83,7 +89,8 @@ export function TableContent({ data, isLoading, tableName }: TableContentProps) 
                   )}
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       </ScrollArea>
