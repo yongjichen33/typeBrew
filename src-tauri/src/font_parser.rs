@@ -1,6 +1,8 @@
 use read_fonts::{FontRef, TableProvider};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
+use std::sync::Mutex;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FontMetadata {
@@ -13,7 +15,28 @@ pub struct FontMetadata {
     pub available_tables: Vec<String>,
 }
 
-pub fn parse_font(file_path: &str) -> Result<FontMetadata, String> {
+// Cache to store parsed font bytes in memory
+pub struct FontCache {
+    cache: Mutex<HashMap<String, Vec<u8>>>,
+}
+
+impl FontCache {
+    pub fn new() -> Self {
+        Self {
+            cache: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn get(&self, path: &str) -> Option<Vec<u8>> {
+        self.cache.lock().unwrap().get(path).cloned()
+    }
+
+    pub fn insert(&self, path: String, bytes: Vec<u8>) {
+        self.cache.lock().unwrap().insert(path, bytes);
+    }
+}
+
+pub fn parse_font(file_path: &str, cache: &FontCache) -> Result<FontMetadata, String> {
     // Read font file bytes
     let bytes = fs::read(file_path)
         .map_err(|e| format!("Failed to read font file: {}", e))?;
@@ -21,6 +44,9 @@ pub fn parse_font(file_path: &str) -> Result<FontMetadata, String> {
     // Parse font with read-fonts
     let font = FontRef::new(&bytes)
         .map_err(|e| format!("Invalid font file: {:?}", e))?;
+
+    // Store a clone of bytes in cache for later use
+    cache.insert(file_path.to_string(), bytes.clone());
 
     // Extract family name from name table (NameId 1)
     let family_name = font
@@ -93,10 +119,15 @@ pub fn parse_font(file_path: &str) -> Result<FontMetadata, String> {
     })
 }
 
-pub fn get_table_content(file_path: &str, table_name: &str) -> Result<String, String> {
-    // Read font file bytes
-    let bytes = fs::read(file_path)
-        .map_err(|e| format!("Failed to read font file: {}", e))?;
+pub fn get_table_content(file_path: &str, table_name: &str, cache: &FontCache) -> Result<String, String> {
+    // Try to get bytes from cache first, otherwise read from disk
+    let bytes = cache.get(file_path).unwrap_or_else(|| {
+        fs::read(file_path).unwrap_or_default()
+    });
+
+    if bytes.is_empty() {
+        return Err(format!("Failed to read font file: {}", file_path));
+    }
 
     // Parse font
     let font = FontRef::new(&bytes)

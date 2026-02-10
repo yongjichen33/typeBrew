@@ -24,20 +24,14 @@ export function useFileUpload() {
     try {
       setIsUploading(true);
 
-      // Save the font file
-      const savedPath = await invoke<string>('save_font_file', {
-        filePath,
-        fileName,
-      });
-
       // Parse the font to get metadata
       const metadata = await invoke<FontMetadata>('parse_font_file', {
-        filePath: savedPath,
+        filePath: filePath,
       });
 
       // Navigate to font viewer with metadata
       navigate(`/font/${encodeURIComponent(fileName)}`, {
-        state: { metadata, savedPath }
+        state: { metadata, filePath }
       });
 
       toast.success(`${fileName} has been parsed successfully.`);
