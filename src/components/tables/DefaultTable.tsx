@@ -1,0 +1,27 @@
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
+
+interface DefaultTableProps {
+  tableName: string;
+  data: Record<string, unknown>;
+}
+
+export function DefaultTable({ tableName, data }: DefaultTableProps) {
+  const sizeBytes = typeof data.size_bytes === 'number' ? data.size_bytes : null;
+
+  return (
+    <ScrollArea className="h-[calc(100vh-320px)]">
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-380px)] gap-3 text-muted-foreground">
+        <Badge variant="outline" className="text-sm font-mono">
+          {tableName}
+        </Badge>
+        {sizeBytes !== null && (
+          <p className="text-sm">{sizeBytes.toLocaleString()} bytes</p>
+        )}
+        <p className="text-sm">
+          Specialized viewer not yet implemented for this table type.
+        </p>
+      </div>
+    </ScrollArea>
+  );
+}

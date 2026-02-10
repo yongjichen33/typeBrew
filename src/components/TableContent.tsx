@@ -1,7 +1,11 @@
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { GlyphGrid } from '@/components/GlyphGrid';
+import { HeadTable } from '@/components/tables/HeadTable';
+import { NameTable } from '@/components/tables/NameTable';
+import { MaxpTable } from '@/components/tables/MaxpTable';
+import { HheaTable } from '@/components/tables/HheaTable';
+import { PostTable } from '@/components/tables/PostTable';
+import { DefaultTable } from '@/components/tables/DefaultTable';
 
 interface TableContentProps {
   data: string | null;
@@ -38,7 +42,6 @@ export function TableContent({ data, isLoading, tableName }: TableContentProps) 
     );
   }
 
-  // Parse and check if it's outline data
   let parsed: any;
   try {
     parsed = JSON.parse(data);
@@ -46,77 +49,37 @@ export function TableContent({ data, isLoading, tableName }: TableContentProps) 
     parsed = null;
   }
 
-  // Render outline glyphs if this is an outline table
-  if (parsed && parsed.type === 'outline' && parsed.glyphs) {
+  if (!parsed) {
     return (
-      <ScrollArea className="h-[calc(100vh-320px)]">
-        <div className="p-6">
-          <div className="mb-4">
-            <h3 className="text-sm font-medium text-muted-foreground">
-              Showing {parsed.num_glyphs} glyphs
-            </h3>
-          </div>
-          <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
-            {parsed.glyphs.map((glyph: any) => {
-              const bounds = glyph.bounds;
-              const padding = 50;
-              const viewBox = bounds
-                ? `${bounds.x_min - padding} ${-bounds.y_max - padding} ${bounds.x_max - bounds.x_min + padding * 2} ${bounds.y_max - bounds.y_min + padding * 2}`
-                : `0 ${-parsed.units_per_em} ${parsed.units_per_em} ${parsed.units_per_em}`;
-              return (
-              <div
-                key={glyph.glyph_id}
-                className="flex flex-col items-center p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-              >
-                <svg
-                  viewBox={viewBox}
-                  className="w-full h-20 mb-2"
-                >
-                  <path
-                    d={glyph.svg_path}
-                    fill="currentColor"
-                    className="text-foreground"
-                  />
-                </svg>
-                <div className="text-center">
-                  <div className="text-xs font-mono text-muted-foreground">
-                    #{glyph.glyph_id}
-                  </div>
-                  {glyph.glyph_name && (
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {glyph.glyph_name}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-            })}
-          </div>
-        </div>
-      </ScrollArea>
+      <div className="flex items-center justify-center h-[calc(100vh-320px)] text-muted-foreground">
+        Failed to parse table data
+      </div>
     );
   }
 
-  // Otherwise show JSON
-  const formattedJson = parsed
-    ? JSON.stringify(parsed, null, 2)
-    : data;
+  // Outline tables (glyf, CFF, CFF2)
+  if (parsed.type === 'outline' && parsed.glyphs) {
+    return (
+      <GlyphGrid
+        glyphs={parsed.glyphs}
+        numGlyphs={parsed.num_glyphs}
+        unitsPerEm={parsed.units_per_em}
+      />
+    );
+  }
 
-  return (
-    <ScrollArea className="h-[calc(100vh-320px)]">
-      <SyntaxHighlighter
-        language="json"
-        style={oneDark}
-        customStyle={{
-          margin: 0,
-          borderRadius: 0,
-          background: 'transparent',
-          fontSize: '0.875rem',
-        }}
-        showLineNumbers
-      >
-        {formattedJson}
-      </SyntaxHighlighter>
-    </ScrollArea>
-  );
+  switch (tableName) {
+    case 'head':
+      return <HeadTable data={parsed} />;
+    case 'name':
+      return <NameTable data={parsed} />;
+    case 'maxp':
+      return <MaxpTable data={parsed} />;
+    case 'hhea':
+      return <HheaTable data={parsed} />;
+    case 'post':
+      return <PostTable data={parsed} />;
+    default:
+      return <DefaultTable tableName={tableName} data={parsed} />;
+  }
 }
