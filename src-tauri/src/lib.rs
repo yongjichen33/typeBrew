@@ -1,11 +1,8 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod font_parser;
+
 use std::fs;
 use std::path::PathBuf;
-
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
 
 #[tauri::command]
 fn save_font_file(file_path: String, file_name: String) -> Result<String, String> {
@@ -45,13 +42,23 @@ fn save_font_file(file_path: String, file_name: String) -> Result<String, String
     Ok(dest_path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+fn parse_font_file(file_path: String) -> Result<font_parser::FontMetadata, String> {
+    font_parser::parse_font(&file_path)
+}
+
+#[tauri::command]
+fn get_font_table(file_path: String, table_name: String) -> Result<String, String> {
+    font_parser::get_table_content(&file_path, &table_name)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![greet, save_font_file])
+        .invoke_handler(tauri::generate_handler![save_font_file, parse_font_file, get_font_table])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

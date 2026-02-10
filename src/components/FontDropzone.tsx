@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Upload, FileText } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { useFileUpload } from '@/hooks/useFileUpload';
 
 export function FontDropzone() {
   const [isDragging, setIsDragging] = useState(false);
-  const { uploadFont, handleFileDialog, isUploading, uploadedFonts } = useFileUpload();
+  const { uploadFont, handleFileDialog, isUploading } = useFileUpload();
 
   useEffect(() => {
     const webview = getCurrentWebviewWindow();
@@ -67,25 +67,6 @@ export function FontDropzone() {
         </div>
       </Card>
 
-      {uploadedFonts.length > 0 && (
-        <Card className="p-6">
-          <h4 className="text-lg font-semibold mb-4">Uploaded Fonts</h4>
-          <div className="space-y-2">
-            {uploadedFonts.map((font, index) => (
-              <div
-                key={index}
-                className="flex items-center space-x-3 p-3 bg-muted rounded-lg"
-              >
-                <FileText className="h-5 w-5 text-muted-foreground" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{font.name}</p>
-                  <p className="text-xs text-muted-foreground">{font.path}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
     </div>
   );
 }

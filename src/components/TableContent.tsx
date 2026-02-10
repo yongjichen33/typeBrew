@@ -1,0 +1,67 @@
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
+interface TableContentProps {
+  data: string | null;
+  isLoading: boolean;
+  tableName: string | null;
+}
+
+export function TableContent({ data, isLoading, tableName }: TableContentProps) {
+  if (isLoading) {
+    return (
+      <div className="p-4 space-y-2">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-5/6" />
+        <Skeleton className="h-4 w-2/3" />
+        <Skeleton className="h-4 w-4/5" />
+      </div>
+    );
+  }
+
+  if (!tableName) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-320px)] text-muted-foreground">
+        Select a table to view its contents
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-320px)] text-muted-foreground">
+        No data available
+      </div>
+    );
+  }
+
+  // Parse and pretty-print JSON
+  let formattedJson: string;
+  try {
+    const parsed = JSON.parse(data);
+    formattedJson = JSON.stringify(parsed, null, 2);
+  } catch {
+    formattedJson = data; // Fallback to raw data
+  }
+
+  return (
+    <ScrollArea className="h-[calc(100vh-320px)]">
+      <SyntaxHighlighter
+        language="json"
+        style={oneDark}
+        customStyle={{
+          margin: 0,
+          borderRadius: 0,
+          background: 'transparent',
+          fontSize: '0.875rem',
+        }}
+        showLineNumbers
+      >
+        {formattedJson}
+      </SyntaxHighlighter>
+    </ScrollArea>
+  );
+}

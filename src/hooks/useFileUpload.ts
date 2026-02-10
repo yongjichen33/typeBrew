@@ -1,16 +1,12 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
-
-interface UploadedFont {
-  name: string;
-  path: string;
-  size: number;
-}
+import type { FontMetadata } from '@/types/font';
 
 export function useFileUpload() {
-  const [uploadedFonts, setUploadedFonts] = useState<UploadedFont[]>([]);
+  const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false);
 
   const validateFontFile = (fileName: string): boolean => {
@@ -27,22 +23,26 @@ export function useFileUpload() {
 
     try {
       setIsUploading(true);
+
+      // Save the font file
       const savedPath = await invoke<string>('save_font_file', {
         filePath,
         fileName,
       });
 
-      const newFont: UploadedFont = {
-        name: fileName,
-        path: savedPath,
-        size: 0,
-      };
+      // Parse the font to get metadata
+      const metadata = await invoke<FontMetadata>('parse_font_file', {
+        filePath: savedPath,
+      });
 
-      setUploadedFonts(prev => [...prev, newFont]);
+      // Navigate to font viewer with metadata
+      navigate(`/font/${encodeURIComponent(fileName)}`, {
+        state: { metadata, savedPath }
+      });
 
-      toast.success(`${fileName} has been added to your collection.`);
+      toast.success(`${fileName} has been parsed successfully.`);
     } catch (error) {
-      toast.error(`Failed to upload ${fileName}: ${error}`);
+      toast.error(`Failed to process ${fileName}: ${error}`);
     } finally {
       setIsUploading(false);
     }
@@ -71,7 +71,6 @@ export function useFileUpload() {
   };
 
   return {
-    uploadedFonts,
     isUploading,
     uploadFont,
     handleFileDialog,
