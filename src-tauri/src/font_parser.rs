@@ -43,8 +43,8 @@ impl FontCache {
 pub struct GlyphOutline {
     pub glyph_id: u32,
     pub glyph_name: Option<String>,
-    pub svg_path: String,
-    pub advance_width: f32,
+    pub svg_path: Option<String>,
+    pub advance_width: Option<f32>,
     pub bounds: Option<GlyphBounds>,
 }
 
@@ -143,6 +143,7 @@ fn extract_glyph_outlines(bytes: &[u8]) -> Result<Vec<GlyphOutline>, String> {
 
     let mut glyph_outlines = Vec::new();
 
+
     for glyph_id in 0..num_glyphs {
         let gid = GlyphId::from(glyph_id);
 
@@ -150,6 +151,18 @@ fn extract_glyph_outlines(bytes: &[u8]) -> Result<Vec<GlyphOutline>, String> {
         let glyph_name = charmap.mappings()
             .find(|(_, mapped_gid)| *mapped_gid == gid)
             .map(|(ch, _)| format!("U+{:04X}", ch as u32));
+
+
+        if !glyph_name.is_none(){
+            glyph_outlines.push(GlyphOutline { 
+                glyph_id: glyph_id as u32,
+                glyph_name,
+                svg_path: None,
+                advance_width: None,
+                bounds: None
+            });
+            continue;
+        }
 
         // Get glyph metrics
         let advance_width = glyph_metrics.advance_width(gid).unwrap_or(0.0);
@@ -174,8 +187,8 @@ fn extract_glyph_outlines(bytes: &[u8]) -> Result<Vec<GlyphOutline>, String> {
                     glyph_outlines.push(GlyphOutline {
                         glyph_id: glyph_id as u32,
                         glyph_name,
-                        svg_path: pen.into_path(),
-                        advance_width,
+                        svg_path: Some(pen.into_path()),
+                        advance_width: Some(advance_width),
                         bounds: Some(boundingbox),
                     });
                 }

@@ -112,6 +112,7 @@ export function FontViewer() {
               data={tableData}
               isLoading={isLoading}
               tableName={selectedTable}
+              filePath={metadata?.file_path ?? null}
             />
           </CardContent>
         </Card>

@@ -11,9 +11,10 @@ interface TableContentProps {
   data: string | null;
   isLoading: boolean;
   tableName: string | null;
+  filePath: string | null;
 }
 
-export function TableContent({ data, isLoading, tableName }: TableContentProps) {
+export function TableContent({ data, isLoading, tableName, filePath }: TableContentProps) {
   if (isLoading) {
     return (
       <div className="p-4 space-y-2">
@@ -64,6 +65,7 @@ export function TableContent({ data, isLoading, tableName }: TableContentProps) 
         glyphs={parsed.glyphs}
         numGlyphs={parsed.num_glyphs}
         unitsPerEm={parsed.units_per_em}
+        filePath={filePath}
       />
     );
   }
