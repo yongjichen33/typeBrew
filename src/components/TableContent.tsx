@@ -1,4 +1,5 @@
 import { Skeleton } from '@/components/ui/skeleton';
+import { Loader2 } from 'lucide-react';
 import { GlyphGrid } from '@/components/GlyphGrid';
 import { HeadTable } from '@/components/tables/HeadTable';
 import { NameTable } from '@/components/tables/NameTable';
@@ -23,25 +24,38 @@ interface TableContentProps {
   onLoadMore: () => void;
 }
 
-export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableName, onLoadMore }: TableContentProps) {
-  if (isLoading) {
-    return (
-      <div className="p-4 space-y-2">
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-4 w-5/6" />
-        <Skeleton className="h-4 w-2/3" />
-        <Skeleton className="h-4 w-4/5" />
-      </div>
-    );
-  }
+function LoadingSkeleton() {
+  return (
+    <div className="p-4 space-y-3">
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-3/4" />
+      <Skeleton className="h-4 w-5/6" />
+      <Skeleton className="h-4 w-2/3" />
+      <Skeleton className="h-4 w-4/5" />
+    </div>
+  );
+}
 
+function LoadingSpinner() {
+  return (
+    <div className="flex flex-col items-center justify-center h-[calc(100vh-320px)] gap-3 text-muted-foreground">
+      <Loader2 className="h-8 w-8 animate-spin" />
+      <p className="text-sm">Loading table data...</p>
+    </div>
+  );
+}
+
+export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableName, onLoadMore }: TableContentProps) {
   if (!tableName) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-320px)] text-muted-foreground">
         Select a table to view its contents
       </div>
     );
+  }
+
+  if (isLoading) {
+    return <LoadingSkeleton />;
   }
 
   // Outline tables (glyf, CFF, CFF2) — parsed from binary
@@ -57,22 +71,15 @@ export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableN
     );
   }
 
+  // Data not yet available — show spinner while waiting
   if (!data) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-320px)] text-muted-foreground">
-        No data available
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   let parsed: any;
   try {
     parsed = JSON.parse(data);
   } catch {
-    parsed = null;
-  }
-
-  if (!parsed) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-320px)] text-muted-foreground">
         Failed to parse table data

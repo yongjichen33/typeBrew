@@ -100,6 +100,12 @@ export function FontViewer() {
     }
   }, [glyphState, metadata?.file_path, loadGlyphBatch]);
 
+  const handleSelectTable = useCallback((table: string) => {
+    setTableData(null);
+    setGlyphState(null);
+    setSelectedTable(table);
+  }, []);
+
   const filteredTables = metadata?.available_tables.filter(table =>
     table.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
@@ -146,7 +152,7 @@ export function FontViewer() {
             <TableList
               tables={filteredTables}
               selectedTable={selectedTable}
-              onSelectTable={setSelectedTable}
+              onSelectTable={handleSelectTable}
             />
           </CardContent>
         </Card>
