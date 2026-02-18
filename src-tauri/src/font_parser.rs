@@ -3,6 +3,7 @@ use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::{FontRef as RawFontRef, TableProvider};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::fs;
 use std::sync::Mutex;
 
@@ -17,24 +18,32 @@ pub struct FontMetadata {
     pub available_tables: Vec<String>,
 }
 
-// Cache to store parsed font bytes in memory
+// Cached extracted outlines for a font
+struct CachedOutlines {
+    outlines: Vec<GlyphOutline>,
+    units_per_em: u16,
+}
+
+// Cache to store parsed font bytes and extracted outlines in memory
 pub struct FontCache {
-    cache: Mutex<HashMap<String, Vec<u8>>>,
+    fonts: Mutex<HashMap<String, Vec<u8>>>,
+    outlines: Mutex<HashMap<String, CachedOutlines>>,
 }
 
 impl FontCache {
     pub fn new() -> Self {
         Self {
-            cache: Mutex::new(HashMap::new()),
+            fonts: Mutex::new(HashMap::new()),
+            outlines: Mutex::new(HashMap::new()),
         }
     }
 
     pub fn get(&self, path: &str) -> Option<Vec<u8>> {
-        self.cache.lock().unwrap().get(path).cloned()
+        self.fonts.lock().unwrap().get(path).cloned()
     }
 
     pub fn insert(&self, path: String, bytes: Vec<u8>) {
-        self.cache.lock().unwrap().insert(path, bytes);
+        self.fonts.lock().unwrap().insert(path, bytes);
     }
 }
 
@@ -68,7 +77,7 @@ struct SvgPathPen {
 impl SvgPathPen {
     fn new() -> Self {
         Self {
-            path: String::new(),
+            path: String::with_capacity(256),
             x_min: f32::MAX,
             x_max: f32::MIN,
             y_min: f32::MAX,
@@ -92,23 +101,23 @@ impl SvgPathPen {
 
 impl OutlinePen for SvgPathPen {
     fn move_to(&mut self, x: f32, y: f32) {
-        self.path.push_str(&format!("M{} {} ", x, -y));
+        let _ = write!(self.path, "M{} {} ", x, -y);
         self.update_bounds(x, y);
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
-        self.path.push_str(&format!("L{} {} ", x, -y));
+        let _ = write!(self.path, "L{} {} ", x, -y);
         self.update_bounds(x, y);
     }
 
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-        self.path.push_str(&format!("Q{} {} {} {} ", cx0, -cy0, x, -y));
+        let _ = write!(self.path, "Q{} {} {} {} ", cx0, -cy0, x, -y);
         self.update_bounds(cx0, cy0);
         self.update_bounds(x, y);
     }
 
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        self.path.push_str(&format!("C{} {} {} {} {} {} ", cx0, -cy0, cx1, -cy1, x, -y));
+        let _ = write!(self.path, "C{} {} {} {} {} {} ", cx0, -cy0, cx1, -cy1, x, -y);
         self.update_bounds(cx0, cy0);
         self.update_bounds(cx1, cy1);
         self.update_bounds(x, y);
@@ -134,57 +143,141 @@ fn extract_glyph_outlines(bytes: &[u8]) -> Result<Vec<GlyphOutline>, String> {
         .map_err(|e| format!("Failed to parse font: {:?}", e))?;
 
     let outlines = font.outline_glyphs();
-    let charmap = font.charmap();
     let glyph_metrics = font.glyph_metrics(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default());
 
     let num_glyphs = font.maxp()
         .map_err(|e| format!("Failed to read maxp table: {:?}", e))?
         .num_glyphs();
 
-    let mut glyph_outlines = Vec::new();
+    // Pre-build glyph_id → unicode lookup (O(n) once instead of O(n) per glyph)
+    let mut gid_to_unicode: HashMap<GlyphId, u32> = HashMap::new();
+    for (codepoint, gid) in font.charmap().mappings() {
+        gid_to_unicode.entry(gid).or_insert(codepoint);
+    }
+
+    let location = skrifa::instance::Location::default();
+    let mut glyph_outlines = Vec::with_capacity(num_glyphs as usize);
 
     for glyph_id in 0..num_glyphs {
         let gid = GlyphId::from(glyph_id);
 
-        // Try to get the glyph name from cmap
-        let glyph_name = charmap.mappings()
-            .find(|(_, mapped_gid)| *mapped_gid == gid)
-            .map(|(ch, _)| format!("U+{:04X}", ch as u32));
+        let outline = match outlines.get(gid) {
+            Some(o) => o,
+            None => continue,
+        };
 
-        // Get glyph metrics
-        let advance_width = glyph_metrics.advance_width(gid).unwrap_or(0.0);
-
-        // Try to get outline
         let mut pen = SvgPathPen::new();
-        let location = skrifa::instance::Location::default();
         let settings = DrawSettings::unhinted(skrifa::instance::Size::unscaled(), &location);
 
-        match outlines.get(gid) {
-            Some(outline) => {
-                if let Err(_) = outline.draw(settings, &mut pen) {
-                    // Skip glyphs that fail to draw
-                    continue;
-                }
-
-                // let svg_path = pen.into_path();
-                
-                // Only include glyphs that have actual paths
-                if !pen.path.is_empty() {
-                    let boundingbox = pen.bounding_box();
-                    glyph_outlines.push(GlyphOutline {
-                        glyph_id: glyph_id as u32,
-                        glyph_name,
-                        svg_path: pen.into_path(),
-                        advance_width,
-                        bounds: Some(boundingbox),
-                    });
-                }
-            }
-            None => continue,
+        if outline.draw(settings, &mut pen).is_err() {
+            continue;
         }
+
+        if pen.path.is_empty() {
+            continue;
+        }
+
+        let glyph_name = gid_to_unicode
+            .get(&gid)
+            .map(|cp| format!("U+{:04X}", cp));
+
+        let advance_width = glyph_metrics.advance_width(gid).unwrap_or(0.0);
+        let boundingbox = pen.bounding_box();
+
+        glyph_outlines.push(GlyphOutline {
+            glyph_id: glyph_id as u32,
+            glyph_name,
+            svg_path: pen.into_path(),
+            advance_width,
+            bounds: Some(boundingbox),
+        });
     }
 
     Ok(glyph_outlines)
+}
+
+// Encode glyph outlines into a compact binary format for efficient IPC transfer.
+// Format:
+//   Header: total_glyphs(u32) + batch_count(u32) + units_per_em(u16)
+//   Per glyph: glyph_id(u32) + advance_width(f32) + has_bounds(u8)
+//              + [x_min(f32) + y_min(f32) + x_max(f32) + y_max(f32)]
+//              + name_len(u16) + name_bytes + path_len(u32) + path_bytes
+fn encode_glyph_outlines_binary(outlines: &[GlyphOutline], total_glyphs: u32, units_per_em: u16) -> Vec<u8> {
+    let mut buf = Vec::new();
+
+    // Header
+    buf.extend_from_slice(&total_glyphs.to_le_bytes());
+    buf.extend_from_slice(&(outlines.len() as u32).to_le_bytes());
+    buf.extend_from_slice(&units_per_em.to_le_bytes());
+
+    for glyph in outlines {
+        buf.extend_from_slice(&glyph.glyph_id.to_le_bytes());
+        buf.extend_from_slice(&glyph.advance_width.to_le_bytes());
+
+        if let Some(ref bounds) = glyph.bounds {
+            buf.push(1);
+            buf.extend_from_slice(&bounds.x_min.to_le_bytes());
+            buf.extend_from_slice(&bounds.y_min.to_le_bytes());
+            buf.extend_from_slice(&bounds.x_max.to_le_bytes());
+            buf.extend_from_slice(&bounds.y_max.to_le_bytes());
+        } else {
+            buf.push(0);
+        }
+
+        let name_bytes = glyph.glyph_name.as_deref().unwrap_or("").as_bytes();
+        buf.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes());
+        buf.extend_from_slice(name_bytes);
+
+        let path_bytes = glyph.svg_path.as_bytes();
+        buf.extend_from_slice(&(path_bytes.len() as u32).to_le_bytes());
+        buf.extend_from_slice(path_bytes);
+    }
+
+    buf
+}
+
+pub fn get_glyph_outlines_binary(
+    file_path: &str,
+    offset: u32,
+    limit: u32,
+    cache: &FontCache,
+) -> Result<Vec<u8>, String> {
+    // Ensure outlines are extracted and cached (expensive work happens only once)
+    {
+        let has_cached = cache.outlines.lock().unwrap().contains_key(file_path);
+        if !has_cached {
+            let bytes = cache.get(file_path).unwrap_or_else(|| {
+                fs::read(file_path).unwrap_or_default()
+            });
+            if bytes.is_empty() {
+                return Err(format!("Failed to read font file: {}", file_path));
+            }
+
+            let outlines = extract_glyph_outlines(&bytes)?;
+            let font = RawFontRef::new(&bytes)
+                .map_err(|e| format!("Invalid font file: {:?}", e))?;
+            let units_per_em = font.head()
+                .ok()
+                .map(|head| head.units_per_em())
+                .unwrap_or(1000);
+
+            cache.outlines.lock().unwrap().insert(
+                file_path.to_string(),
+                CachedOutlines { outlines, units_per_em },
+            );
+        }
+    }
+
+    // Serve the requested page from cache
+    let outline_cache = cache.outlines.lock().unwrap();
+    let cached = outline_cache.get(file_path).unwrap();
+
+    let total = cached.outlines.len();
+    let start = (offset as usize).min(total);
+    let end = ((offset as usize) + (limit as usize)).min(total);
+    let page = &cached.outlines[start..end];
+
+    Ok(encode_glyph_outlines_binary(page, total as u32, cached.units_per_em))
 }
 
 pub fn parse_font(file_path: &str, cache: &FontCache) -> Result<FontMetadata, String> {
@@ -278,29 +371,6 @@ pub fn get_table_content(file_path: &str, table_name: &str, cache: &FontCache) -
 
     if bytes.is_empty() {
         return Err(format!("Failed to read font file: {}", file_path));
-    }
-
-    // Check if this is an outline table - render glyphs instead of raw data
-    if table_name == "glyf" || table_name == "CFF " || table_name == "CFF2" {
-        let outlines = extract_glyph_outlines(&bytes)
-            .map_err(|e| format!("Failed to extract outlines: {}", e))?;
-
-        // Get unitsPerEm from head table
-        let font = RawFontRef::new(&bytes)
-            .map_err(|e| format!("Invalid font file: {:?}", e))?;
-        let units_per_em = font.head()
-            .ok()
-            .map(|head| head.units_per_em())
-            .unwrap_or(1000);
-
-        return serde_json::to_string_pretty(&serde_json::json!({
-            "table": table_name,
-            "type": "outline",
-            "num_glyphs": outlines.len(),
-            "units_per_em": units_per_em,
-            "glyphs": outlines
-        }))
-        .map_err(|e| format!("Failed to serialize outline data: {}", e));
     }
 
     // Parse font

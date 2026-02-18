@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router';
 import { invoke } from '@tauri-apps/api/core';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -11,6 +11,16 @@ import { toast } from 'sonner';
 import { TableList } from '@/components/TableList';
 import { TableContent } from '@/components/TableContent';
 import type { FontMetadata } from '@/types/font';
+import { parseGlyphOutlines, type Glyph } from '@/lib/glyphParser';
+
+const OUTLINE_TABLES = ['glyf', 'CFF ', 'CFF2'];
+const GLYPH_BATCH_SIZE = 200;
+
+interface GlyphState {
+  glyphs: Glyph[];
+  totalGlyphs: number;
+  unitsPerEm: number;
+}
 
 export function FontViewer() {
   const { fontName } = useParams();
@@ -22,8 +32,20 @@ export function FontViewer() {
   );
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [tableData, setTableData] = useState<string | null>(null);
+  const [glyphState, setGlyphState] = useState<GlyphState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const loadingMoreRef = useRef(false);
+
+  const loadGlyphBatch = useCallback(async (filePath: string, offset: number) => {
+    const buffer = await invoke<ArrayBuffer>('get_glyph_outlines', {
+      filePath,
+      offset,
+      limit: GLYPH_BATCH_SIZE,
+    });
+    return parseGlyphOutlines(buffer);
+  }, []);
 
   // Load table data when selection changes
   useEffect(() => {
@@ -31,22 +53,52 @@ export function FontViewer() {
 
     const loadTableData = async () => {
       setIsLoading(true);
+      setTableData(null);
+      setGlyphState(null);
       try {
-        const data = await invoke<string>('get_font_table', {
-          filePath: metadata.file_path,
-          tableName: selectedTable,
-        });
-        setTableData(data);
+        if (OUTLINE_TABLES.includes(selectedTable)) {
+          const data = await loadGlyphBatch(metadata.file_path, 0);
+          setGlyphState({
+            glyphs: data.glyphs,
+            totalGlyphs: data.totalGlyphs,
+            unitsPerEm: data.unitsPerEm,
+          });
+        } else {
+          const data = await invoke<string>('get_font_table', {
+            filePath: metadata.file_path,
+            tableName: selectedTable,
+          });
+          setTableData(data);
+        }
       } catch (error) {
         toast.error(`Failed to load ${selectedTable} table: ${error}`);
-        setTableData(null);
       } finally {
         setIsLoading(false);
       }
     };
 
     loadTableData();
-  }, [selectedTable, metadata?.file_path]);
+  }, [selectedTable, metadata?.file_path, loadGlyphBatch]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (!glyphState || !metadata?.file_path || loadingMoreRef.current) return;
+    if (glyphState.glyphs.length >= glyphState.totalGlyphs) return;
+
+    loadingMoreRef.current = true;
+    setIsLoadingMore(true);
+    try {
+      const data = await loadGlyphBatch(metadata.file_path, glyphState.glyphs.length);
+      setGlyphState(prev => prev ? {
+        ...prev,
+        glyphs: [...prev.glyphs, ...data.glyphs],
+      } : null);
+    } catch (error) {
+      toast.error(`Failed to load more glyphs: ${error}`);
+    } finally {
+      setIsLoadingMore(false);
+      loadingMoreRef.current = false;
+    }
+  }, [glyphState, metadata?.file_path, loadGlyphBatch]);
 
   const filteredTables = metadata?.available_tables.filter(table =>
     table.toLowerCase().includes(searchQuery.toLowerCase())
@@ -110,8 +162,11 @@ export function FontViewer() {
           <CardContent className="p-0">
             <TableContent
               data={tableData}
+              glyphData={glyphState}
               isLoading={isLoading}
+              isLoadingMore={isLoadingMore}
               tableName={selectedTable}
+              onLoadMore={handleLoadMore}
             />
           </CardContent>
         </Card>

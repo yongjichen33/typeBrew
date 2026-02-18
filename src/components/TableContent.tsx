@@ -6,14 +6,24 @@ import { MaxpTable } from '@/components/tables/MaxpTable';
 import { HheaTable } from '@/components/tables/HheaTable';
 import { PostTable } from '@/components/tables/PostTable';
 import { DefaultTable } from '@/components/tables/DefaultTable';
+import type { Glyph } from '@/lib/glyphParser';
+
+interface GlyphState {
+  glyphs: Glyph[];
+  totalGlyphs: number;
+  unitsPerEm: number;
+}
 
 interface TableContentProps {
   data: string | null;
+  glyphData: GlyphState | null;
   isLoading: boolean;
+  isLoadingMore: boolean;
   tableName: string | null;
+  onLoadMore: () => void;
 }
 
-export function TableContent({ data, isLoading, tableName }: TableContentProps) {
+export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableName, onLoadMore }: TableContentProps) {
   if (isLoading) {
     return (
       <div className="p-4 space-y-2">
@@ -31,6 +41,19 @@ export function TableContent({ data, isLoading, tableName }: TableContentProps) 
       <div className="flex items-center justify-center h-[calc(100vh-320px)] text-muted-foreground">
         Select a table to view its contents
       </div>
+    );
+  }
+
+  // Outline tables (glyf, CFF, CFF2) — parsed from binary
+  if (glyphData) {
+    return (
+      <GlyphGrid
+        glyphs={glyphData.glyphs}
+        totalGlyphs={glyphData.totalGlyphs}
+        unitsPerEm={glyphData.unitsPerEm}
+        onLoadMore={onLoadMore}
+        isLoadingMore={isLoadingMore}
+      />
     );
   }
 
@@ -54,17 +77,6 @@ export function TableContent({ data, isLoading, tableName }: TableContentProps) 
       <div className="flex items-center justify-center h-[calc(100vh-320px)] text-muted-foreground">
         Failed to parse table data
       </div>
-    );
-  }
-
-  // Outline tables (glyf, CFF, CFF2)
-  if (parsed.type === 'outline' && parsed.glyphs) {
-    return (
-      <GlyphGrid
-        glyphs={parsed.glyphs}
-        numGlyphs={parsed.num_glyphs}
-        unitsPerEm={parsed.units_per_em}
-      />
     );
   }
 
