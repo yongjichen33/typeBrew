@@ -19,8 +19,8 @@ function GlyphCell({ glyph, unitsPerEm }: { glyph: Glyph; unitsPerEm: number }) 
     : `0 ${-unitsPerEm} ${unitsPerEm} ${unitsPerEm}`;
 
   return (
-    <div className="flex flex-col items-center p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-      <svg viewBox={viewBox} className="w-full h-20 mb-2">
+    <div className="flex flex-col items-center p-2 border rounded-lg hover:bg-muted/50 transition-colors">
+      <svg viewBox={viewBox} className="w-full h-12 mb-1">
         <path d={glyph.svg_path} fill="currentColor" className="text-foreground" />
       </svg>
       <div className="text-center">
@@ -66,7 +66,7 @@ export function GlyphGrid({ glyphs, totalGlyphs, unitsPerEm, onLoadMore, isLoadi
             Showing {glyphs.length} of {totalGlyphs} glyphs
           </h3>
         </div>
-        <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+        <div className="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-2">
           {glyphs.map((glyph) => (
             <GlyphCell key={glyph.glyph_id} glyph={glyph} unitsPerEm={unitsPerEm} />
           ))}

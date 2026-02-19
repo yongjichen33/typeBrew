@@ -10,7 +10,8 @@
 
 /* Tab bar header */
 .lm_header {
-  height: 32px !important;
+  height: 40px !important;
+  background: #e5e7eb !important;
 }
 
 /* Individual tabs */
@@ -18,19 +19,22 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   color: var(--muted-foreground) !important;
-  background: transparent !important;
+  background: #d1d5db !important;
   box-shadow: none !important;
-  margin-right: 0 !important;
-  padding: 4px 28px 4px 12px !important;
-  height: auto !important;
-  border-right: 1px solid var(--border);
+  margin: 6px 1px 0 !important;
+  padding: 0 32px 0 16px !important;
+  height: 34px !important;
+  line-height: 34px !important;
+  min-width: 100px !important;
+  border-radius: 6px 6px 0 0 !important;
+  border-right: none !important;
 }
 
 /* Active tab */
 .lm_header .lm_tab.lm_active {
   background: var(--background) !important;
   color: var(--foreground) !important;
-  border-bottom: 2px solid var(--primary) !important;
+  border-bottom: none !important;
   box-shadow: none !important;
 }
 
@@ -41,7 +45,7 @@
 
 /* Tab hover */
 .lm_tab:hover {
-  background: var(--accent) !important;
+  background: #e5e7eb !important;
   color: var(--accent-foreground) !important;
 }
 
@@ -111,7 +115,8 @@
 
 /* Header controls (maximize, close stack, etc.) */
 .lm_controls > * {
-  opacity: 0.4;
+  opacity: 0.6;
+  filter: invert(1) !important;
 }
 
 .lm_controls > *:hover {
