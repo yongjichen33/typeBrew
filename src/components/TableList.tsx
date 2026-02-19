@@ -1,8 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
-import { ChevronRight, ChevronDown } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { RsTree, type TreeNode } from 'rstree-ui';
 import type { FontMetadata } from '@/types/font';
 
 interface TableListProps {
@@ -13,6 +10,10 @@ interface TableListProps {
   onSelectTable: (filePath: string, table: string) => void;
 }
 
+function tableNodeId(filePath: string, table: string): string {
+  return `${filePath}::${table}`;
+}
+
 export function TableList({
   fonts,
   selectedFilePath,
@@ -20,100 +21,86 @@ export function TableList({
   searchQuery,
   onSelectTable,
 }: TableListProps) {
-  const [expanded, setExpanded] = useState<Set<string>>(() =>
-    new Set(fonts.map(f => f.file_path))
-  );
   const prevFontCount = useRef(fonts.length);
+
+  // Convert fonts to RsTree data format
+  const treeData: TreeNode[] = useMemo(() =>
+    fonts.map(font => ({
+      id: font.file_path,
+      label: font.file_name,
+      children: font.available_tables.map(table => ({
+        id: tableNodeId(font.file_path, table),
+        label: table,
+      })),
+    })),
+    [fonts]
+  );
+
+  // All font nodes start expanded
+  const [expandedIds, setExpandedIds] = useState<string[]>(() =>
+    fonts.map(f => f.file_path)
+  );
 
   // Auto-expand newly added fonts
   useEffect(() => {
     if (fonts.length > prevFontCount.current) {
-      setExpanded(prev => {
-        const next = new Set(prev);
-        for (const f of fonts) {
-          next.add(f.file_path);
-        }
-        return next;
+      setExpandedIds(prev => {
+        const existing = new Set(prev);
+        const newIds = fonts
+          .map(f => f.file_path)
+          .filter(id => !existing.has(id));
+        return newIds.length > 0 ? [...prev, ...newIds] : prev;
       });
     }
     prevFontCount.current = fonts.length;
   }, [fonts]);
 
-  const toggleExpand = (filePath: string) => {
-    setExpanded(prev => {
-      const next = new Set(prev);
-      if (next.has(filePath)) {
-        next.delete(filePath);
-      } else {
-        next.add(filePath);
-      }
-      return next;
-    });
-  };
+  // Compute selected node id
+  const selectedIds = useMemo(() => {
+    if (selectedFilePath && selectedTable) {
+      return [tableNodeId(selectedFilePath, selectedTable)];
+    }
+    return [];
+  }, [selectedFilePath, selectedTable]);
 
-  const query = searchQuery.toLowerCase();
+  // Handle node selection — only table (leaf) nodes trigger onSelectTable
+  const handleSelect = useCallback((ids: string[]) => {
+    const id = ids[0];
+    if (!id) return;
+
+    // Font (parent) nodes don't have "::" — only table nodes do
+    const sepIndex = id.indexOf('::');
+    if (sepIndex === -1) return; // clicked a font node, ignore
+
+    const filePath = id.substring(0, sepIndex);
+    const table = id.substring(sepIndex + 2);
+    onSelectTable(filePath, table);
+  }, [onSelectTable]);
+
+  if (fonts.length === 0) {
+    return (
+      <p className="text-center text-muted-foreground py-8">
+        No fonts opened
+      </p>
+    );
+  }
 
   return (
-    <ScrollArea className="h-[calc(100vh-320px)]">
-      <div className="p-2">
-        {fonts.map(font => {
-          const filteredTables = query
-            ? font.available_tables.filter(t => t.toLowerCase().includes(query))
-            : font.available_tables;
-
-          if (query && filteredTables.length === 0) return null;
-
-          const isExpanded = expanded.has(font.file_path);
-          const isFontSelected = font.file_path === selectedFilePath;
-
-          return (
-            <div key={font.file_path}>
-              <button
-                onClick={() => toggleExpand(font.file_path)}
-                className={cn(
-                  'w-full flex items-center gap-1.5 px-2 py-2 rounded-md text-sm font-medium transition-colors',
-                  isFontSelected ? 'bg-muted' : 'hover:bg-muted/50'
-                )}
-              >
-                {isExpanded ? (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                )}
-                <span className="truncate">{font.file_name}</span>
-                <Badge variant="outline" className="ml-auto text-xs shrink-0">
-                  {filteredTables.length}
-                </Badge>
-              </button>
-
-              {isExpanded && (
-                <div className="ml-4">
-                  {filteredTables.map(table => (
-                    <button
-                      key={table}
-                      onClick={() => onSelectTable(font.file_path, table)}
-                      className={cn(
-                        'w-full text-left px-4 py-1.5 rounded-md transition-colors font-mono text-sm',
-                        isFontSelected && selectedTable === table
-                          ? 'bg-primary text-primary-foreground'
-                          : 'hover:bg-muted'
-                      )}
-                    >
-                      {table}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {fonts.length === 0 && (
-          <p className="text-center text-muted-foreground py-8">
-            No fonts opened
-          </p>
-        )}
-      </div>
-    </ScrollArea>
+    <RsTree
+      data={treeData}
+      selectedIds={selectedIds}
+      onSelect={handleSelect}
+      expandedIds={expandedIds}
+      onExpand={setExpandedIds}
+      searchTerm={searchQuery}
+      autoExpandSearch={true}
+      showIcons={false}
+      showTreeLines={true}
+      clickToToggle={true}
+      autoHeight={true}
+      maxHeight={window.innerHeight - 320}
+      itemHeight={30}
+      treeNodeClassName="font-mono text-sm"
+    />
   );
 }

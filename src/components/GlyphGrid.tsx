@@ -13,7 +13,7 @@ interface GlyphGridProps {
 
 function GlyphCell({ glyph, unitsPerEm }: { glyph: Glyph; unitsPerEm: number }) {
   const bounds = glyph.bounds;
-  const padding = 50;
+  const padding = 20;
   const viewBox = bounds
     ? `${bounds.x_min - padding} ${-bounds.y_max - padding} ${bounds.x_max - bounds.x_min + padding * 2} ${bounds.y_max - bounds.y_min + padding * 2}`
     : `0 ${-unitsPerEm} ${unitsPerEm} ${unitsPerEm}`;

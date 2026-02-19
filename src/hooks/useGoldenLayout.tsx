@@ -17,27 +17,28 @@ interface TabState {
   tableName: string;
 }
 
-export function useGoldenLayout(containerRef: React.RefObject<HTMLDivElement | null>) {
+export function useGoldenLayout() {
+  // Use state-based ref so the effect re-runs when the element mounts/unmounts
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const layoutRef = useRef<GoldenLayout | null>(null);
-  const reactRootsRef = useRef<Map<ComponentContainer, Root>>(new Map());
+  const reactRootsRef = useRef<Map<string, Root>>(new Map());
   const openTabsRef = useRef<Map<string, ComponentContainer>>(new Map());
   const [isEmpty, setIsEmpty] = useState(true);
 
   useEffect(() => {
-    const container = containerRef.current;
     if (!container) return;
 
     const layout = new GoldenLayout(container);
 
     layout.registerComponentFactoryFunction(
       'TableContentTab',
-      (container: ComponentContainer, state: JsonValue | undefined) => {
+      (glContainer: ComponentContainer, state: JsonValue | undefined) => {
         const tabState = state as unknown as TabState;
         const key = tabKey(tabState.filePath, tabState.tableName);
 
-        const root = createRoot(container.element);
-        reactRootsRef.current.set(container, root);
-        openTabsRef.current.set(key, container);
+        const root = createRoot(glContainer.element);
+        reactRootsRef.current.set(key, root);
+        openTabsRef.current.set(key, glContainer);
 
         root.render(
           <TableContentTab
@@ -48,59 +49,43 @@ export function useGoldenLayout(containerRef: React.RefObject<HTMLDivElement | n
 
         setIsEmpty(false);
 
+        // Clean up when this specific tab is closed
+        glContainer.addEventListener('beforeComponentRelease', () => {
+          const r = reactRootsRef.current.get(key);
+          if (r) {
+            r.unmount();
+            reactRootsRef.current.delete(key);
+          }
+          openTabsRef.current.delete(key);
+        });
+
         return undefined;
       }
     );
 
-    // Track when items are destroyed to detect empty state
     layout.on('itemDestroyed', () => {
-      // Defer the check so the layout tree is updated
       requestAnimationFrame(() => {
         if (layoutRef.current) {
-          const root = layoutRef.current.rootItem;
-          const hasContent = root && root.contentItems.length > 0;
+          const rootItem = layoutRef.current.rootItem;
+          const hasContent = rootItem && rootItem.contentItems.length > 0;
           setIsEmpty(!hasContent);
         }
       });
     });
 
-    // Listen for beforeComponentRelease to clean up React roots
-    layout.on('beforeComponentRelease', (component: unknown) => {
-      // Find and clean up the container
-      for (const [container, root] of reactRootsRef.current.entries()) {
-        if (container.component === component) {
-          root.unmount();
-          reactRootsRef.current.delete(container);
-
-          // Remove from open tabs
-          for (const [key, c] of openTabsRef.current.entries()) {
-            if (c === container) {
-              openTabsRef.current.delete(key);
-              break;
-            }
-          }
-          break;
-        }
-      }
-    });
-
     const initialConfig: LayoutConfig = {
       root: {
-        type: 'row',
+        type: 'stack',
         content: [],
       },
     };
     layout.loadLayout(initialConfig);
-
     layoutRef.current = layout;
 
     // Handle resize
     const resizeObserver = new ResizeObserver(() => {
-      if (layoutRef.current) {
-        const el = containerRef.current;
-        if (el) {
-          layoutRef.current.setSize(el.offsetWidth, el.offsetHeight);
-        }
+      if (layoutRef.current && container.offsetWidth > 0 && container.offsetHeight > 0) {
+        layoutRef.current.setSize(container.offsetWidth, container.offsetHeight);
       }
     });
     resizeObserver.observe(container);
@@ -115,7 +100,7 @@ export function useGoldenLayout(containerRef: React.RefObject<HTMLDivElement | n
       layout.destroy();
       layoutRef.current = null;
     };
-  }, []);
+  }, [container]);
 
   const addTab = useCallback((filePath: string, tableName: string, title: string) => {
     const layout = layoutRef.current;
@@ -123,7 +108,6 @@ export function useGoldenLayout(containerRef: React.RefObject<HTMLDivElement | n
 
     const key = tabKey(filePath, tableName);
 
-    // Focus existing tab if already open
     const existingContainer = openTabsRef.current.get(key);
     if (existingContainer) {
       existingContainer.focus();
@@ -131,8 +115,13 @@ export function useGoldenLayout(containerRef: React.RefObject<HTMLDivElement | n
     }
 
     const componentState: TabState = { filePath, tableName };
-    layout.addComponent('TableContentTab', componentState as unknown as JsonValue, title);
+    try {
+      layout.addComponent('TableContentTab', componentState as unknown as JsonValue, title);
+    } catch (e) {
+      console.error('Failed to add golden-layout tab:', e);
+    }
   }, []);
 
-  return { addTab, isEmpty };
+  // setContainer is a stable function (from useState), used as a callback ref
+  return { containerRef: setContainer, addTab, isEmpty };
 }

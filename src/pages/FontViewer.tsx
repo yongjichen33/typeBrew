@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router';
 import { listen } from '@tauri-apps/api/event';
+import { SplitPane, Pane } from 'react-split-pane';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -24,10 +25,7 @@ export function FontViewer() {
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const glContainerRef = useRef<HTMLDivElement>(null);
-  const { addTab, isEmpty } = useGoldenLayout(glContainerRef);
-
-  const selectedFont = fonts.find(f => f.file_path === selectedFilePath) ?? null;
+  const { containerRef, addTab, isEmpty } = useGoldenLayout();
 
   // Listen for "Open Font" menu event
   useEffect(() => {
@@ -53,44 +51,47 @@ export function FontViewer() {
   }, [addTab]);
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      {/* Split View */}
-      <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-4 h-[calc(100vh-200px)]">
+    <div className="h-screen bg-background">
+      <SplitPane direction="horizontal">
         {/* Left: Font Tree */}
-        <Card>
-          <CardHeader>
-            <div className="relative mt-2">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search tables..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8"
+        <Pane defaultSize="300px" minSize="200px" maxSize="500px">
+          <Card className="h-full rounded-none border-0 border-r">
+            <CardHeader>
+              <div className="relative mt-2">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search tables..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+            </CardHeader>
+            <Separator />
+            <CardContent className="p-0">
+              <TableList
+                fonts={fonts}
+                selectedFilePath={selectedFilePath}
+                selectedTable={selectedTable}
+                searchQuery={searchQuery}
+                onSelectTable={handleSelectTable}
               />
-            </div>
-          </CardHeader>
-          <Separator />
-          <CardContent className="p-0">
-            <TableList
-              fonts={fonts}
-              selectedFilePath={selectedFilePath}
-              selectedTable={selectedTable}
-              searchQuery={searchQuery}
-              onSelectTable={handleSelectTable}
-            />
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Pane>
 
         {/* Right: Golden Layout Tabs */}
-        <div className="relative border rounded-lg overflow-hidden">
-          <div ref={glContainerRef} className="h-full w-full" />
-          {isEmpty && (
-            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground pointer-events-none">
-              Select a table to view its contents
-            </div>
-          )}
-        </div>
-      </div>
+        <Pane>
+          <div className="relative h-full overflow-hidden">
+            <div ref={containerRef} className="h-full w-full" />
+            {isEmpty && (
+              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground pointer-events-none">
+                Select a table to view its contents
+              </div>
+            )}
+          </div>
+        </Pane>
+      </SplitPane>
     </div>
   );
 }
