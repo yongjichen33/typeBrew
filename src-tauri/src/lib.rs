@@ -1,7 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod font_parser;
 
-use font_parser::FontCache;
+use font_parser::{FontCache, HeadTableUpdate};
 use tauri::ipc::Response;
 use tauri::State;
 
@@ -33,6 +33,15 @@ fn get_glyph_outlines(
     Ok(Response::new(bytes))
 }
 
+#[tauri::command]
+fn update_head_table(
+    file_path: String,
+    updates: HeadTableUpdate,
+    cache: State<FontCache>,
+) -> Result<(), String> {
+    font_parser::update_head_table(&file_path, &updates, &cache)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize font cache
@@ -43,7 +52,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![parse_font_file, get_font_table, get_glyph_outlines])
+        .invoke_handler(tauri::generate_handler![parse_font_file, get_font_table, get_glyph_outlines, update_head_table])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

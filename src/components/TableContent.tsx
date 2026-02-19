@@ -22,6 +22,8 @@ interface TableContentProps {
   isLoadingMore: boolean;
   tableName: string | null;
   onLoadMore: () => void;
+  filePath: string | null;
+  onTableUpdated: () => void;
 }
 
 function LoadingSkeleton() {
@@ -45,7 +47,7 @@ function LoadingSpinner() {
   );
 }
 
-export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableName, onLoadMore }: TableContentProps) {
+export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableName, onLoadMore, filePath, onTableUpdated }: TableContentProps) {
   if (!tableName) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-320px)] text-muted-foreground">
@@ -89,7 +91,7 @@ export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableN
 
   switch (tableName) {
     case 'head':
-      return <HeadTable data={parsed} />;
+      return <HeadTable data={parsed} filePath={filePath!} onSaved={onTableUpdated} />;
     case 'name':
       return <NameTable data={parsed} />;
     case 'maxp':

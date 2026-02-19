@@ -485,3 +485,135 @@ pub fn get_table_content(file_path: &str, table_name: &str, cache: &FontCache) -
 
     Ok(json_data)
 }
+
+#[derive(Deserialize)]
+pub struct HeadTableUpdate {
+    pub font_revision: f64,
+    pub flags: u16,
+    pub units_per_em: u16,
+    pub created: i64,
+    pub modified: i64,
+    pub x_min: i16,
+    pub y_min: i16,
+    pub x_max: i16,
+    pub y_max: i16,
+    pub mac_style: u16,
+    pub lowest_rec_ppem: u16,
+    pub font_direction_hint: i16,
+    pub index_to_loc_format: i16,
+    pub glyph_data_format: i16,
+}
+
+fn calc_checksum(data: &[u8]) -> u32 {
+    let mut sum: u32 = 0;
+    let chunks = data.len() / 4;
+    for i in 0..chunks {
+        let off = i * 4;
+        sum = sum.wrapping_add(u32::from_be_bytes([
+            data[off], data[off + 1], data[off + 2], data[off + 3],
+        ]));
+    }
+    let remaining = data.len() % 4;
+    if remaining > 0 {
+        let off = chunks * 4;
+        let mut last = [0u8; 4];
+        for (i, byte) in data[off..].iter().enumerate() {
+            last[i] = *byte;
+        }
+        sum = sum.wrapping_add(u32::from_be_bytes(last));
+    }
+    sum
+}
+
+pub fn update_head_table(
+    file_path: &str,
+    updates: &HeadTableUpdate,
+    cache: &FontCache,
+) -> Result<(), String> {
+    let mut bytes = cache.get(file_path).unwrap_or_else(|| {
+        fs::read(file_path).unwrap_or_default()
+    });
+
+    if bytes.is_empty() {
+        return Err(format!("Failed to read font file: {}", file_path));
+    }
+
+    // Find head table offset and record offset from table directory
+    let num_tables = u16::from_be_bytes([bytes[4], bytes[5]]) as usize;
+    let mut head_table_offset: Option<usize> = None;
+    let mut head_record_offset: Option<usize> = None;
+    let mut head_length: usize = 0;
+
+    for i in 0..num_tables {
+        let rec = 12 + i * 16;
+        if &bytes[rec..rec + 4] == b"head" {
+            head_table_offset = Some(u32::from_be_bytes(
+                bytes[rec + 8..rec + 12].try_into().unwrap(),
+            ) as usize);
+            head_record_offset = Some(rec);
+            head_length = u32::from_be_bytes(
+                bytes[rec + 12..rec + 16].try_into().unwrap(),
+            ) as usize;
+            break;
+        }
+    }
+
+    let t = head_table_offset.ok_or("head table not found")?;
+    let rec = head_record_offset.ok_or("head table record not found")?;
+
+    // Patch fields at known offsets (big-endian)
+    // fontRevision: Fixed (i32, 16.16) at offset 4
+    let fixed = (updates.font_revision * 65536.0).round() as i32;
+    bytes[t + 4..t + 8].copy_from_slice(&fixed.to_be_bytes());
+    // flags: u16 at offset 16
+    bytes[t + 16..t + 18].copy_from_slice(&updates.flags.to_be_bytes());
+    // unitsPerEm: u16 at offset 18
+    bytes[t + 18..t + 20].copy_from_slice(&updates.units_per_em.to_be_bytes());
+    // created: i64 at offset 20
+    bytes[t + 20..t + 28].copy_from_slice(&updates.created.to_be_bytes());
+    // modified: i64 at offset 28
+    bytes[t + 28..t + 36].copy_from_slice(&updates.modified.to_be_bytes());
+    // xMin: i16 at offset 36
+    bytes[t + 36..t + 38].copy_from_slice(&updates.x_min.to_be_bytes());
+    // yMin: i16 at offset 38
+    bytes[t + 38..t + 40].copy_from_slice(&updates.y_min.to_be_bytes());
+    // xMax: i16 at offset 40
+    bytes[t + 40..t + 42].copy_from_slice(&updates.x_max.to_be_bytes());
+    // yMax: i16 at offset 42
+    bytes[t + 42..t + 44].copy_from_slice(&updates.y_max.to_be_bytes());
+    // macStyle: u16 at offset 44
+    bytes[t + 44..t + 46].copy_from_slice(&updates.mac_style.to_be_bytes());
+    // lowestRecPPEM: u16 at offset 46
+    bytes[t + 46..t + 48].copy_from_slice(&updates.lowest_rec_ppem.to_be_bytes());
+    // fontDirectionHint: i16 at offset 48
+    bytes[t + 48..t + 50].copy_from_slice(&updates.font_direction_hint.to_be_bytes());
+    // indexToLocFormat: i16 at offset 50
+    bytes[t + 50..t + 52].copy_from_slice(&updates.index_to_loc_format.to_be_bytes());
+    // glyphDataFormat: i16 at offset 52
+    bytes[t + 52..t + 54].copy_from_slice(&updates.glyph_data_format.to_be_bytes());
+
+    // Recalculate checksums per OpenType spec:
+    // 1. Set checksumAdjustment to 0
+    bytes[t + 8..t + 12].copy_from_slice(&0u32.to_be_bytes());
+
+    // 2. Calculate head table checksum and update directory record
+    let head_checksum = calc_checksum(&bytes[t..t + head_length]);
+    bytes[rec + 4..rec + 8].copy_from_slice(&head_checksum.to_be_bytes());
+
+    // 3. Calculate entire font checksum
+    let font_checksum = calc_checksum(&bytes);
+
+    // 4. Set checksumAdjustment = 0xB1B0AFBA - font_checksum
+    let checksum_adjustment = 0xB1B0AFBAu32.wrapping_sub(font_checksum);
+    bytes[t + 8..t + 12].copy_from_slice(&checksum_adjustment.to_be_bytes());
+
+    // Write modified font to disk
+    fs::write(file_path, &bytes)
+        .map_err(|e| format!("Failed to write font file: {}", e))?;
+
+    // Invalidate caches
+    cache.fonts.lock().unwrap().insert(file_path.to_string(), bytes);
+    cache.outlines.lock().unwrap().remove(file_path);
+
+    Ok(())
+}

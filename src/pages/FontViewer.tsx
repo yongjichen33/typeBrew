@@ -100,6 +100,20 @@ export function FontViewer() {
     }
   }, [glyphState, metadata?.file_path, loadGlyphBatch]);
 
+  const handleTableUpdated = useCallback(async () => {
+    if (!selectedTable || !metadata?.file_path) return;
+    if (OUTLINE_TABLES.includes(selectedTable)) return;
+    try {
+      const data = await invoke<string>('get_font_table', {
+        filePath: metadata.file_path,
+        tableName: selectedTable,
+      });
+      setTableData(data);
+    } catch (error) {
+      toast.error(`Failed to refresh table: ${error}`);
+    }
+  }, [selectedTable, metadata?.file_path]);
+
   const handleSelectTable = useCallback((table: string) => {
     setTableData(null);
     setGlyphState(null);
@@ -173,6 +187,8 @@ export function FontViewer() {
               isLoadingMore={isLoadingMore}
               tableName={selectedTable}
               onLoadMore={handleLoadMore}
+              filePath={metadata?.file_path || null}
+              onTableUpdated={handleTableUpdated}
             />
           </CardContent>
         </Card>
