@@ -3,7 +3,8 @@ mod font_parser;
 
 use font_parser::{FontCache, HeadTableUpdate};
 use tauri::ipc::Response;
-use tauri::State;
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::{Emitter, State};
 
 #[tauri::command]
 fn parse_font_file(
@@ -52,6 +53,31 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .setup(|app| {
+            let open_font = MenuItemBuilder::with_id("open_font", "Open Font…")
+                .accelerator("CmdOrCtrl+O")
+                .build(app)?;
+
+            let file_menu = SubmenuBuilder::new(app, "File")
+                .item(&open_font)
+                .separator()
+                .quit()
+                .build()?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&file_menu)
+                .build()?;
+
+            app.set_menu(menu)?;
+
+            app.on_menu_event(move |app_handle, event| {
+                if event.id() == open_font.id() {
+                    let _ = app_handle.emit("menu:open-font", ());
+                }
+            });
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![parse_font_file, get_font_table, get_glyph_outlines, update_head_table])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -5,15 +5,48 @@ import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import type { FontMetadata } from '@/types/font';
 
+const VALID_EXTENSIONS = ['.otf', '.ttf'];
+
+export function validateFontFile(fileName: string): boolean {
+  const extension = fileName.toLowerCase().slice(fileName.lastIndexOf('.'));
+  return VALID_EXTENSIONS.includes(extension);
+}
+
+export async function parseFontFile(filePath: string): Promise<FontMetadata> {
+  return invoke<FontMetadata>('parse_font_file', { filePath });
+}
+
+export async function openFontDialog(): Promise<FontMetadata[]> {
+  const selected = await open({
+    multiple: true,
+    filters: [{ name: 'Font Files', extensions: ['otf', 'ttf'] }],
+  });
+
+  if (!selected) return [];
+
+  const paths = Array.isArray(selected) ? selected : [selected];
+  const results: FontMetadata[] = [];
+
+  for (const filePath of paths) {
+    const fileName = filePath.split(/[\\/]/).pop() || '';
+    if (!validateFontFile(fileName)) {
+      toast.error(`Invalid file type: ${fileName}. Only .otf/.ttf supported.`);
+      continue;
+    }
+    try {
+      const metadata = await parseFontFile(filePath);
+      results.push(metadata);
+    } catch (error) {
+      toast.error(`Failed to process ${fileName}: ${error}`);
+    }
+  }
+
+  return results;
+}
+
 export function useFileUpload() {
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false);
-
-  const validateFontFile = (fileName: string): boolean => {
-    const validExtensions = ['.otf', '.ttf'];
-    const extension = fileName.toLowerCase().slice(fileName.lastIndexOf('.'));
-    return validExtensions.includes(extension);
-  };
 
   const uploadFont = async (filePath: string, fileName: string) => {
     if (!validateFontFile(fileName)) {
@@ -23,15 +56,10 @@ export function useFileUpload() {
 
     try {
       setIsUploading(true);
+      const metadata = await parseFontFile(filePath);
 
-      // Parse the font to get metadata
-      const metadata = await invoke<FontMetadata>('parse_font_file', {
-        filePath: filePath,
-      });
-
-      // Navigate to font viewer with metadata
       navigate(`/font/${encodeURIComponent(fileName)}`, {
-        state: { metadata, filePath }
+        state: { metadata, filePath },
       });
 
       toast.success(`${fileName} has been parsed successfully.`);
@@ -45,22 +73,15 @@ export function useFileUpload() {
   const handleFileDialog = async () => {
     const selected = await open({
       multiple: true,
-      filters: [{
-        name: 'Font Files',
-        extensions: ['otf', 'ttf']
-      }]
+      filters: [{ name: 'Font Files', extensions: ['otf', 'ttf'] }],
     });
 
     if (!selected) return;
 
-    if (Array.isArray(selected)) {
-      for (const filePath of selected) {
-        const fileName = filePath.split(/[\\/]/).pop() || '';
-        await uploadFont(filePath, fileName);
-      }
-    } else {
-      const fileName = (selected as string).split(/[\\/]/).pop() || '';
-      await uploadFont(selected as string, fileName);
+    const paths = Array.isArray(selected) ? selected : [selected];
+    for (const filePath of paths) {
+      const fileName = filePath.split(/[\\/]/).pop() || '';
+      await uploadFont(filePath, fileName);
     }
   };
 

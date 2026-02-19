@@ -35,7 +35,7 @@ interface HeadTableProps {
 const EDITABLE_KEYS = [
   'font_revision', 'flags', 'units_per_em', 'created', 'modified',
   'x_min', 'y_min', 'x_max', 'y_max', 'mac_style', 'lowest_rec_ppem',
-  'font_direction_hint', 'index_to_loc_format', 'glyph_data_format',
+  'font_direction_hint', 'index_to_loc_format',
 ] as const;
 
 type EditableKey = typeof EDITABLE_KEYS[number];
@@ -107,7 +107,6 @@ export function HeadTable({ data, filePath, onSaved }: HeadTableProps) {
           lowest_rec_ppem: parseInt(values.lowest_rec_ppem) || 0,
           font_direction_hint: parseInt(values.font_direction_hint) || 0,
           index_to_loc_format: parseInt(values.index_to_loc_format) || 0,
-          glyph_data_format: parseInt(values.glyph_data_format) || 0,
         },
       });
       toast.success('Head table updated successfully');
@@ -174,7 +173,7 @@ export function HeadTable({ data, filePath, onSaved }: HeadTableProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <EditableField label="Font Direction Hint" value={values.font_direction_hint} onChange={update('font_direction_hint')} />
           <EditableField label="Index to Loc Format" value={values.index_to_loc_format} onChange={update('index_to_loc_format')} />
-          <EditableField label="Glyph Data Format" value={values.glyph_data_format} onChange={update('glyph_data_format')} />
+          <ReadOnlyField label="Glyph Data Format" value={data.glyph_data_format} />
         </div>
       </div>
     </ScrollArea>
