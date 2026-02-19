@@ -40,7 +40,7 @@ function LoadingSkeleton() {
 
 function LoadingSpinner() {
   return (
-    <div className="flex flex-col items-center justify-center h-[calc(100vh-320px)] gap-3 text-muted-foreground">
+    <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
       <Loader2 className="h-8 w-8 animate-spin" />
       <p className="text-sm">Loading table data...</p>
     </div>
@@ -50,7 +50,7 @@ function LoadingSpinner() {
 export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableName, onLoadMore, filePath, onTableUpdated }: TableContentProps) {
   if (!tableName) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-320px)] text-muted-foreground">
+      <div className="flex items-center justify-center h-full text-muted-foreground">
         Select a table to view its contents
       </div>
     );
@@ -83,7 +83,7 @@ export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableN
     parsed = JSON.parse(data);
   } catch {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-320px)] text-muted-foreground">
+      <div className="flex items-center justify-center h-full text-muted-foreground">
         Failed to parse table data
       </div>
     );

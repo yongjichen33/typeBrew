@@ -1,0 +1,142 @@
+/* Golden Layout base + dark theme */
+@import 'golden-layout/dist/css/goldenlayout-base.css';
+@import 'golden-layout/dist/css/themes/goldenlayout-dark-theme.css';
+
+/* ── Override golden-layout theme to match typeBrew design tokens ── */
+
+.lm_goldenlayout {
+  background: transparent !important;
+}
+
+/* Tab bar header */
+.lm_header {
+  height: 32px !important;
+}
+
+/* Individual tabs */
+.lm_header .lm_tab {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: var(--muted-foreground) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  margin-right: 0 !important;
+  padding: 4px 28px 4px 12px !important;
+  height: auto !important;
+  border-right: 1px solid var(--border);
+}
+
+/* Active tab */
+.lm_header .lm_tab.lm_active {
+  background: var(--background) !important;
+  color: var(--foreground) !important;
+  border-bottom: 2px solid var(--primary) !important;
+  box-shadow: none !important;
+}
+
+/* Focused active tab */
+.lm_header .lm_tab.lm_active.lm_focused {
+  background: var(--background) !important;
+}
+
+/* Tab hover */
+.lm_tab:hover {
+  background: var(--accent) !important;
+  color: var(--accent-foreground) !important;
+}
+
+/* Close button on tab — use CSS instead of images */
+.lm_header .lm_tab .lm_close_tab {
+  background-image: none !important;
+  width: 16px !important;
+  height: 16px !important;
+  top: 50% !important;
+  right: 6px !important;
+  transform: translateY(-50%);
+  opacity: 0.4;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lm_header .lm_tab .lm_close_tab::after {
+  content: '×';
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted-foreground);
+}
+
+.lm_header .lm_tab .lm_close_tab:hover {
+  opacity: 1;
+  background: var(--destructive);
+}
+
+.lm_header .lm_tab .lm_close_tab:hover::after {
+  color: white;
+}
+
+.lm_header .lm_tab.lm_active .lm_close_tab {
+  opacity: 0.6;
+}
+
+/* Content area */
+.lm_content {
+  background: var(--background) !important;
+  border: none !important;
+}
+
+/* Splitter */
+.lm_splitter {
+  background: var(--border) !important;
+  opacity: 0.001;
+}
+
+.lm_splitter:hover,
+.lm_splitter.lm_dragging {
+  background: var(--ring) !important;
+  opacity: 1;
+}
+
+/* Drop target indicator */
+.lm_dropTargetIndicator {
+  box-shadow: inset 0 0 30px oklch(0 0 0 / 20%) !important;
+  outline: 1px dashed var(--ring) !important;
+}
+
+.lm_dropTargetIndicator .lm_inner {
+  background: var(--primary) !important;
+  opacity: 0.1;
+}
+
+/* Header controls (maximize, close stack, etc.) */
+.lm_controls > * {
+  opacity: 0.4;
+}
+
+.lm_controls > *:hover {
+  opacity: 1;
+}
+
+/* Tab dropdown list */
+.lm_header .lm_tabdropdown_list {
+  background: var(--popover) !important;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.lm_header .lm_tabdropdown_list .lm_tab {
+  border-right: none;
+}
+
+/* Maximised state */
+.lm_maximised .lm_header {
+  background-color: var(--card) !important;
+}
+
+/* Drag proxy */
+.lm_dragProxy .lm_content {
+  box-shadow: 0 8px 24px oklch(0 0 0 / 40%) !important;
+  border-radius: 6px;
+}

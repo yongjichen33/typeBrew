@@ -17,7 +17,7 @@ function Field({ label, value }: { label: string; value: string | number }) {
 
 export function MaxpTable({ data }: { data: MaxpTableData }) {
   return (
-    <ScrollArea className="h-[calc(100vh-320px)]">
+    <ScrollArea className="h-full">
       <div className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Version" value={data.version} />

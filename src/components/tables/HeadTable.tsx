@@ -123,7 +123,7 @@ export function HeadTable({ data, filePath, onSaved }: HeadTableProps) {
   };
 
   return (
-    <ScrollArea className="h-[calc(100vh-320px)]">
+    <ScrollArea className="h-full">
       {isDirty && (
         <div className="sticky top-0 z-10 flex items-center justify-end gap-2 border-b bg-background/95 backdrop-blur px-6 py-3">
           <Button variant="outline" size="sm" onClick={handleReset}>

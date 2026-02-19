@@ -59,7 +59,7 @@ export function GlyphGrid({ glyphs, totalGlyphs, unitsPerEm, onLoadMore, isLoadi
   }, [hasMore, onLoadMore]);
 
   return (
-    <ScrollArea className="h-[calc(100vh-320px)]">
+    <ScrollArea className="h-full">
       <div className="p-6">
         <div className="mb-4">
           <h3 className="text-sm font-medium text-muted-foreground">

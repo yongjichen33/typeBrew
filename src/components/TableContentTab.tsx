@@ -16,10 +16,9 @@ interface GlyphState {
 interface TableContentTabProps {
   filePath: string;
   tableName: string;
-  isActive: boolean;
 }
 
-export function TableContentTab({ filePath, tableName, isActive }: TableContentTabProps) {
+export function TableContentTab({ filePath, tableName }: TableContentTabProps) {
   const [tableData, setTableData] = useState<string | null>(null);
   const [glyphState, setGlyphState] = useState<GlyphState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -97,7 +96,7 @@ export function TableContentTab({ filePath, tableName, isActive }: TableContentT
   }, [filePath, tableName]);
 
   return (
-    <div className={isActive ? undefined : 'hidden'}>
+    <div className="h-full overflow-auto">
       <TableContent
         data={tableData}
         glyphData={glyphState}

@@ -10,8 +10,8 @@ export function DefaultTable({ tableName, data }: DefaultTableProps) {
   const sizeBytes = typeof data.size_bytes === 'number' ? data.size_bytes : null;
 
   return (
-    <ScrollArea className="h-[calc(100vh-320px)]">
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-380px)] gap-3 text-muted-foreground">
+    <ScrollArea className="h-full">
+      <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
         <Badge variant="outline" className="text-sm font-mono">
           {tableName}
         </Badge>

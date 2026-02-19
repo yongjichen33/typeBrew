@@ -36,14 +36,14 @@ const NAME_ID_LABELS: Record<number, string> = {
 export function NameTable({ data }: { data: NameTableData }) {
   if (!data.name_records?.length) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-320px)] text-muted-foreground">
+      <div className="flex items-center justify-center h-full text-muted-foreground">
         No name records available
       </div>
     );
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-320px)]">
+    <ScrollArea className="h-full">
       <div className="p-6 space-y-3">
         {data.name_records.map((record, i) => (
           <div key={i}>
