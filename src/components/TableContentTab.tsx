@@ -95,18 +95,27 @@ export function TableContentTab({ filePath, tableName }: TableContentTabProps) {
     }
   }, [filePath, tableName]);
 
+  const fileName = filePath.split(/[\\/]/).pop() ?? filePath;
+
   return (
-    <div className="h-full overflow-auto">
-      <TableContent
-        data={tableData}
-        glyphData={glyphState}
-        isLoading={isLoading}
-        isLoadingMore={isLoadingMore}
-        tableName={tableName}
-        onLoadMore={handleLoadMore}
-        filePath={filePath}
-        onTableUpdated={handleTableUpdated}
-      />
+    <div className="h-full flex flex-col">
+      <div className="flex items-center gap-1.5 px-4 py-2 border-b text-sm text-muted-foreground font-mono shrink-0">
+        <span>{fileName}</span>
+        <span className="text-border">/</span>
+        <span className="text-foreground font-medium">{tableName}</span>
+      </div>
+      <div className="flex-1 min-h-0 overflow-auto">
+        <TableContent
+          data={tableData}
+          glyphData={glyphState}
+          isLoading={isLoading}
+          isLoadingMore={isLoadingMore}
+          tableName={tableName}
+          onLoadMore={handleLoadMore}
+          filePath={filePath}
+          onTableUpdated={handleTableUpdated}
+        />
+      </div>
     </div>
   );
 }
