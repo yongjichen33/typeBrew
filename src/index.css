@@ -123,3 +123,9 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* react-split-pane divider — matches lm_splitter */
+.split-pane-divider {
+  background: var(--border) !important;
+  width: 3px !important;
+}

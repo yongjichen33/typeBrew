@@ -55,7 +55,7 @@ export function FontViewer() {
       <SplitPane direction="horizontal">
         {/* Left: Font Tree */}
         <Pane defaultSize="300px" minSize="200px" maxSize="500px">
-          <Card className="h-full rounded-none border-0 border-r">
+          <Card className="h-full rounded-none border-0 border-r flex flex-col">
             <CardHeader>
               <div className="relative mt-2">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -68,7 +68,7 @@ export function FontViewer() {
               </div>
             </CardHeader>
             <Separator />
-            <CardContent className="p-0">
+            <CardContent className="p-0 flex-1 min-h-0 overflow-hidden">
               <TableList
                 fonts={fonts}
                 selectedFilePath={selectedFilePath}

@@ -90,10 +90,10 @@
   border: none !important;
 }
 
-/* Splitter */
+/* Splitter — matches react-split-pane divider: 1px, border color */
 .lm_splitter {
   background: var(--border) !important;
-  opacity: 0.001;
+  opacity: 1;
 }
 
 .lm_splitter:hover,

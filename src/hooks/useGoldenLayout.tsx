@@ -74,6 +74,10 @@ export function useGoldenLayout() {
     });
 
     const initialConfig: LayoutConfig = {
+      dimensions: {
+        borderWidth: 1,
+        borderGrabWidth: 8,
+      },
       root: {
         type: 'stack',
         content: [],

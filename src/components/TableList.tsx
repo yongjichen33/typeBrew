@@ -22,6 +22,18 @@ export function TableList({
   onSelectTable,
 }: TableListProps) {
   const prevFontCount = useRef(fonts.length);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerHeight, setContainerHeight] = useState(400);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setContainerHeight(entry.contentRect.height);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Convert fonts to RsTree data format
   const treeData: TreeNode[] = useMemo(() =>
@@ -35,25 +47,6 @@ export function TableList({
     })),
     [fonts]
   );
-
-  // All font nodes start expanded
-  const [expandedIds, setExpandedIds] = useState<string[]>(() =>
-    fonts.map(f => f.file_path)
-  );
-
-  // Auto-expand newly added fonts
-  useEffect(() => {
-    if (fonts.length > prevFontCount.current) {
-      setExpandedIds(prev => {
-        const existing = new Set(prev);
-        const newIds = fonts
-          .map(f => f.file_path)
-          .filter(id => !existing.has(id));
-        return newIds.length > 0 ? [...prev, ...newIds] : prev;
-      });
-    }
-    prevFontCount.current = fonts.length;
-  }, [fonts]);
 
   // Compute selected node id
   const selectedIds = useMemo(() => {
@@ -77,30 +70,28 @@ export function TableList({
     onSelectTable(filePath, table);
   }, [onSelectTable]);
 
-  if (fonts.length === 0) {
-    return (
-      <p className="text-center text-muted-foreground py-8">
-        No fonts opened
-      </p>
-    );
-  }
-
   return (
-    <RsTree
-      data={treeData}
-      selectedIds={selectedIds}
-      onSelect={handleSelect}
-      expandedIds={expandedIds}
-      onExpand={setExpandedIds}
-      searchTerm={searchQuery}
-      autoExpandSearch={true}
-      showIcons={false}
-      showTreeLines={true}
-      clickToToggle={true}
-      autoHeight={true}
-      maxHeight={window.innerHeight - 320}
-      itemHeight={30}
-      treeNodeClassName="font-mono text-sm"
-    />
+    <div ref={containerRef} className="h-full">
+      {fonts.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8">
+          No fonts opened
+        </p>
+      ) : (
+        <RsTree
+          data={treeData}
+          selectedIds={selectedIds}
+          onSelect={handleSelect}
+          searchTerm={searchQuery}
+          autoExpandSearch={true}
+          showIcons={false}
+          showTreeLines={true}
+          clickToToggle={true}
+          autoHeight={false}
+          height={containerHeight}
+          itemHeight={30}
+          treeNodeClassName="font-mono text-sm"
+        />
+      )}
+    </div>
   );
 }
