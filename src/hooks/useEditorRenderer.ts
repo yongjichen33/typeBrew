@@ -26,7 +26,7 @@ const C = {
   rubber:          rgba(0, 112, 243, 0.12),
   rubberStroke:    rgba(0, 112, 243, 0.7),
   ghostPoint:      rgba(0, 112, 243, 0.35),
-  directionArrow:  rgba(70, 70, 70, 0.75),
+  directionArrow:  rgba(100, 149, 237, 0.9),
   pendingOffCurve: rgba(200, 100, 0, 0.5),
 };
 
@@ -42,8 +42,8 @@ function toScreen(
 
 // ---------- direction arrows ----------
 /** Collect (screen x, screen y, dx, dy) for every on-curve point, representing
- *  the direction the contour is travelling when it arrives at that point.
- *  For M points we use the outgoing direction (lookahead) since there is no arrival. */
+ *  the direction the contour is travelling when it leaves that point (outgoing).
+ *  Always uses lookahead to the next point. */
 function collectArrows(
   paths: EditablePath[],
   vt: ViewTransform,
@@ -52,51 +52,41 @@ function collectArrows(
 
   for (const path of paths) {
     const cmds = path.commands;
-    let prevOnX = 0, prevOnY = 0;
+    const onCurvePoints: Array<{ kind: string; point: { x: number; y: number }; ctrl?: { x: number; y: number }; ctrl1?: { x: number; y: number }; ctrl2?: { x: number; y: number } }> = [];
 
-    for (let i = 0; i < cmds.length; i++) {
-      const cmd = cmds[i];
-
-      if (cmd.kind === 'M') {
-        prevOnX = cmd.point.x;
-        prevOnY = cmd.point.y;
-        // Outgoing direction: look at next command
-        const next = cmds[i + 1];
-        if (!next || next.kind === 'Z') continue;
-        const [sx, sy] = toScreen(cmd.point.x, cmd.point.y, vt);
-        let targetFx: number, targetFy: number;
-        if (next.kind === 'L')      { targetFx = next.point.x; targetFy = next.point.y; }
-        else if (next.kind === 'Q') { targetFx = next.ctrl.x;  targetFy = next.ctrl.y; }
-        else if (next.kind === 'C') { targetFx = next.ctrl1.x; targetFy = next.ctrl1.y; }
-        else continue;
-        const [tsx, tsy] = toScreen(targetFx, targetFy, vt);
-        arrows.push({ sx, sy, dx: tsx - sx, dy: tsy - sy });
-
-      } else if (cmd.kind === 'L') {
-        // Incoming direction: prev on-curve → this
-        const [prevSx, prevSy] = toScreen(prevOnX, prevOnY, vt);
-        const [sx, sy]         = toScreen(cmd.point.x, cmd.point.y, vt);
-        arrows.push({ sx, sy, dx: sx - prevSx, dy: sy - prevSy });
-        prevOnX = cmd.point.x;
-        prevOnY = cmd.point.y;
-
+    for (const cmd of cmds) {
+      if (cmd.kind === 'M' || cmd.kind === 'L') {
+        onCurvePoints.push(cmd);
       } else if (cmd.kind === 'Q') {
-        // Arriving tangent: ctrl → point
-        const [csx, csy] = toScreen(cmd.ctrl.x,  cmd.ctrl.y,  vt);
-        const [sx, sy]   = toScreen(cmd.point.x, cmd.point.y, vt);
-        arrows.push({ sx, sy, dx: sx - csx, dy: sy - csy });
-        prevOnX = cmd.point.x;
-        prevOnY = cmd.point.y;
-
+        onCurvePoints.push(cmd);
       } else if (cmd.kind === 'C') {
-        // Arriving tangent: ctrl2 → point
-        const [c2sx, c2sy] = toScreen(cmd.ctrl2.x, cmd.ctrl2.y, vt);
-        const [sx, sy]     = toScreen(cmd.point.x, cmd.point.y, vt);
-        arrows.push({ sx, sy, dx: sx - c2sx, dy: sy - c2sy });
-        prevOnX = cmd.point.x;
-        prevOnY = cmd.point.y;
+        onCurvePoints.push(cmd);
       }
-      // Z: no point
+    }
+
+    for (let i = 0; i < onCurvePoints.length; i++) {
+      const cmd = onCurvePoints[i];
+      const [sx, sy] = toScreen(cmd.point.x, cmd.point.y, vt);
+      
+      const next = onCurvePoints[i + 1];
+      if (!next) continue;
+      
+      let targetFx: number, targetFy: number;
+      if (next.kind === 'L') {
+        targetFx = next.point.x;
+        targetFy = next.point.y;
+      } else if (next.kind === 'Q' && next.ctrl) {
+        targetFx = next.ctrl.x;
+        targetFy = next.ctrl.y;
+      } else if (next.kind === 'C' && next.ctrl1) {
+        targetFx = next.ctrl1.x;
+        targetFy = next.ctrl1.y;
+      } else {
+        continue;
+      }
+      
+      const [tsx, tsy] = toScreen(targetFx, targetFy, vt);
+      arrows.push({ sx, sy, dx: tsx - sx, dy: tsy - sy });
     }
   }
 
@@ -297,8 +287,9 @@ export function renderFrame(
   }
 
   // ---- 6. Direction arrows on on-curve points ----
-  const ARROW_HEIGHT = 6;   // triangle height in screen pixels
-  const ARROW_HALF_W = 3;   // half-width of triangle base
+  const ARROW_HEIGHT = 14;   // triangle height in screen pixels
+  const ARROW_HALF_W = 7;   // half-width of triangle base
+  const ARROW_OFFSET = 18;  // offset from point center
   const arrowPaint = new Paint();
   arrowPaint.setAntiAlias(true);
   arrowPaint.setStyle(ck.PaintStyle.Fill);
@@ -309,11 +300,11 @@ export function renderFrame(
     if (len < 1) continue;
     const nx = dx / len;
     const ny = dy / len;
-    // Tip of triangle in direction of travel, base behind it — centred on the circle
-    const tipX = sx + nx * (ARROW_HEIGHT / 2);
-    const tipY = sy + ny * (ARROW_HEIGHT / 2);
-    const baseX = sx - nx * (ARROW_HEIGHT / 2);
-    const baseY = sy - ny * (ARROW_HEIGHT / 2);
+    // Tip of triangle in direction of travel, offset away from the point
+    const tipX = sx + nx * ARROW_OFFSET;
+    const tipY = sy + ny * ARROW_OFFSET;
+    const baseX = sx + nx * (ARROW_OFFSET - ARROW_HEIGHT);
+    const baseY = sy + ny * (ARROW_OFFSET - ARROW_HEIGHT);
     const perpX = -ny * ARROW_HALF_W;
     const perpY =  nx * ARROW_HALF_W;
 
