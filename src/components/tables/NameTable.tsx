@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Loader2, Save } from 'lucide-react';
+import { Loader2, Save, RotateCcw } from 'lucide-react';
 
 interface NameRecord {
   name_id: number;
@@ -44,67 +44,87 @@ const NAME_ID_LABELS: Record<number, string> = {
   17: 'Typographic Subfamily',
 };
 
-interface EditableRecord extends NameRecord {
-  editedValue: string;
-  isSaving: boolean;
-  isDirty: boolean;
-}
-
 export function NameTable({ data, filePath, onSaved }: NameTableProps) {
-  const [records, setRecords] = useState<EditableRecord[]>([]);
+  const [values, setValues] = useState<Record<number, Record<number, string>>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const editable = data.name_records.map((r) => ({
-      ...r,
-      editedValue: r.value,
-      isSaving: false,
-      isDirty: false,
-    }));
-    setRecords(editable);
+    const newValues: Record<number, Record<number, string>> = {};
+    for (const record of data.name_records) {
+      const platformId = parseInt(record.platform_id);
+      if (!newValues[record.name_id]) {
+        newValues[record.name_id] = {};
+      }
+      newValues[record.name_id][platformId] = record.value;
+    }
+    setValues(newValues);
   }, [data]);
 
-  const handleChange = (index: number, value: string) => {
-    setRecords((prev) =>
-      prev.map((r, i) =>
-        i === index
-          ? { ...r, editedValue: value, isDirty: value !== r.value }
-          : r
-      )
-    );
+  const originalValues = useMemo(() => {
+    const orig: Record<number, Record<number, string>> = {};
+    for (const record of data.name_records) {
+      const platformId = parseInt(record.platform_id);
+      if (!orig[record.name_id]) {
+        orig[record.name_id] = {};
+      }
+      orig[record.name_id][platformId] = record.value;
+    }
+    return orig;
+  }, [data]);
+
+  const isDirty = useMemo(() => {
+    for (const nameId of Object.keys(originalValues)) {
+      for (const platformId of Object.keys(originalValues[parseInt(nameId)])) {
+        const orig = originalValues[parseInt(nameId)][parseInt(platformId)];
+        const current = values[parseInt(nameId)]?.[parseInt(platformId)];
+        if (current !== orig) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }, [values, originalValues]);
+
+  const handleChange = (nameId: number, platformId: number, value: string) => {
+    setValues((prev) => ({
+      ...prev,
+      [nameId]: {
+        ...(prev[nameId] || {}),
+        [platformId]: value,
+      },
+    }));
   };
 
-  const handleSave = async (index: number) => {
-    const record = records[index];
-    if (!record.isDirty) return;
-
-    setRecords((prev) =>
-      prev.map((r, i) => (i === index ? { ...r, isSaving: true } : r))
-    );
-
+  const handleSave = async () => {
+    setIsSaving(true);
     try {
-      await invoke('update_name_table', {
-        filePath,
-        updates: {
-          name_id: record.name_id,
-          platform_id: parseInt(record.platform_id),
-          value: record.editedValue,
-        },
-      });
-      toast.success('Name record updated successfully');
-      setRecords((prev) =>
-        prev.map((r, i) =>
-          i === index
-            ? { ...r, value: r.editedValue, isDirty: false, isSaving: false }
-            : r
-        )
-      );
+      for (const nameId of Object.keys(originalValues)) {
+        for (const platformId of Object.keys(originalValues[parseInt(nameId)])) {
+          const orig = originalValues[parseInt(nameId)][parseInt(platformId)];
+          const current = values[parseInt(nameId)]?.[parseInt(platformId)];
+          if (current !== orig && current !== undefined) {
+            await invoke('update_name_table', {
+              filePath,
+              updates: {
+                name_id: parseInt(nameId),
+                platform_id: parseInt(platformId),
+                value: current,
+              },
+            });
+          }
+        }
+      }
+      toast.success('Name table updated successfully');
       onSaved();
     } catch (error) {
-      toast.error(`Failed to update name record: ${error}`);
-      setRecords((prev) =>
-        prev.map((r, i) => (i === index ? { ...r, isSaving: false } : r))
-      );
+      toast.error(`Failed to update name table: ${error}`);
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  const handleReset = () => {
+    setValues(originalValues);
   };
 
   if (!data.name_records?.length) {
@@ -117,43 +137,47 @@ export function NameTable({ data, filePath, onSaved }: NameTableProps) {
 
   return (
     <ScrollArea className="h-full">
+      {isDirty && (
+        <div className="sticky top-0 z-10 flex items-center justify-end gap-2 border-b bg-background/95 backdrop-blur px-6 py-3">
+          <Button variant="outline" size="sm" onClick={handleReset}>
+            <RotateCcw className="mr-2 h-3 w-3" />
+            Reset
+          </Button>
+          <Button size="sm" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? (
+              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-3 w-3" />
+            )}
+            Save Changes
+          </Button>
+        </div>
+      )}
       <div className="p-6 space-y-3">
-        {records.map((record, i) => (
-          <div key={i}>
-            <div className="flex items-center gap-2 mb-1.5">
-              <Badge variant="outline" className="font-mono text-xs">
-                {record.name_id}
-              </Badge>
-              <span className="text-sm font-medium text-muted-foreground">
-                {NAME_ID_LABELS[record.name_id] ?? `Name ID ${record.name_id}`}
-              </span>
-              <Badge variant="secondary" className="text-xs ml-auto">
-                {record.platform_id}
-              </Badge>
-            </div>
-            <div className="flex gap-2">
+        {data.name_records.map((record, i) => {
+          const platformId = parseInt(record.platform_id);
+          const value = values[record.name_id]?.[platformId] ?? record.value;
+          return (
+            <div key={i}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <Badge variant="outline" className="font-mono text-xs">
+                  {record.name_id}
+                </Badge>
+                <span className="text-sm font-medium text-muted-foreground">
+                  {NAME_ID_LABELS[record.name_id] ?? `Name ID ${record.name_id}`}
+                </span>
+                <Badge variant="secondary" className="text-xs ml-auto">
+                  {record.platform_id}
+                </Badge>
+              </div>
               <Input
-                value={record.editedValue}
-                onChange={(e) => handleChange(i, e.target.value)}
-                className={record.isDirty ? 'border-primary' : ''}
+                value={value}
+                onChange={(e) => handleChange(record.name_id, platformId, e.target.value)}
               />
-              {record.isDirty && (
-                <Button
-                  size="sm"
-                  onClick={() => handleSave(i)}
-                  disabled={record.isSaving}
-                >
-                  {record.isSaving ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Save className="h-3 w-3" />
-                  )}
-                </Button>
-              )}
+              {i < data.name_records.length - 1 && <Separator className="mt-3" />}
             </div>
-            {i < records.length - 1 && <Separator className="mt-3" />}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </ScrollArea>
   );
