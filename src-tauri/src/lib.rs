@@ -1,7 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod font_parser;
 
-use font_parser::{FontCache, HeadTableUpdate};
+use font_parser::{FontCache, HeadTableUpdate, HheaTableUpdate, MaxpTableUpdate, NameTableUpdate};
 use tauri::ipc::Response;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, State};
@@ -44,6 +44,33 @@ fn update_head_table(
 }
 
 #[tauri::command]
+fn update_hhea_table(
+    file_path: String,
+    updates: HheaTableUpdate,
+    cache: State<FontCache>,
+) -> Result<(), String> {
+    font_parser::update_hhea_table(&file_path, &updates, &cache)
+}
+
+#[tauri::command]
+fn update_maxp_table(
+    file_path: String,
+    updates: MaxpTableUpdate,
+    cache: State<FontCache>,
+) -> Result<(), String> {
+    font_parser::update_maxp_table(&file_path, &updates, &cache)
+}
+
+#[tauri::command]
+fn update_name_table(
+    file_path: String,
+    updates: NameTableUpdate,
+    cache: State<FontCache>,
+) -> Result<(), String> {
+    font_parser::update_name_table(&file_path, &updates, &cache)
+}
+
+#[tauri::command]
 fn save_glyph_outline(
     file_path: String,
     glyph_id: u32,
@@ -51,7 +78,11 @@ fn save_glyph_outline(
     table_name: String,
     cache: State<FontCache>,
 ) -> Result<(), String> {
-    let args = font_parser::SaveGlyphOutlineArgs { glyph_id, svg_path, table_name };
+    let args = font_parser::SaveGlyphOutlineArgs {
+        glyph_id,
+        svg_path,
+        table_name,
+    };
     font_parser::save_glyph_outline(&file_path, &args, &cache)
 }
 
@@ -76,9 +107,7 @@ pub fn run() {
                 .quit()
                 .build()?;
 
-            let menu = MenuBuilder::new(app)
-                .item(&file_menu)
-                .build()?;
+            let menu = MenuBuilder::new(app).item(&file_menu).build()?;
 
             app.set_menu(menu)?;
 
@@ -90,7 +119,16 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![parse_font_file, get_font_table, get_glyph_outlines, update_head_table, save_glyph_outline])
+        .invoke_handler(tauri::generate_handler![
+            parse_font_file,
+            get_font_table,
+            get_glyph_outlines,
+            update_head_table,
+            update_hhea_table,
+            update_maxp_table,
+            update_name_table,
+            save_glyph_outline
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

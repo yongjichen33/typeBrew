@@ -1,7 +1,12 @@
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
+import { Loader2, Save } from 'lucide-react';
 
 interface NameRecord {
   name_id: number;
@@ -11,6 +16,12 @@ interface NameRecord {
 
 interface NameTableData {
   name_records: NameRecord[];
+}
+
+interface NameTableProps {
+  data: NameTableData;
+  filePath: string;
+  onSaved: () => void;
 }
 
 const NAME_ID_LABELS: Record<number, string> = {
@@ -33,7 +44,69 @@ const NAME_ID_LABELS: Record<number, string> = {
   17: 'Typographic Subfamily',
 };
 
-export function NameTable({ data }: { data: NameTableData }) {
+interface EditableRecord extends NameRecord {
+  editedValue: string;
+  isSaving: boolean;
+  isDirty: boolean;
+}
+
+export function NameTable({ data, filePath, onSaved }: NameTableProps) {
+  const [records, setRecords] = useState<EditableRecord[]>([]);
+
+  useEffect(() => {
+    const editable = data.name_records.map((r) => ({
+      ...r,
+      editedValue: r.value,
+      isSaving: false,
+      isDirty: false,
+    }));
+    setRecords(editable);
+  }, [data]);
+
+  const handleChange = (index: number, value: string) => {
+    setRecords((prev) =>
+      prev.map((r, i) =>
+        i === index
+          ? { ...r, editedValue: value, isDirty: value !== r.value }
+          : r
+      )
+    );
+  };
+
+  const handleSave = async (index: number) => {
+    const record = records[index];
+    if (!record.isDirty) return;
+
+    setRecords((prev) =>
+      prev.map((r, i) => (i === index ? { ...r, isSaving: true } : r))
+    );
+
+    try {
+      await invoke('update_name_table', {
+        filePath,
+        updates: {
+          name_id: record.name_id,
+          platform_id: parseInt(record.platform_id),
+          value: record.editedValue,
+        },
+      });
+      toast.success('Name record updated successfully');
+      setRecords((prev) =>
+        prev.map((r, i) =>
+          i === index
+            ? { ...r, value: r.editedValue, isDirty: false, isSaving: false }
+            : r
+        )
+      );
+      onSaved();
+    } catch (error) {
+      toast.error(`Failed to update name record: ${error}`);
+      setRecords((prev) =>
+        prev.map((r, i) => (i === index ? { ...r, isSaving: false } : r))
+      );
+    }
+  };
+
   if (!data.name_records?.length) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -45,7 +118,7 @@ export function NameTable({ data }: { data: NameTableData }) {
   return (
     <ScrollArea className="h-full">
       <div className="p-6 space-y-3">
-        {data.name_records.map((record, i) => (
+        {records.map((record, i) => (
           <div key={i}>
             <div className="flex items-center gap-2 mb-1.5">
               <Badge variant="outline" className="font-mono text-xs">
@@ -58,8 +131,27 @@ export function NameTable({ data }: { data: NameTableData }) {
                 {record.platform_id}
               </Badge>
             </div>
-            <Input defaultValue={record.value} />
-            {i < data.name_records.length - 1 && <Separator className="mt-3" />}
+            <div className="flex gap-2">
+              <Input
+                value={record.editedValue}
+                onChange={(e) => handleChange(i, e.target.value)}
+                className={record.isDirty ? 'border-primary' : ''}
+              />
+              {record.isDirty && (
+                <Button
+                  size="sm"
+                  onClick={() => handleSave(i)}
+                  disabled={record.isSaving}
+                >
+                  {record.isSaving ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Save className="h-3 w-3" />
+                  )}
+                </Button>
+              )}
+            </div>
+            {i < records.length - 1 && <Separator className="mt-3" />}
           </div>
         ))}
       </div>

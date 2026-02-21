@@ -89,8 +89,8 @@ impl SvgPathPen {
         self.path
     }
 
-    fn bounding_box(&self) -> GlyphBounds{
-        GlyphBounds{
+    fn bounding_box(&self) -> GlyphBounds {
+        GlyphBounds {
             x_min: self.x_min,
             y_min: self.y_min,
             x_max: self.x_max,
@@ -117,7 +117,11 @@ impl OutlinePen for SvgPathPen {
     }
 
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        let _ = write!(self.path, "C{} {} {} {} {} {} ", cx0, -cy0, cx1, -cy1, x, -y);
+        let _ = write!(
+            self.path,
+            "C{} {} {} {} {} {} ",
+            cx0, -cy0, cx1, -cy1, x, -y
+        );
         self.update_bounds(cx0, cy0);
         self.update_bounds(cx1, cy1);
         self.update_bounds(x, y);
@@ -139,13 +143,16 @@ impl SvgPathPen {
 
 // Extract outlines for all glyphs in the font
 fn extract_glyph_outlines(bytes: &[u8]) -> Result<Vec<GlyphOutline>, String> {
-    let font = FontRef::new(bytes)
-        .map_err(|e| format!("Failed to parse font: {:?}", e))?;
+    let font = FontRef::new(bytes).map_err(|e| format!("Failed to parse font: {:?}", e))?;
 
     let outlines = font.outline_glyphs();
-    let glyph_metrics = font.glyph_metrics(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default());
+    let glyph_metrics = font.glyph_metrics(
+        skrifa::instance::Size::unscaled(),
+        skrifa::instance::LocationRef::default(),
+    );
 
-    let num_glyphs = font.maxp()
+    let num_glyphs = font
+        .maxp()
         .map_err(|e| format!("Failed to read maxp table: {:?}", e))?
         .num_glyphs();
 
@@ -177,9 +184,7 @@ fn extract_glyph_outlines(bytes: &[u8]) -> Result<Vec<GlyphOutline>, String> {
             continue;
         }
 
-        let glyph_name = gid_to_unicode
-            .get(&gid)
-            .map(|cp| format!("U+{:04X}", cp));
+        let glyph_name = gid_to_unicode.get(&gid).map(|cp| format!("U+{:04X}", cp));
 
         let advance_width = glyph_metrics.advance_width(gid).unwrap_or(0.0);
         let boundingbox = pen.bounding_box();
@@ -202,7 +207,11 @@ fn extract_glyph_outlines(bytes: &[u8]) -> Result<Vec<GlyphOutline>, String> {
 //   Per glyph: glyph_id(u32) + advance_width(f32) + has_bounds(u8)
 //              + [x_min(f32) + y_min(f32) + x_max(f32) + y_max(f32)]
 //              + name_len(u16) + name_bytes + path_len(u32) + path_bytes
-fn encode_glyph_outlines_binary(outlines: &[GlyphOutline], total_glyphs: u32, units_per_em: u16) -> Vec<u8> {
+fn encode_glyph_outlines_binary(
+    outlines: &[GlyphOutline],
+    total_glyphs: u32,
+    units_per_em: u16,
+) -> Vec<u8> {
     let mut buf = Vec::new();
 
     // Header
@@ -246,24 +255,28 @@ pub fn get_glyph_outlines_binary(
     {
         let has_cached = cache.outlines.lock().unwrap().contains_key(file_path);
         if !has_cached {
-            let bytes = cache.get(file_path).unwrap_or_else(|| {
-                fs::read(file_path).unwrap_or_default()
-            });
+            let bytes = cache
+                .get(file_path)
+                .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
             if bytes.is_empty() {
                 return Err(format!("Failed to read font file: {}", file_path));
             }
 
             let outlines = extract_glyph_outlines(&bytes)?;
-            let font = RawFontRef::new(&bytes)
-                .map_err(|e| format!("Invalid font file: {:?}", e))?;
-            let units_per_em = font.head()
+            let font =
+                RawFontRef::new(&bytes).map_err(|e| format!("Invalid font file: {:?}", e))?;
+            let units_per_em = font
+                .head()
                 .ok()
                 .map(|head| head.units_per_em())
                 .unwrap_or(1000);
 
             cache.outlines.lock().unwrap().insert(
                 file_path.to_string(),
-                CachedOutlines { outlines, units_per_em },
+                CachedOutlines {
+                    outlines,
+                    units_per_em,
+                },
             );
         }
     }
@@ -277,17 +290,19 @@ pub fn get_glyph_outlines_binary(
     let end = ((offset as usize) + (limit as usize)).min(total);
     let page = &cached.outlines[start..end];
 
-    Ok(encode_glyph_outlines_binary(page, total as u32, cached.units_per_em))
+    Ok(encode_glyph_outlines_binary(
+        page,
+        total as u32,
+        cached.units_per_em,
+    ))
 }
 
 pub fn parse_font(file_path: &str, cache: &FontCache) -> Result<FontMetadata, String> {
     // Read font file bytes
-    let bytes = fs::read(file_path)
-        .map_err(|e| format!("Failed to read font file: {}", e))?;
+    let bytes = fs::read(file_path).map_err(|e| format!("Failed to read font file: {}", e))?;
 
     // Parse font with read-fonts
-    let font = RawFontRef::new(&bytes)
-        .map_err(|e| format!("Invalid font file: {:?}", e))?;
+    let font = RawFontRef::new(&bytes).map_err(|e| format!("Invalid font file: {:?}", e))?;
 
     // Store a clone of bytes in cache for later use
     cache.insert(file_path.to_string(), bytes.clone());
@@ -324,15 +339,17 @@ pub fn parse_font(file_path: &str, cache: &FontCache) -> Result<FontMetadata, St
     let version = font
         .head()
         .ok()
-        .map(|head| format!("{}.{}", head.font_revision().to_bits() >> 16, head.font_revision().to_bits() & 0xFFFF))
+        .map(|head| {
+            format!(
+                "{}.{}",
+                head.font_revision().to_bits() >> 16,
+                head.font_revision().to_bits() & 0xFFFF
+            )
+        })
         .unwrap_or_else(|| "Unknown".to_string());
 
     // Get number of glyphs from maxp table
-    let num_glyphs = font
-        .maxp()
-        .ok()
-        .map(|maxp| maxp.num_glyphs())
-        .unwrap_or(0);
+    let num_glyphs = font.maxp().ok().map(|maxp| maxp.num_glyphs()).unwrap_or(0);
 
     // Get list of available tables
     let available_tables: Vec<String> = font
@@ -363,19 +380,22 @@ pub fn parse_font(file_path: &str, cache: &FontCache) -> Result<FontMetadata, St
     })
 }
 
-pub fn get_table_content(file_path: &str, table_name: &str, cache: &FontCache) -> Result<String, String> {
+pub fn get_table_content(
+    file_path: &str,
+    table_name: &str,
+    cache: &FontCache,
+) -> Result<String, String> {
     // Try to get bytes from cache first, otherwise read from disk
-    let bytes = cache.get(file_path).unwrap_or_else(|| {
-        fs::read(file_path).unwrap_or_default()
-    });
+    let bytes = cache
+        .get(file_path)
+        .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
 
     if bytes.is_empty() {
         return Err(format!("Failed to read font file: {}", file_path));
     }
 
     // Parse font
-    let font = RawFontRef::new(&bytes)
-        .map_err(|e| format!("Invalid font file: {:?}", e))?;
+    let font = RawFontRef::new(&bytes).map_err(|e| format!("Invalid font file: {:?}", e))?;
 
     // Parse the table tag
     let tag = skrifa::raw::types::Tag::from_be_bytes(
@@ -390,7 +410,9 @@ pub fn get_table_content(file_path: &str, table_name: &str, cache: &FontCache) -
     // Try to get the table data and serialize it
     let json_data = match table_name {
         "head" => {
-            let table = font.head().map_err(|e| format!("Failed to read head table: {:?}", e))?;
+            let table = font
+                .head()
+                .map_err(|e| format!("Failed to read head table: {:?}", e))?;
             serde_json::to_string_pretty(&serde_json::json!({
                 "version": format!("{:?}", table.version()),
                 "font_revision": table.font_revision().to_f32(),
@@ -413,7 +435,9 @@ pub fn get_table_content(file_path: &str, table_name: &str, cache: &FontCache) -
             .map_err(|e| format!("Failed to serialize head table: {}", e))?
         }
         "name" => {
-            let table = font.name().map_err(|e| format!("Failed to read name table: {:?}", e))?;
+            let table = font
+                .name()
+                .map_err(|e| format!("Failed to read name table: {:?}", e))?;
             let records: Vec<serde_json::Value> = table
                 .name_record()
                 .iter()
@@ -432,7 +456,9 @@ pub fn get_table_content(file_path: &str, table_name: &str, cache: &FontCache) -
                 .map_err(|e| format!("Failed to serialize name table: {}", e))?
         }
         "maxp" => {
-            let table = font.maxp().map_err(|e| format!("Failed to read maxp table: {:?}", e))?;
+            let table = font
+                .maxp()
+                .map_err(|e| format!("Failed to read maxp table: {:?}", e))?;
             serde_json::to_string_pretty(&serde_json::json!({
                 "version": format!("{:?}", table.version()),
                 "num_glyphs": table.num_glyphs(),
@@ -440,7 +466,9 @@ pub fn get_table_content(file_path: &str, table_name: &str, cache: &FontCache) -
             .map_err(|e| format!("Failed to serialize maxp table: {}", e))?
         }
         "hhea" => {
-            let table = font.hhea().map_err(|e| format!("Failed to read hhea table: {:?}", e))?;
+            let table = font
+                .hhea()
+                .map_err(|e| format!("Failed to read hhea table: {:?}", e))?;
             serde_json::to_string_pretty(&serde_json::json!({
                 "version": format!("{:?}", table.version()),
                 "ascender": table.ascender(),
@@ -458,7 +486,9 @@ pub fn get_table_content(file_path: &str, table_name: &str, cache: &FontCache) -
             .map_err(|e| format!("Failed to serialize hhea table: {}", e))?
         }
         "post" => {
-            let table = font.post().map_err(|e| format!("Failed to read post table: {:?}", e))?;
+            let table = font
+                .post()
+                .map_err(|e| format!("Failed to read post table: {:?}", e))?;
             serde_json::to_string_pretty(&serde_json::json!({
                 "version": format!("{:?}", table.version()),
                 "italic_angle": table.italic_angle().to_f64(),
@@ -503,6 +533,16 @@ pub struct HeadTableUpdate {
     pub index_to_loc_format: i16,
 }
 
+#[derive(Deserialize)]
+pub struct HheaTableUpdate {
+    pub ascender: i16,
+    pub descender: i16,
+    pub line_gap: i16,
+    pub caret_slope_rise: i16,
+    pub caret_slope_run: i16,
+    pub caret_offset: i16,
+}
+
 pub fn update_head_table(
     file_path: &str,
     updates: &HeadTableUpdate,
@@ -513,16 +553,15 @@ pub fn update_head_table(
     use write_fonts::types::{Fixed, LongDateTime};
     use write_fonts::FontBuilder;
 
-    let bytes = cache.get(file_path).unwrap_or_else(|| {
-        fs::read(file_path).unwrap_or_default()
-    });
+    let bytes = cache
+        .get(file_path)
+        .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
 
     if bytes.is_empty() {
         return Err(format!("Failed to read font file: {}", file_path));
     }
 
-    let font = RawFontRef::new(&bytes)
-        .map_err(|e| format!("Invalid font file: {:?}", e))?;
+    let font = RawFontRef::new(&bytes).map_err(|e| format!("Invalid font file: {:?}", e))?;
 
     // Convert read-only head to owned/mutable via write-fonts
     let mut head: Head = font
@@ -553,11 +592,200 @@ pub fn update_head_table(
         .build();
 
     // Write modified font to disk
-    fs::write(file_path, &new_bytes)
-        .map_err(|e| format!("Failed to write font file: {}", e))?;
+    fs::write(file_path, &new_bytes).map_err(|e| format!("Failed to write font file: {}", e))?;
 
     // Invalidate caches
-    cache.fonts.lock().unwrap().insert(file_path.to_string(), new_bytes);
+    cache
+        .fonts
+        .lock()
+        .unwrap()
+        .insert(file_path.to_string(), new_bytes);
+    cache.outlines.lock().unwrap().remove(file_path);
+
+    Ok(())
+}
+
+pub fn update_hhea_table(
+    file_path: &str,
+    updates: &HheaTableUpdate,
+    cache: &FontCache,
+) -> Result<(), String> {
+    use write_fonts::from_obj::ToOwnedTable;
+    use write_fonts::tables::hhea::Hhea;
+    use write_fonts::FontBuilder;
+
+    let bytes = cache
+        .get(file_path)
+        .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
+
+    if bytes.is_empty() {
+        return Err(format!("Failed to read font file: {}", file_path));
+    }
+
+    let font = RawFontRef::new(&bytes).map_err(|e| format!("Invalid font file: {:?}", e))?;
+
+    let mut hhea: Hhea = font
+        .hhea()
+        .map_err(|e| format!("Failed to read hhea table: {:?}", e))?
+        .to_owned_table();
+
+    hhea.ascender = updates.ascender.into();
+    hhea.descender = updates.descender.into();
+    hhea.line_gap = updates.line_gap.into();
+    hhea.caret_slope_rise = updates.caret_slope_rise.into();
+    hhea.caret_slope_run = updates.caret_slope_run.into();
+    hhea.caret_offset = updates.caret_offset.into();
+
+    let new_bytes = FontBuilder::new()
+        .add_table(&hhea)
+        .map_err(|e| format!("Failed to add hhea table: {:?}", e))?
+        .copy_missing_tables(font)
+        .build();
+
+    fs::write(file_path, &new_bytes).map_err(|e| format!("Failed to write font file: {}", e))?;
+
+    cache
+        .fonts
+        .lock()
+        .unwrap()
+        .insert(file_path.to_string(), new_bytes);
+    cache.outlines.lock().unwrap().remove(file_path);
+
+    Ok(())
+}
+
+#[derive(Deserialize)]
+pub struct MaxpTableUpdate {
+    pub num_glyphs: u16,
+}
+
+pub fn update_maxp_table(
+    file_path: &str,
+    updates: &MaxpTableUpdate,
+    cache: &FontCache,
+) -> Result<(), String> {
+    use write_fonts::from_obj::ToOwnedTable;
+    use write_fonts::tables::maxp::Maxp;
+    use write_fonts::FontBuilder;
+
+    let bytes = cache
+        .get(file_path)
+        .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
+
+    if bytes.is_empty() {
+        return Err(format!("Failed to read font file: {}", file_path));
+    }
+
+    let font = RawFontRef::new(&bytes).map_err(|e| format!("Invalid font file: {:?}", e))?;
+
+    let mut maxp: Maxp = font
+        .maxp()
+        .map_err(|e| format!("Failed to read maxp table: {:?}", e))?
+        .to_owned_table();
+
+    maxp.num_glyphs = updates.num_glyphs;
+
+    let new_bytes = FontBuilder::new()
+        .add_table(&maxp)
+        .map_err(|e| format!("Failed to add maxp table: {:?}", e))?
+        .copy_missing_tables(font)
+        .build();
+
+    fs::write(file_path, &new_bytes).map_err(|e| format!("Failed to write font file: {}", e))?;
+
+    cache
+        .fonts
+        .lock()
+        .unwrap()
+        .insert(file_path.to_string(), new_bytes);
+    cache.outlines.lock().unwrap().remove(file_path);
+
+    Ok(())
+}
+
+#[derive(Deserialize)]
+pub struct NameTableUpdate {
+    pub name_id: u16,
+    pub platform_id: u16,
+    pub value: String,
+}
+
+pub fn update_name_table(
+    file_path: &str,
+    updates: &NameTableUpdate,
+    cache: &FontCache,
+) -> Result<(), String> {
+    use write_fonts::tables::name::{Name, NameRecord};
+    use write_fonts::FontBuilder;
+
+    let bytes = cache
+        .get(file_path)
+        .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
+
+    if bytes.is_empty() {
+        return Err(format!("Failed to read font file: {}", file_path));
+    }
+
+    let font = RawFontRef::new(&bytes).map_err(|e| format!("Invalid font file: {:?}", e))?;
+
+    let name_table = font
+        .name()
+        .map_err(|e| format!("Failed to read name table: {:?}", e))?;
+
+    let mut new_records = Vec::new();
+    let mut found = false;
+
+    for record in name_table.name_record().iter() {
+        if record.name_id().to_u16() == updates.name_id
+            && record.platform_id() as u16 == updates.platform_id
+        {
+            let new_record = NameRecord {
+                platform_id: record.platform_id.get(),
+                encoding_id: record.encoding_id.get(),
+                language_id: record.language_id.get(),
+                name_id: record.name_id().to_u16().into(),
+                string: updates.value.clone().into(),
+            };
+            new_records.push(new_record);
+            found = true;
+        } else {
+            let existing_string = record
+                .string(name_table.string_data())
+                .map(|s| s.chars().collect::<String>())
+                .unwrap_or_default();
+            let new_record = NameRecord {
+                platform_id: record.platform_id.get(),
+                encoding_id: record.encoding_id.get(),
+                language_id: record.language_id.get(),
+                name_id: record.name_id().to_u16().into(),
+                string: existing_string.into(),
+            };
+            new_records.push(new_record);
+        }
+    }
+
+    if !found {
+        return Err(format!(
+            "No name record found for name_id={} platform_id={}",
+            updates.name_id, updates.platform_id
+        ));
+    }
+
+    let new_name = Name::new(new_records);
+
+    let new_bytes = FontBuilder::new()
+        .add_table(&new_name)
+        .map_err(|e| format!("Failed to add name table: {:?}", e))?
+        .copy_missing_tables(font)
+        .build();
+
+    fs::write(file_path, &new_bytes).map_err(|e| format!("Failed to write font file: {}", e))?;
+
+    cache
+        .fonts
+        .lock()
+        .unwrap()
+        .insert(file_path.to_string(), new_bytes);
     cache.outlines.lock().unwrap().remove(file_path);
 
     Ok(())
@@ -662,9 +890,12 @@ fn parse_svg_path_cmds(path: &str) -> Result<Vec<SvgCmd>, String> {
     let mut i = 0usize;
 
     let next_f = |idx: &mut usize| -> Result<f32, String> {
-        let s = tokens.get(*idx).ok_or_else(|| "unexpected end of path".to_string())?;
+        let s = tokens
+            .get(*idx)
+            .ok_or_else(|| "unexpected end of path".to_string())?;
         *idx += 1;
-        s.parse::<f32>().map_err(|e| format!("bad number '{}': {}", s, e))
+        s.parse::<f32>()
+            .map_err(|e| format!("bad number '{}': {}", s, e))
     };
 
     while i < tokens.len() {
@@ -723,7 +954,9 @@ fn build_glyf_glyph_bytes(cmds: &[SvgCmd]) -> Result<Vec<u8>, String> {
     for cmd in cmds {
         match cmd {
             SvgCmd::MoveTo(x, y) => {
-                if !cur.is_empty() { contours.push(std::mem::take(&mut cur)); }
+                if !cur.is_empty() {
+                    contours.push(std::mem::take(&mut cur));
+                }
                 cur.push((x.round() as i16, y.round() as i16, true));
             }
             SvgCmd::LineTo(x, y) => {
@@ -735,15 +968,22 @@ fn build_glyf_glyph_bytes(cmds: &[SvgCmd]) -> Result<Vec<u8>, String> {
             }
             SvgCmd::CurveTo(..) => {
                 return Err("Cubic Bézier (C) not supported in glyf table. \
-                    Use a CFF font for cubic curves.".into());
+                    Use a CFF font for cubic curves."
+                    .into());
             }
             SvgCmd::Close => {
-                if !cur.is_empty() { contours.push(std::mem::take(&mut cur)); }
+                if !cur.is_empty() {
+                    contours.push(std::mem::take(&mut cur));
+                }
             }
         }
     }
-    if !cur.is_empty() { contours.push(cur); }
-    if contours.is_empty() { return Ok(Vec::new()); }
+    if !cur.is_empty() {
+        contours.push(cur);
+    }
+    if contours.is_empty() {
+        return Ok(Vec::new());
+    }
 
     // Flatten
     let mut pts: Vec<(i16, i16, bool)> = Vec::new();
@@ -768,17 +1008,29 @@ fn build_glyf_glyph_bytes(cmds: &[SvgCmd]) -> Result<Vec<u8>, String> {
     buf.extend(x_max.to_be_bytes());
     buf.extend(y_max.to_be_bytes());
     // endPtsOfContours
-    for ep in &end_pts { buf.extend(ep.to_be_bytes()); }
+    for ep in &end_pts {
+        buf.extend(ep.to_be_bytes());
+    }
     // instructionLength = 0
     buf.extend(0u16.to_be_bytes());
     // flags (uncompressed: no SHORT_VECTOR bits)
-    for &(_, _, on) in &pts { buf.push(if on { 0x01 } else { 0x00 }); }
+    for &(_, _, on) in &pts {
+        buf.push(if on { 0x01 } else { 0x00 });
+    }
     // x-coordinates (relative i16 deltas, big-endian)
     let mut prev: i16 = 0;
-    for &(x, _, _) in &pts { let d = x - prev; buf.extend(d.to_be_bytes()); prev = x; }
+    for &(x, _, _) in &pts {
+        let d = x - prev;
+        buf.extend(d.to_be_bytes());
+        prev = x;
+    }
     // y-coordinates (relative i16 deltas, big-endian)
     prev = 0;
-    for &(_, y, _) in &pts { let d = y - prev; buf.extend(d.to_be_bytes()); prev = y; }
+    for &(_, y, _) in &pts {
+        let d = y - prev;
+        buf.extend(d.to_be_bytes());
+        prev = y;
+    }
 
     Ok(buf)
 }
@@ -788,14 +1040,25 @@ fn parse_loca_offsets(loca: &[u8], n_plus_one: usize, is_long: bool) -> Vec<u32>
     if is_long {
         for i in 0..n_plus_one {
             let b = i * 4;
-            if b + 4 > loca.len() { v.push(0); continue; }
-            v.push(u32::from_be_bytes([loca[b], loca[b+1], loca[b+2], loca[b+3]]));
+            if b + 4 > loca.len() {
+                v.push(0);
+                continue;
+            }
+            v.push(u32::from_be_bytes([
+                loca[b],
+                loca[b + 1],
+                loca[b + 2],
+                loca[b + 3],
+            ]));
         }
     } else {
         for i in 0..n_plus_one {
             let b = i * 2;
-            if b + 2 > loca.len() { v.push(0); continue; }
-            v.push(u16::from_be_bytes([loca[b], loca[b+1]]) as u32 * 2);
+            if b + 2 > loca.len() {
+                v.push(0);
+                continue;
+            }
+            v.push(u16::from_be_bytes([loca[b], loca[b + 1]]) as u32 * 2);
         }
     }
     v
@@ -803,7 +1066,7 @@ fn parse_loca_offsets(loca: &[u8], n_plus_one: usize, is_long: bool) -> Vec<u32>
 
 fn rebuild_glyf_with_patch(
     glyf: &[u8],
-    offsets: &[u32],       // n+1 entries
+    offsets: &[u32], // n+1 entries
     glyph_id: usize,
     new_glyph: &[u8],
     is_long: bool,
@@ -824,14 +1087,18 @@ fn rebuild_glyf_with_patch(
             }
         }
         // Pad to 4-byte boundary (required by OpenType spec)
-        while new_glyf.len() % 4 != 0 { new_glyf.push(0); }
+        while new_glyf.len() % 4 != 0 {
+            new_glyf.push(0);
+        }
     }
     new_offsets.push(new_glyf.len() as u32); // sentinel
 
     // Build loca bytes
     let new_loca = if is_long {
         let mut v: Vec<u8> = Vec::with_capacity(new_offsets.len() * 4);
-        for &o in &new_offsets { v.extend(o.to_be_bytes()); }
+        for &o in &new_offsets {
+            v.extend(o.to_be_bytes());
+        }
         v
     } else {
         // Short loca stores offset/2 as uint16
@@ -861,15 +1128,14 @@ pub fn save_glyph_outline(
         ));
     }
 
-    let bytes = cache.get(file_path).unwrap_or_else(|| {
-        fs::read(file_path).unwrap_or_default()
-    });
+    let bytes = cache
+        .get(file_path)
+        .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
     if bytes.is_empty() {
         return Err(format!("Failed to read font file: {}", file_path));
     }
 
-    let font = RawFontRef::new(&bytes)
-        .map_err(|e| format!("Invalid font file: {:?}", e))?;
+    let font = RawFontRef::new(&bytes).map_err(|e| format!("Invalid font file: {:?}", e))?;
 
     // Parse the SVG path back to font-space points
     let cmds = parse_svg_path_cmds(&args.svg_path)?;
@@ -879,7 +1145,10 @@ pub fn save_glyph_outline(
     use skrifa::raw::types::Tag;
     let head = font.head().map_err(|e| format!("head: {:?}", e))?;
     let is_long = head.index_to_loc_format() != 0;
-    let num_glyphs = font.maxp().map_err(|e| format!("maxp: {:?}", e))?.num_glyphs() as usize;
+    let num_glyphs = font
+        .maxp()
+        .map_err(|e| format!("maxp: {:?}", e))?
+        .num_glyphs() as usize;
 
     let loca_data = font
         .table_data(Tag::new(b"loca"))
@@ -896,12 +1165,17 @@ pub fn save_glyph_outline(
         ));
     }
 
-    let (new_glyf, new_loca) =
-        rebuild_glyf_with_patch(glyf_data.as_bytes(), &offsets, args.glyph_id as usize, &new_glyph_bytes, is_long)?;
+    let (new_glyf, new_loca) = rebuild_glyf_with_patch(
+        glyf_data.as_bytes(),
+        &offsets,
+        args.glyph_id as usize,
+        &new_glyph_bytes,
+        is_long,
+    )?;
 
     // Rebuild font with patched glyf/loca, copy all other tables
-    use write_fonts::FontBuilder;
     use write_fonts::types::Tag as WTag;
+    use write_fonts::FontBuilder;
 
     let new_font_bytes = FontBuilder::new()
         .add_raw(WTag::new(b"glyf"), new_glyf)
@@ -909,11 +1183,14 @@ pub fn save_glyph_outline(
         .copy_missing_tables(font)
         .build();
 
-    fs::write(file_path, &new_font_bytes)
-        .map_err(|e| format!("Failed to write font: {}", e))?;
+    fs::write(file_path, &new_font_bytes).map_err(|e| format!("Failed to write font: {}", e))?;
 
     // Invalidate caches
-    cache.fonts.lock().unwrap().insert(file_path.to_string(), new_font_bytes);
+    cache
+        .fonts
+        .lock()
+        .unwrap()
+        .insert(file_path.to_string(), new_font_bytes);
     cache.outlines.lock().unwrap().remove(file_path);
 
     Ok(())

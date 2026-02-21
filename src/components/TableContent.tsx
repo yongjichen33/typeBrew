@@ -95,11 +95,11 @@ export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableN
     case 'head':
       return <HeadTable data={parsed} filePath={filePath!} onSaved={onTableUpdated} />;
     case 'name':
-      return <NameTable data={parsed} />;
+      return <NameTable data={parsed} filePath={filePath!} onSaved={onTableUpdated} />;
     case 'maxp':
-      return <MaxpTable data={parsed} />;
+      return <MaxpTable data={parsed} filePath={filePath!} onSaved={onTableUpdated} />;
     case 'hhea':
-      return <HheaTable data={parsed} />;
+      return <HheaTable data={parsed} filePath={filePath!} onSaved={onTableUpdated} />;
     case 'post':
       return <PostTable data={parsed} />;
     default:
