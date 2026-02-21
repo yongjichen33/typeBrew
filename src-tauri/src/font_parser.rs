@@ -498,6 +498,71 @@ pub fn get_table_content(
             }))
             .map_err(|e| format!("Failed to serialize post table: {}", e))?
         }
+        "OS/2" | "os2" => {
+            let table = font
+                .os2()
+                .map_err(|e| format!("Failed to read OS/2 table: {:?}", e))?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "version": table.version(),
+                "x_avg_char_width": table.x_avg_char_width(),
+                "us_weight_class": table.us_weight_class(),
+                "us_width_class": table.us_width_class(),
+                "fs_type": table.fs_type(),
+                "y_subscript_x_size": table.y_subscript_x_size(),
+                "y_subscript_y_size": table.y_subscript_y_size(),
+                "y_subscript_x_offset": table.y_subscript_x_offset(),
+                "y_subscript_y_offset": table.y_subscript_y_offset(),
+                "y_superscript_x_size": table.y_superscript_x_size(),
+                "y_superscript_y_size": table.y_superscript_y_size(),
+                "y_superscript_x_offset": table.y_superscript_x_offset(),
+                "y_superscript_y_offset": table.y_superscript_y_offset(),
+                "y_strikeout_size": table.y_strikeout_size(),
+                "y_strikeout_position": table.y_strikeout_position(),
+                "s_family_class": table.s_family_class(),
+            }))
+            .map_err(|e| format!("Failed to serialize OS/2 table: {}", e))?
+        }
+        "loca" => {
+            use skrifa::raw::types::Tag;
+            let head = font
+                .head()
+                .map_err(|e| format!("Failed to read head table: {:?}", e))?;
+            let is_long = head.index_to_loc_format() != 0;
+            let num_glyphs = font
+                .maxp()
+                .map_err(|e| format!("Failed to read maxp table: {:?}", e))?
+                .num_glyphs() as usize;
+
+            let loca_data = font
+                .table_data(Tag::new(b"loca"))
+                .ok_or_else(|| "No loca table in font".to_string())?;
+
+            let offsets = parse_loca_offsets(loca_data.as_bytes(), num_glyphs + 1, is_long);
+
+            let entries: Vec<serde_json::Value> = offsets
+                .iter()
+                .enumerate()
+                .map(|(i, &offset)| {
+                    let length = if i + 1 < offsets.len() {
+                        offsets[i + 1].saturating_sub(offset)
+                    } else {
+                        0
+                    };
+                    serde_json::json!({
+                        "glyph_id": i,
+                        "offset": offset,
+                        "length": length,
+                    })
+                })
+                .collect();
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "format": if is_long { "long (32-bit)" } else { "short (16-bit)" },
+                "num_glyphs": num_glyphs,
+                "entries": entries,
+            }))
+            .map_err(|e| format!("Failed to serialize loca table: {}", e))?
+        }
         _ => {
             // For other tables, try to get raw table data
             let table_data = font

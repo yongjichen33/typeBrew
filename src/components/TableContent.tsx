@@ -6,6 +6,8 @@ import { NameTable } from '@/components/tables/NameTable';
 import { MaxpTable } from '@/components/tables/MaxpTable';
 import { HheaTable } from '@/components/tables/HheaTable';
 import { PostTable } from '@/components/tables/PostTable';
+import { OS2Table } from '@/components/tables/OS2Table';
+import { LocaTable } from '@/components/tables/LocaTable';
 import { DefaultTable } from '@/components/tables/DefaultTable';
 import type { Glyph } from '@/lib/glyphParser';
 
@@ -102,6 +104,11 @@ export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableN
       return <HheaTable data={parsed} filePath={filePath!} onSaved={onTableUpdated} />;
     case 'post':
       return <PostTable data={parsed} />;
+    case 'OS/2':
+    case 'os2':
+      return <OS2Table data={parsed} />;
+    case 'loca':
+      return <LocaTable data={parsed} />;
     default:
       return <DefaultTable tableName={tableName} data={parsed} />;
   }
