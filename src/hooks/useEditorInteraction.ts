@@ -124,6 +124,16 @@ export function useEditorInteraction({
       return;
     }
 
+    // Hand tool = pan
+    if (toolMode === 'hand') {
+      panRef.current = {
+        startOriginX: vt.originX, startOriginY: vt.originY,
+        startX: x, startY: y,
+      };
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
+
     if (toolMode === 'select') {
       const hitId = hitTest(x, y, paths, vt);
       if (hitId) {

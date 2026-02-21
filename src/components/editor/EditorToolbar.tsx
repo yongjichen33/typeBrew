@@ -1,4 +1,4 @@
-import { MousePointer2, Pen, Undo2, Redo2, Save, Loader2, Circle, Square } from 'lucide-react';
+import { MousePointer2, Pen, Undo2, Redo2, Save, Loader2, Circle, Square, Hand } from 'lucide-react';
 import type { ToolMode, DrawPointType } from '@/lib/editorTypes';
 
 interface EditorToolbarProps {
@@ -73,6 +73,12 @@ export function EditorToolbar({
         label="Draw (P)"
         active={toolMode === 'draw'}
         onClick={() => onSetMode('draw')}
+      />
+      <ToolButton
+        icon={<Hand size={15} />}
+        label="Hand (H)"
+        active={toolMode === 'hand'}
+        onClick={() => onSetMode('hand')}
       />
 
       {/* Draw sub-options: on-curve / off-curve point type */}

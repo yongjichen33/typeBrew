@@ -159,7 +159,7 @@ export function GlyphEditorCanvas({
         style={{
           width: canvasSize.w,
           height: canvasSize.h,
-          cursor: toolMode === 'draw' ? 'crosshair' : 'default',
+          cursor: toolMode === 'draw' ? 'crosshair' : toolMode === 'hand' ? 'grab' : 'default',
           display: 'block',
         }}
         onPointerDown={(e) => onPointerDown(e.nativeEvent)}

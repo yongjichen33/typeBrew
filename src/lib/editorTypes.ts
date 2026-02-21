@@ -1,4 +1,4 @@
-export type ToolMode = 'select' | 'draw';
+export type ToolMode = 'select' | 'draw' | 'hand';
 export type DrawPointType = 'on-curve' | 'off-curve';
 export type PointType = 'on-curve' | 'off-curve-quad' | 'off-curve-cubic';
 
