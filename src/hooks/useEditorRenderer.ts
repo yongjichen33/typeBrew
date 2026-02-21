@@ -349,23 +349,6 @@ export function renderFrame(
     skCanvas.drawRect(rect, gstroke);
     gstroke.delete();
 
-    // Draw a preview line from the last on-curve to the pending control point
-    const lastPts = paths[paths.length - 1]?.commands;
-    if (lastPts && lastPts.length > 0) {
-      const lastCmd = lastPts[lastPts.length - 1];
-      let lastX = 0, lastY = 0;
-      if (lastCmd.kind === 'M' || lastCmd.kind === 'L') { lastX = lastCmd.point.x; lastY = lastCmd.point.y; }
-      else if (lastCmd.kind === 'Q') { lastX = lastCmd.point.x; lastY = lastCmd.point.y; }
-      else if (lastCmd.kind === 'C') { lastX = lastCmd.point.x; lastY = lastCmd.point.y; }
-      const [lsx, lsy] = toScreen(lastX, lastY, vt);
-      const linePaint = new Paint();
-      linePaint.setAntiAlias(true);
-      linePaint.setStyle(ck.PaintStyle.Stroke);
-      linePaint.setStrokeWidth(1);
-      linePaint.setColor(rgba(200, 100, 0, 0.4));
-      skCanvas.drawLine(lsx, lsy, psx, psy, linePaint);
-      linePaint.delete();
-    }
   }
 
   // ---- 8. Rubber-band selection rect ----

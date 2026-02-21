@@ -147,6 +147,18 @@ export function GlyphEditorCanvas({
     return () => observer.disconnect();
   }, []);
 
+  // Redraw when the tab becomes visible again (GL shows the hidden container)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) redraw();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const getCanvasRect = () => canvasRef.current?.getBoundingClientRect() ?? null;
 
   const { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave } =
