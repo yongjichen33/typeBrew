@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
 import type { Glyph } from '@/lib/glyphParser';
 import { editorEventBus } from '@/lib/editorEventBus';
+import type { GlyphOutlineData } from '@/lib/editorTypes';
 
 interface GlyphGridProps {
   glyphs: Glyph[];
@@ -31,20 +33,29 @@ function GlyphCell({
     ? `${bounds.x_min - padding} ${-bounds.y_max - padding} ${bounds.x_max - bounds.x_min + padding * 2} ${bounds.y_max - bounds.y_min + padding * 2}`
     : `0 ${-unitsPerEm} ${unitsPerEm} ${unitsPerEm}`;
 
-  const handleClick = () => {
-    editorEventBus.emit({
-      filePath,
-      tableName,
-      glyphId: glyph.glyph_id,
-      glyphName: glyph.glyph_name,
-      svgPath: glyph.svg_path,
-      advanceWidth: glyph.advance_width,
-      boundsXMin: bounds?.x_min ?? 0,
-      boundsYMin: bounds?.y_min ?? 0,
-      boundsXMax: bounds?.x_max ?? 0,
-      boundsYMax: bounds?.y_max ?? 0,
-      unitsPerEm,
-    });
+  const handleClick = async () => {
+    try {
+      const outlineData = await invoke<GlyphOutlineData>('get_glyph_outline_data', {
+        filePath,
+        glyphId: glyph.glyph_id,
+      });
+
+      editorEventBus.emit({
+        filePath,
+        tableName,
+        glyphId: glyph.glyph_id,
+        glyphName: glyph.glyph_name,
+        outlineData,
+        advanceWidth: outlineData.advance_width,
+        boundsXMin: outlineData.bounds?.x_min ?? 0,
+        boundsYMin: outlineData.bounds?.y_min ?? 0,
+        boundsXMax: outlineData.bounds?.x_max ?? 0,
+        boundsYMax: outlineData.bounds?.y_max ?? 0,
+        unitsPerEm,
+      });
+    } catch (err) {
+      console.error('Failed to load glyph outline data:', err);
+    }
   };
 
   return (

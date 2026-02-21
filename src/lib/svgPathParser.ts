@@ -1,4 +1,4 @@
-import type { EditablePath, EditablePoint, PathCommand } from './editorTypes';
+import type { EditablePath, EditablePoint, PathCommand, GlyphOutlineData, PointType } from './editorTypes';
 
 let _idCounter = 0;
 function uid(): string {
@@ -140,4 +140,44 @@ export function collectAllPoints(paths: EditablePath[]): EditablePoint[] {
 /** Deep-clone paths (for undo stack). */
 export function clonePaths(paths: EditablePath[]): EditablePath[] {
   return JSON.parse(JSON.stringify(paths));
+}
+
+/** Convert GlyphOutlineData from backend to EditablePath[] for the editor. */
+export function outlineDataToEditablePaths(outlineData: GlyphOutlineData): EditablePath[] {
+  return outlineData.contours.map((contour, contourIndex) => {
+    const commands: PathCommand[] = contour.commands.map((cmd) => {
+      switch (cmd.kind) {
+        case 'M':
+          return {
+            kind: 'M' as const,
+            point: makePoint(cmd.point.x, cmd.point.y, 'on-curve'),
+          };
+        case 'L':
+          return {
+            kind: 'L' as const,
+            point: makePoint(cmd.point.x, cmd.point.y, 'on-curve'),
+          };
+        case 'Q':
+          return {
+            kind: 'Q' as const,
+            ctrl: makePoint(cmd.ctrl.x, cmd.ctrl.y, 'off-curve-quad'),
+            point: makePoint(cmd.point.x, cmd.point.y, 'on-curve'),
+          };
+        case 'C':
+          return {
+            kind: 'C' as const,
+            ctrl1: makePoint(cmd.ctrl1.x, cmd.ctrl1.y, 'off-curve-cubic'),
+            ctrl2: makePoint(cmd.ctrl2.x, cmd.ctrl2.y, 'off-curve-cubic'),
+            point: makePoint(cmd.point.x, cmd.point.y, 'on-curve'),
+          };
+        case 'Z':
+          return { kind: 'Z' as const };
+      }
+    });
+    return { id: `contour-${contourIndex}-${uid()}`, commands };
+  });
+}
+
+function makePoint(x: number, y: number, type: PointType): EditablePoint {
+  return { id: uid(), x, y, type };
 }

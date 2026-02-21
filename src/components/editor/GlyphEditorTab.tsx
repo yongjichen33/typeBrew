@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { useCanvasKit } from '@/hooks/useCanvasKit';
 import { useGlyphEditor } from '@/hooks/useGlyphEditor';
-import { parseSvgPath, editablePathToSvg } from '@/lib/svgPathParser';
+import { editablePathToSvg, outlineDataToEditablePaths } from '@/lib/svgPathParser';
 import { EditorToolbar } from './EditorToolbar';
 import { GlyphEditorCanvas } from './GlyphEditorCanvas';
 import type { GlyphEditorTabState, FontMetrics, ViewTransform } from '@/lib/editorTypes';
@@ -36,7 +36,7 @@ interface Props {
 }
 
 export function GlyphEditorTab({ tabState }: Props) {
-  const { filePath, tableName, glyphId, glyphName, svgPath, advanceWidth, boundsXMin, boundsYMin, boundsXMax, boundsYMax, unitsPerEm } = tabState;
+  const { filePath, tableName, glyphId, glyphName, outlineData, advanceWidth, boundsXMin, boundsYMin, boundsXMax, boundsYMax, unitsPerEm } = tabState;
 
   const ck = useCanvasKit();
 
@@ -70,8 +70,10 @@ export function GlyphEditorTab({ tabState }: Props) {
 
   // Load glyph data and font metrics on mount
   useEffect(() => {
-    // Parse the SVG path into editable points
-    const paths = parseSvgPath(svgPath);
+    if (!outlineData) return;
+
+    // Convert outline data to editable paths
+    const paths = outlineDataToEditablePaths(outlineData);
     dispatch({ type: 'SET_PATHS', paths });
 
     // Fetch hhea for ascender/descender
@@ -105,7 +107,7 @@ export function GlyphEditorTab({ tabState }: Props) {
         setMetrics(m);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filePath, svgPath]);
+  }, [filePath, outlineData]);
 
   // Once we have metrics and ck, compute initial view transform
   const [vtInitialized, setVtInitialized] = useState(false);

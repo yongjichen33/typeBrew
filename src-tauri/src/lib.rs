@@ -1,7 +1,9 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod font_parser;
 
-use font_parser::{FontCache, HeadTableUpdate, HheaTableUpdate, MaxpTableUpdate, NameTableUpdate};
+use font_parser::{
+    FontCache, GlyphOutlineData, HeadTableUpdate, HheaTableUpdate, MaxpTableUpdate, NameTableUpdate,
+};
 use tauri::ipc::Response;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, State};
@@ -32,6 +34,15 @@ fn get_glyph_outlines(
 ) -> Result<Response, String> {
     let bytes = font_parser::get_glyph_outlines_binary(&file_path, offset, limit, &cache)?;
     Ok(Response::new(bytes))
+}
+
+#[tauri::command]
+fn get_glyph_outline_data(
+    file_path: String,
+    glyph_id: u32,
+    cache: State<FontCache>,
+) -> Result<GlyphOutlineData, String> {
+    font_parser::get_glyph_outline_data(&file_path, glyph_id, &cache)
 }
 
 #[tauri::command]
@@ -123,6 +134,7 @@ pub fn run() {
             parse_font_file,
             get_font_table,
             get_glyph_outlines,
+            get_glyph_outline_data,
             update_head_table,
             update_hhea_table,
             update_maxp_table,

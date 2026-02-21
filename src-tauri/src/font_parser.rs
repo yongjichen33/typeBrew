@@ -57,12 +57,54 @@ pub struct GlyphOutline {
     pub bounds: Option<GlyphBounds>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GlyphBounds {
     pub x_min: f32,
     pub y_min: f32,
     pub x_max: f32,
     pub y_max: f32,
+}
+
+// Structured outline data for the glyph editor
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GlyphOutlineData {
+    pub glyph_id: u32,
+    pub glyph_name: Option<String>,
+    pub contours: Vec<Contour>,
+    pub advance_width: f32,
+    pub bounds: Option<GlyphBounds>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Contour {
+    pub commands: Vec<OutlineCommand>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "kind")]
+pub enum OutlineCommand {
+    M {
+        point: Point,
+    },
+    L {
+        point: Point,
+    },
+    Q {
+        ctrl: Point,
+        point: Point,
+    },
+    C {
+        ctrl1: Point,
+        ctrl2: Point,
+        point: Point,
+    },
+    Z,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Point {
+    pub x: f32,
+    pub y: f32,
 }
 
 // Custom pen implementation that converts outline commands to SVG path
@@ -138,6 +180,106 @@ impl SvgPathPen {
         self.x_max = self.x_max.max(x);
         self.y_min = self.y_min.min(y);
         self.y_max = self.y_max.max(y);
+    }
+}
+
+// Pen implementation that collects outline commands as structured data
+struct OutlineDataPen {
+    contours: Vec<Contour>,
+    current_contour: Vec<OutlineCommand>,
+    x_min: f32,
+    x_max: f32,
+    y_min: f32,
+    y_max: f32,
+}
+
+impl OutlineDataPen {
+    fn new() -> Self {
+        Self {
+            contours: Vec::new(),
+            current_contour: Vec::new(),
+            x_min: f32::MAX,
+            x_max: f32::MIN,
+            y_min: f32::MAX,
+            y_max: f32::MIN,
+        }
+    }
+
+    fn update_bounds(&mut self, x: f32, y: f32) {
+        self.x_min = self.x_min.min(x);
+        self.x_max = self.x_max.max(x);
+        self.y_min = self.y_min.min(y);
+        self.y_max = self.y_max.max(y);
+    }
+
+    fn into_outline_data(
+        self,
+        glyph_id: u32,
+        glyph_name: Option<String>,
+        advance_width: f32,
+    ) -> GlyphOutlineData {
+        GlyphOutlineData {
+            glyph_id,
+            glyph_name,
+            contours: self.contours,
+            advance_width,
+            bounds: if self.x_min < self.x_max {
+                Some(GlyphBounds {
+                    x_min: self.x_min,
+                    y_min: self.y_min,
+                    x_max: self.x_max,
+                    y_max: self.y_max,
+                })
+            } else {
+                None
+            },
+        }
+    }
+}
+
+impl OutlinePen for OutlineDataPen {
+    fn move_to(&mut self, x: f32, y: f32) {
+        // Start a new contour
+        if !self.current_contour.is_empty() {
+            self.contours.push(Contour {
+                commands: std::mem::take(&mut self.current_contour),
+            });
+        }
+        self.current_contour.push(OutlineCommand::M {
+            point: Point { x, y },
+        });
+        self.update_bounds(x, y);
+    }
+
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.current_contour.push(OutlineCommand::L {
+            point: Point { x, y },
+        });
+        self.update_bounds(x, y);
+    }
+
+    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+        self.current_contour.push(OutlineCommand::Q {
+            ctrl: Point { x: cx0, y: cy0 },
+            point: Point { x, y },
+        });
+        self.update_bounds(cx0, cy0);
+        self.update_bounds(x, y);
+    }
+
+    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+        self.current_contour.push(OutlineCommand::C {
+            ctrl1: Point { x: cx0, y: cy0 },
+            ctrl2: Point { x: cx1, y: cy1 },
+            point: Point { x, y },
+        });
+        self.update_bounds(cx0, cy0);
+        self.update_bounds(cx1, cy1);
+        self.update_bounds(x, y);
+    }
+
+    fn close(&mut self) {
+        self.current_contour.push(OutlineCommand::Z);
     }
 }
 
@@ -295,6 +437,56 @@ pub fn get_glyph_outlines_binary(
         total as u32,
         cached.units_per_em,
     ))
+}
+
+pub fn get_glyph_outline_data(
+    file_path: &str,
+    glyph_id: u32,
+    cache: &FontCache,
+) -> Result<GlyphOutlineData, String> {
+    // Ensure font is loaded
+    let bytes = cache
+        .get(file_path)
+        .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
+    if bytes.is_empty() {
+        return Err(format!("Failed to read font file: {}", file_path));
+    }
+
+    let font = FontRef::new(&bytes).map_err(|e| format!("Failed to parse font: {:?}", e))?;
+
+    // Glyph name will be passed from frontend (already available in batch data)
+    let glyph_name = None;
+
+    // Get advance width from hmtx table
+    let advance_width = font
+        .glyph_metrics(
+            skrifa::instance::Size::unscaled(),
+            skrifa::instance::LocationRef::default(),
+        )
+        .advance_width(GlyphId::from(glyph_id))
+        .unwrap_or(0.0);
+
+    // Extract outline
+    let outlines = font.outline_glyphs();
+    let outline = outlines
+        .get(GlyphId::from(glyph_id))
+        .ok_or_else(|| format!("Glyph {} not found", glyph_id))?;
+
+    let mut pen = OutlineDataPen::new();
+    let location = skrifa::instance::Location::default();
+    let settings = DrawSettings::unhinted(skrifa::instance::Size::unscaled(), &location);
+
+    outline
+        .draw(settings, &mut pen)
+        .map_err(|e| format!("Failed to draw glyph outline: {:?}", e))?;
+
+    // Don't forget the last contour
+    if !pen.current_contour.is_empty() {
+        let commands = std::mem::take(&mut pen.current_contour);
+        pen.contours.push(Contour { commands });
+    }
+
+    Ok(pen.into_outline_data(glyph_id, glyph_name, advance_width))
 }
 
 pub fn parse_font(file_path: &str, cache: &FontCache) -> Result<FontMetadata, String> {

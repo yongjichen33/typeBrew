@@ -108,6 +108,64 @@ export interface GlyphEditorContextValue {
   openGlyphEditor: (glyphId: number) => void;
 }
 
+// ---- Glyph outline data from backend ----
+
+export interface GlyphOutlinePoint {
+  x: number;
+  y: number;
+}
+
+export interface GlyphOutlineCommand {
+  kind: 'M';
+  point: GlyphOutlinePoint;
+}
+
+export interface GlyphOutlineCommandL {
+  kind: 'L';
+  point: GlyphOutlinePoint;
+}
+
+export interface GlyphOutlineCommandQ {
+  kind: 'Q';
+  ctrl: GlyphOutlinePoint;
+  point: GlyphOutlinePoint;
+}
+
+export interface GlyphOutlineCommandC {
+  kind: 'C';
+  ctrl1: GlyphOutlinePoint;
+  ctrl2: GlyphOutlinePoint;
+  point: GlyphOutlinePoint;
+}
+
+export interface GlyphOutlineCommandZ {
+  kind: 'Z';
+}
+
+export type GlyphOutlineCommandRaw =
+  | GlyphOutlineCommand
+  | GlyphOutlineCommandL
+  | GlyphOutlineCommandQ
+  | GlyphOutlineCommandC
+  | GlyphOutlineCommandZ;
+
+export interface GlyphContour {
+  commands: GlyphOutlineCommandRaw[];
+}
+
+export interface GlyphOutlineData {
+  glyph_id: number;
+  glyph_name?: string;
+  contours: GlyphContour[];
+  advance_width: number;
+  bounds?: {
+    x_min: number;
+    y_min: number;
+    x_max: number;
+    y_max: number;
+  };
+}
+
 // ---- State passed to GoldenLayout for a GlyphEditorTab ----
 
 export interface GlyphEditorTabState {
@@ -115,7 +173,8 @@ export interface GlyphEditorTabState {
   tableName: string;
   glyphId: number;
   glyphName?: string;
-  svgPath: string;
+  outlineData?: GlyphOutlineData;
+  svgPath?: string;
   advanceWidth: number;
   boundsXMin: number;
   boundsYMin: number;
