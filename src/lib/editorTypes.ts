@@ -1,4 +1,5 @@
 export type ToolMode = 'select' | 'draw';
+export type DrawPointType = 'on-curve' | 'off-curve';
 export type PointType = 'on-curve' | 'off-curve-quad' | 'off-curve-cubic';
 
 export interface Vec2 {
@@ -69,6 +70,7 @@ export interface EditorState {
   paths: EditablePath[];
   selection: Selection;
   toolMode: ToolMode;
+  drawPointType: DrawPointType;
   viewTransform: ViewTransform;
   isDirty: boolean;
   isSaving: boolean;
@@ -85,6 +87,7 @@ export type EditorAction =
   | { type: 'SET_SELECTION'; pointIds: Set<string> }
   | { type: 'TOGGLE_SELECTION'; pointId: string }
   | { type: 'SET_TOOL_MODE'; mode: ToolMode }
+  | { type: 'SET_DRAW_POINT_TYPE'; drawPointType: DrawPointType }
   | { type: 'SET_VIEW_TRANSFORM'; vt: ViewTransform }
   | { type: 'UNDO' }
   | { type: 'REDO' }

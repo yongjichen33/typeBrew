@@ -1,9 +1,11 @@
-import { MousePointer2, Pen, Undo2, Redo2, Save, Loader2 } from 'lucide-react';
-import type { ToolMode } from '@/lib/editorTypes';
+import { MousePointer2, Pen, Undo2, Redo2, Save, Loader2, Circle, Square } from 'lucide-react';
+import type { ToolMode, DrawPointType } from '@/lib/editorTypes';
 
 interface EditorToolbarProps {
   toolMode: ToolMode;
   onSetMode: (mode: ToolMode) => void;
+  drawPointType: DrawPointType;
+  onSetDrawPointType: (type: DrawPointType) => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -47,6 +49,8 @@ function ToolButton({
 export function EditorToolbar({
   toolMode,
   onSetMode,
+  drawPointType,
+  onSetDrawPointType,
   canUndo,
   canRedo,
   onUndo,
@@ -70,6 +74,25 @@ export function EditorToolbar({
         active={toolMode === 'draw'}
         onClick={() => onSetMode('draw')}
       />
+
+      {/* Draw sub-options: on-curve / off-curve point type */}
+      {toolMode === 'draw' && (
+        <>
+          <div className="w-px h-5 bg-border mx-1" />
+          <ToolButton
+            icon={<Circle size={13} />}
+            label="On-curve point"
+            active={drawPointType === 'on-curve'}
+            onClick={() => onSetDrawPointType('on-curve')}
+          />
+          <ToolButton
+            icon={<Square size={13} />}
+            label="Off-curve point"
+            active={drawPointType === 'off-curve'}
+            onClick={() => onSetDrawPointType('off-curve')}
+          />
+        </>
+      )}
 
       <div className="w-px h-5 bg-border mx-1" />
 

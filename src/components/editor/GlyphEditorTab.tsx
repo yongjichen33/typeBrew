@@ -51,6 +51,7 @@ export function GlyphEditorTab({ tabState }: Props) {
     paths: state.paths,
     selection: state.selection,
     toolMode: state.toolMode,
+    drawPointType: state.drawPointType,
     viewTransform: state.viewTransform,
   });
   useEffect(() => {
@@ -58,6 +59,7 @@ export function GlyphEditorTab({ tabState }: Props) {
       paths: state.paths,
       selection: state.selection,
       toolMode: state.toolMode,
+      drawPointType: state.drawPointType,
       viewTransform: state.viewTransform,
     };
   }, [state]);
@@ -174,6 +176,8 @@ export function GlyphEditorTab({ tabState }: Props) {
       <EditorToolbar
         toolMode={state.toolMode}
         onSetMode={(mode) => dispatch({ type: 'SET_TOOL_MODE', mode })}
+        drawPointType={state.drawPointType}
+        onSetDrawPointType={(drawPointType) => dispatch({ type: 'SET_DRAW_POINT_TYPE', drawPointType })}
         canUndo={state.undoStack.length > 0}
         canRedo={state.redoStack.length > 0}
         onUndo={() => dispatch({ type: 'UNDO' })}

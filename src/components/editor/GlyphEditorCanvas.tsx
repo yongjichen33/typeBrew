@@ -22,6 +22,7 @@ interface GlyphEditorCanvasProps {
     paths: EditablePath[];
     selection: Selection;
     toolMode: string;
+    drawPointType: string;
     viewTransform: ViewTransform;
   }>;
 }
@@ -48,13 +49,16 @@ export function GlyphEditorCanvas({
 
   const [rubberBand, setRubberBandState] = useState<RubberBand | null>(null);
   const [mousePos, setMousePosState] = useState<{ x: number; y: number } | null>(null);
+  const [pendingOffCurve, setPendingOffCurveState] = useState<{ x: number; y: number } | null>(null);
 
   const rubberBandRef = useRef<RubberBand | null>(null);
   const mousePosRef = useRef<{ x: number; y: number } | null>(null);
+  const pendingOffCurveRef = useRef<{ x: number; y: number } | null>(null);
 
   const extraRef = useRef({
     rubberBand: rubberBandRef.current,
     mousePos: mousePosRef.current,
+    pendingOffCurve: pendingOffCurveRef.current,
     canvasWidth: canvasSize.w,
     canvasHeight: canvasSize.h,
   });
@@ -64,10 +68,11 @@ export function GlyphEditorCanvas({
     extraRef.current = {
       rubberBand: rubberBandRef.current,
       mousePos: mousePosRef.current,
+      pendingOffCurve: pendingOffCurveRef.current,
       canvasWidth: canvasSize.w,
       canvasHeight: canvasSize.h,
     };
-  }, [rubberBand, mousePos, canvasSize]);
+  }, [rubberBand, mousePos, pendingOffCurve, canvasSize]);
 
   const setRubberBand = (rb: RubberBand | null) => {
     rubberBandRef.current = rb;
@@ -78,6 +83,11 @@ export function GlyphEditorCanvas({
     mousePosRef.current = pos;
     extraRef.current = { ...extraRef.current, mousePos: pos };
     setMousePosState(pos);
+  };
+  const setPendingOffCurve = (pos: { x: number; y: number } | null) => {
+    pendingOffCurveRef.current = pos;
+    extraRef.current = { ...extraRef.current, pendingOffCurve: pos };
+    setPendingOffCurveState(pos);
   };
 
   const { redraw } = useEditorRenderer(ck, surfaceRef, stateRef, metricsRef, extraRef);
@@ -120,7 +130,7 @@ export function GlyphEditorCanvas({
   useEffect(() => {
     redraw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paths, selection, toolMode, viewTransform, rubberBand, mousePos]);
+  }, [paths, selection, toolMode, viewTransform, rubberBand, mousePos, pendingOffCurve]);
 
   // Observe container size and update canvas dimensions
   useEffect(() => {
@@ -140,7 +150,7 @@ export function GlyphEditorCanvas({
   const getCanvasRect = () => canvasRef.current?.getBoundingClientRect() ?? null;
 
   const { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave } =
-    useEditorInteraction({ stateRef, dispatch, setRubberBand, setMousePos, redraw, getCanvasRect });
+    useEditorInteraction({ stateRef, dispatch, setRubberBand, setMousePos, setPendingOffCurve, redraw, getCanvasRect });
 
   return (
     <div ref={containerRef} className="flex-1 min-h-0 w-full relative overflow-hidden bg-white">

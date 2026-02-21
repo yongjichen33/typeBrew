@@ -5,6 +5,7 @@ import type {
   EditablePath,
   EditablePoint,
   ViewTransform,
+  DrawPointType,
 } from '@/lib/editorTypes';
 import { clonePaths } from '@/lib/svgPathParser';
 
@@ -110,6 +111,10 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, toolMode: action.mode, selection: { pointIds: new Set() } };
     }
 
+    case 'SET_DRAW_POINT_TYPE': {
+      return { ...state, drawPointType: action.drawPointType };
+    }
+
     case 'SET_VIEW_TRANSFORM': {
       return { ...state, viewTransform: action.vt };
     }
@@ -160,6 +165,7 @@ export function makeInitialState(vt: ViewTransform): EditorState {
     paths: [],
     selection: { pointIds: new Set() },
     toolMode: 'select',
+    drawPointType: 'on-curve' as DrawPointType,
     viewTransform: vt,
     isDirty: false,
     isSaving: false,

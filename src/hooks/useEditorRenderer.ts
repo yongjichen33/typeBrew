@@ -8,24 +8,26 @@ function rgba(r: number, g: number, b: number, a = 1): Float32Array {
 }
 
 const C = {
-  bg:             rgba(255, 255, 255),
-  fill:           rgba(30, 30, 30, 0.12),
-  outline:        rgba(30, 30, 30, 0.85),
-  baseline:       rgba(150, 150, 150),
-  ascender:       rgba(100, 130, 200, 0.8),
-  descender:      rgba(200, 100, 100, 0.8),
-  advance:        rgba(100, 180, 100, 0.8),
-  bbox:           rgba(180, 180, 180),
-  handle:         rgba(160, 160, 160),
-  onCurveFill:    rgba(255, 255, 255),
-  onCurveStroke:  rgba(70, 70, 70),
-  offCurveFill:   rgba(255, 255, 255),
-  offCurveStroke: rgba(140, 140, 140),
-  selectedFill:   rgba(0, 112, 243),
-  selectedStroke: rgba(0, 80, 200),
-  rubber:         rgba(0, 112, 243, 0.12),
-  rubberStroke:   rgba(0, 112, 243, 0.7),
-  ghostPoint:     rgba(0, 112, 243, 0.35),
+  bg:              rgba(255, 255, 255),
+  fill:            rgba(30, 30, 30, 0.12),
+  outline:         rgba(30, 30, 30, 0.85),
+  baseline:        rgba(150, 150, 150),
+  ascender:        rgba(100, 130, 200, 0.8),
+  descender:       rgba(200, 100, 100, 0.8),
+  advance:         rgba(100, 180, 100, 0.8),
+  bbox:            rgba(180, 180, 180),
+  handle:          rgba(160, 160, 160),
+  onCurveFill:     rgba(255, 255, 255),
+  onCurveStroke:   rgba(70, 70, 70),
+  offCurveFill:    rgba(255, 255, 255),
+  offCurveStroke:  rgba(140, 140, 140),
+  selectedFill:    rgba(0, 112, 243),
+  selectedStroke:  rgba(0, 80, 200),
+  rubber:          rgba(0, 112, 243, 0.12),
+  rubberStroke:    rgba(0, 112, 243, 0.7),
+  ghostPoint:      rgba(0, 112, 243, 0.35),
+  directionArrow:  rgba(70, 70, 70, 0.75),
+  pendingOffCurve: rgba(200, 100, 0, 0.5),
 };
 
 // ---------- coordinate transform ----------
@@ -36,6 +38,69 @@ function toScreen(
     vt.originX + fx * vt.scale,
     vt.originY - fy * vt.scale,  // Y-flip: font Y-up → screen Y-down
   ];
+}
+
+// ---------- direction arrows ----------
+/** Collect (screen x, screen y, dx, dy) for every on-curve point, representing
+ *  the direction the contour is travelling when it arrives at that point.
+ *  For M points we use the outgoing direction (lookahead) since there is no arrival. */
+function collectArrows(
+  paths: EditablePath[],
+  vt: ViewTransform,
+): Array<{ sx: number; sy: number; dx: number; dy: number }> {
+  const arrows: Array<{ sx: number; sy: number; dx: number; dy: number }> = [];
+
+  for (const path of paths) {
+    const cmds = path.commands;
+    let prevOnX = 0, prevOnY = 0;
+
+    for (let i = 0; i < cmds.length; i++) {
+      const cmd = cmds[i];
+
+      if (cmd.kind === 'M') {
+        prevOnX = cmd.point.x;
+        prevOnY = cmd.point.y;
+        // Outgoing direction: look at next command
+        const next = cmds[i + 1];
+        if (!next || next.kind === 'Z') continue;
+        const [sx, sy] = toScreen(cmd.point.x, cmd.point.y, vt);
+        let targetFx: number, targetFy: number;
+        if (next.kind === 'L')      { targetFx = next.point.x; targetFy = next.point.y; }
+        else if (next.kind === 'Q') { targetFx = next.ctrl.x;  targetFy = next.ctrl.y; }
+        else if (next.kind === 'C') { targetFx = next.ctrl1.x; targetFy = next.ctrl1.y; }
+        else continue;
+        const [tsx, tsy] = toScreen(targetFx, targetFy, vt);
+        arrows.push({ sx, sy, dx: tsx - sx, dy: tsy - sy });
+
+      } else if (cmd.kind === 'L') {
+        // Incoming direction: prev on-curve → this
+        const [prevSx, prevSy] = toScreen(prevOnX, prevOnY, vt);
+        const [sx, sy]         = toScreen(cmd.point.x, cmd.point.y, vt);
+        arrows.push({ sx, sy, dx: sx - prevSx, dy: sy - prevSy });
+        prevOnX = cmd.point.x;
+        prevOnY = cmd.point.y;
+
+      } else if (cmd.kind === 'Q') {
+        // Arriving tangent: ctrl → point
+        const [csx, csy] = toScreen(cmd.ctrl.x,  cmd.ctrl.y,  vt);
+        const [sx, sy]   = toScreen(cmd.point.x, cmd.point.y, vt);
+        arrows.push({ sx, sy, dx: sx - csx, dy: sy - csy });
+        prevOnX = cmd.point.x;
+        prevOnY = cmd.point.y;
+
+      } else if (cmd.kind === 'C') {
+        // Arriving tangent: ctrl2 → point
+        const [c2sx, c2sy] = toScreen(cmd.ctrl2.x, cmd.ctrl2.y, vt);
+        const [sx, sy]     = toScreen(cmd.point.x, cmd.point.y, vt);
+        arrows.push({ sx, sy, dx: sx - c2sx, dy: sy - c2sy });
+        prevOnX = cmd.point.x;
+        prevOnY = cmd.point.y;
+      }
+      // Z: no point
+    }
+  }
+
+  return arrows;
 }
 
 // ---------- main draw function ----------
@@ -51,6 +116,7 @@ export function renderFrame(
   selection: Selection,
   rubberBand: RubberBand | null,
   mousePos: { x: number; y: number } | null,
+  pendingOffCurve: { x: number; y: number } | null,
   toolMode: string,
   canvasWidth: number,
   canvasHeight: number,
@@ -61,7 +127,7 @@ export function renderFrame(
 
   if (!metrics) return;
 
-  // ---- 1. Metric lines (dashed) ----
+  // ---- 1. Metric lines ----
   const metricPaint = new Paint();
   metricPaint.setAntiAlias(true);
   metricPaint.setStyle(ck.PaintStyle.Stroke);
@@ -100,7 +166,13 @@ export function renderFrame(
     bboxPaint.delete();
   }
 
-  if (paths.length === 0) return;
+  if (paths.length === 0) {
+    // Still draw draw-mode UI even with no path data
+    if (toolMode === 'draw' && mousePos) {
+      drawGhostPoint(ck, skCanvas, mousePos.x, mousePos.y, C.ghostPoint);
+    }
+    return;
+  }
 
   // ---- 3. Glyph fill ----
   const skPath = new ck.Path();
@@ -114,12 +186,12 @@ export function renderFrame(
         skPath.lineTo(sx, sy);
       } else if (cmd.kind === 'Q') {
         const [cx, cy] = toScreen(cmd.ctrl.x, cmd.ctrl.y, vt);
-        const [x, y] = toScreen(cmd.point.x, cmd.point.y, vt);
+        const [x, y]   = toScreen(cmd.point.x, cmd.point.y, vt);
         skPath.quadTo(cx, cy, x, y);
       } else if (cmd.kind === 'C') {
         const [c1x, c1y] = toScreen(cmd.ctrl1.x, cmd.ctrl1.y, vt);
         const [c2x, c2y] = toScreen(cmd.ctrl2.x, cmd.ctrl2.y, vt);
-        const [x, y] = toScreen(cmd.point.x, cmd.point.y, vt);
+        const [x, y]     = toScreen(cmd.point.x, cmd.point.y, vt);
         skPath.cubicTo(c1x, c1y, c2x, c2y, x, y);
       } else if (cmd.kind === 'Z') {
         skPath.close();
@@ -150,7 +222,6 @@ export function renderFrame(
   handlePaint.setStrokeWidth(1);
   handlePaint.setColor(C.handle);
 
-  // Keep track of last on-curve point per contour for Q handle arm
   for (const path of paths) {
     let lastOnX = 0, lastOnY = 0;
     for (const cmd of path.commands) {
@@ -166,7 +237,7 @@ export function renderFrame(
       } else if (cmd.kind === 'C') {
         const [c1x, c1y] = toScreen(cmd.ctrl1.x, cmd.ctrl1.y, vt);
         const [c2x, c2y] = toScreen(cmd.ctrl2.x, cmd.ctrl2.y, vt);
-        const [px, py] = toScreen(cmd.point.x, cmd.point.y, vt);
+        const [px, py]   = toScreen(cmd.point.x, cmd.point.y, vt);
         skCanvas.drawLine(lastOnX, lastOnY, c1x, c1y, handlePaint);
         skCanvas.drawLine(c2x, c2y, px, py, handlePaint);
         lastOnX = px; lastOnY = py;
@@ -225,7 +296,79 @@ export function renderFrame(
     }
   }
 
-  // ---- 6. Rubber-band selection rect ----
+  // ---- 6. Direction arrows on on-curve points ----
+  const ARROW_HEIGHT = 6;   // triangle height in screen pixels
+  const ARROW_HALF_W = 3;   // half-width of triangle base
+  const arrowPaint = new Paint();
+  arrowPaint.setAntiAlias(true);
+  arrowPaint.setStyle(ck.PaintStyle.Fill);
+  arrowPaint.setColor(C.directionArrow);
+
+  for (const { sx, sy, dx, dy } of collectArrows(paths, vt)) {
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) continue;
+    const nx = dx / len;
+    const ny = dy / len;
+    // Tip of triangle in direction of travel, base behind it — centred on the circle
+    const tipX = sx + nx * (ARROW_HEIGHT / 2);
+    const tipY = sy + ny * (ARROW_HEIGHT / 2);
+    const baseX = sx - nx * (ARROW_HEIGHT / 2);
+    const baseY = sy - ny * (ARROW_HEIGHT / 2);
+    const perpX = -ny * ARROW_HALF_W;
+    const perpY =  nx * ARROW_HALF_W;
+
+    const tri = new ck.Path();
+    tri.moveTo(tipX, tipY);
+    tri.lineTo(baseX + perpX, baseY + perpY);
+    tri.lineTo(baseX - perpX, baseY - perpY);
+    tri.close();
+    skCanvas.drawPath(tri, arrowPaint);
+    tri.delete();
+  }
+  arrowPaint.delete();
+
+  // ---- 7. Pending off-curve ghost (in draw mode) ----
+  if (toolMode === 'draw' && pendingOffCurve) {
+    const [psx, psy] = toScreen(pendingOffCurve.x, pendingOffCurve.y, vt);
+    const half = OFF_SIZE / 2 + 1;
+    const rect = ck.LTRBRect(psx - half, psy - half, psx + half, psy + half);
+
+    // Draw a ghost dashed square to signal the pending control point
+    const gfill = new Paint();
+    gfill.setAntiAlias(true);
+    gfill.setStyle(ck.PaintStyle.Fill);
+    gfill.setColor(C.pendingOffCurve);
+    skCanvas.drawRect(rect, gfill);
+    gfill.delete();
+
+    const gstroke = new Paint();
+    gstroke.setAntiAlias(true);
+    gstroke.setStyle(ck.PaintStyle.Stroke);
+    gstroke.setStrokeWidth(1.5);
+    gstroke.setColor(rgba(200, 100, 0, 0.9));
+    skCanvas.drawRect(rect, gstroke);
+    gstroke.delete();
+
+    // Draw a preview line from the last on-curve to the pending control point
+    const lastPts = paths[paths.length - 1]?.commands;
+    if (lastPts && lastPts.length > 0) {
+      const lastCmd = lastPts[lastPts.length - 1];
+      let lastX = 0, lastY = 0;
+      if (lastCmd.kind === 'M' || lastCmd.kind === 'L') { lastX = lastCmd.point.x; lastY = lastCmd.point.y; }
+      else if (lastCmd.kind === 'Q') { lastX = lastCmd.point.x; lastY = lastCmd.point.y; }
+      else if (lastCmd.kind === 'C') { lastX = lastCmd.point.x; lastY = lastCmd.point.y; }
+      const [lsx, lsy] = toScreen(lastX, lastY, vt);
+      const linePaint = new Paint();
+      linePaint.setAntiAlias(true);
+      linePaint.setStyle(ck.PaintStyle.Stroke);
+      linePaint.setStrokeWidth(1);
+      linePaint.setColor(rgba(200, 100, 0, 0.4));
+      skCanvas.drawLine(lsx, lsy, psx, psy, linePaint);
+      linePaint.delete();
+    }
+  }
+
+  // ---- 8. Rubber-band selection rect ----
   if (rubberBand) {
     const { x1, y1, x2, y2 } = rubberBand;
     const left = Math.min(x1, x2), top = Math.min(y1, y2);
@@ -247,16 +390,24 @@ export function renderFrame(
     rstroke.delete();
   }
 
-  // ---- 7. Draw-mode ghost point ----
+  // ---- 9. Draw-mode ghost point (cursor preview) ----
   if (toolMode === 'draw' && mousePos) {
-    const [sx, sy] = [mousePos.x, mousePos.y]; // already screen coords
-    const gpaint = new Paint();
-    gpaint.setAntiAlias(true);
-    gpaint.setStyle(ck.PaintStyle.Fill);
-    gpaint.setColor(C.ghostPoint);
-    skCanvas.drawCircle(sx, sy, ON_R, gpaint);
-    gpaint.delete();
+    drawGhostPoint(ck, skCanvas, mousePos.x, mousePos.y, C.ghostPoint);
   }
+}
+
+function drawGhostPoint(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ck: any, skCanvas: any,
+  sx: number, sy: number,
+  color: Float32Array,
+) {
+  const gpaint = new ck.Paint();
+  gpaint.setAntiAlias(true);
+  gpaint.setStyle(ck.PaintStyle.Fill);
+  gpaint.setColor(color);
+  skCanvas.drawCircle(sx, sy, 5, gpaint);
+  gpaint.delete();
 }
 
 /** Hook that returns a `redraw` trigger bound to a surface ref. */
@@ -275,6 +426,7 @@ export function useEditorRenderer(
   extraRef: React.MutableRefObject<{
     rubberBand: RubberBand | null;
     mousePos: { x: number; y: number } | null;
+    pendingOffCurve: { x: number; y: number } | null;
     canvasWidth: number;
     canvasHeight: number;
   }>,
@@ -296,6 +448,7 @@ export function useEditorRenderer(
         s.paths, metricsRef.current,
         s.viewTransform, s.selection,
         extra.rubberBand, extra.mousePos,
+        extra.pendingOffCurve,
         s.toolMode,
         extra.canvasWidth, extra.canvasHeight,
       );
