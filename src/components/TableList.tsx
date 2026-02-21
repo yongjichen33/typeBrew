@@ -21,7 +21,6 @@ export function TableList({
   searchQuery,
   onSelectTable,
 }: TableListProps) {
-  const prevFontCount = useRef(fonts.length);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState(400);
 

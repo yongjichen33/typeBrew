@@ -10,6 +10,7 @@ import { TableList } from '@/components/TableList';
 import type { FontMetadata } from '@/types/font';
 import { openFontDialog } from '@/hooks/useFileUpload';
 import { useGoldenLayout } from '@/hooks/useGoldenLayout';
+import { editorEventBus } from '@/lib/editorEventBus';
 import '@/styles/golden-layout.css';
 
 export function FontViewer() {
@@ -25,7 +26,13 @@ export function FontViewer() {
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { containerRef, addTab, isEmpty } = useGoldenLayout();
+  const { containerRef, addTab, addEditorTab, isEmpty } = useGoldenLayout();
+
+  // Register the glyph editor tab opener with the event bus
+  useEffect(() => {
+    editorEventBus.setHandler(addEditorTab);
+    return () => editorEventBus.clearHandler();
+  }, [addEditorTab]);
 
   // Listen for "Open Font" menu event
   useEffect(() => {

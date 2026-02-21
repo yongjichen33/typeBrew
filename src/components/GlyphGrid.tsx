@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
 import type { Glyph } from '@/lib/glyphParser';
+import { editorEventBus } from '@/lib/editorEventBus';
 
 interface GlyphGridProps {
   glyphs: Glyph[];
@@ -9,17 +10,48 @@ interface GlyphGridProps {
   unitsPerEm: number;
   onLoadMore: () => void;
   isLoadingMore: boolean;
+  filePath: string;
+  tableName: string;
 }
 
-function GlyphCell({ glyph, unitsPerEm }: { glyph: Glyph; unitsPerEm: number }) {
+function GlyphCell({
+  glyph,
+  unitsPerEm,
+  filePath,
+  tableName,
+}: {
+  glyph: Glyph;
+  unitsPerEm: number;
+  filePath: string;
+  tableName: string;
+}) {
   const bounds = glyph.bounds;
   const padding = 20;
   const viewBox = bounds
     ? `${bounds.x_min - padding} ${-bounds.y_max - padding} ${bounds.x_max - bounds.x_min + padding * 2} ${bounds.y_max - bounds.y_min + padding * 2}`
     : `0 ${-unitsPerEm} ${unitsPerEm} ${unitsPerEm}`;
 
+  const handleClick = () => {
+    editorEventBus.emit({
+      filePath,
+      tableName,
+      glyphId: glyph.glyph_id,
+      glyphName: glyph.glyph_name,
+      svgPath: glyph.svg_path,
+      advanceWidth: glyph.advance_width,
+      boundsXMin: bounds?.x_min ?? 0,
+      boundsYMin: bounds?.y_min ?? 0,
+      boundsXMax: bounds?.x_max ?? 0,
+      boundsYMax: bounds?.y_max ?? 0,
+      unitsPerEm,
+    });
+  };
+
   return (
-    <div className="flex flex-col items-center p-2 border rounded-lg hover:bg-muted/50 transition-colors">
+    <div
+      onClick={handleClick}
+      className="flex flex-col items-center p-2 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+    >
       <svg viewBox={viewBox} className="w-full h-12 mb-1">
         <path d={glyph.svg_path} fill="currentColor" className="text-foreground" />
       </svg>
@@ -37,7 +69,7 @@ function GlyphCell({ glyph, unitsPerEm }: { glyph: Glyph; unitsPerEm: number }) 
   );
 }
 
-export function GlyphGrid({ glyphs, totalGlyphs, unitsPerEm, onLoadMore, isLoadingMore }: GlyphGridProps) {
+export function GlyphGrid({ glyphs, totalGlyphs, unitsPerEm, onLoadMore, isLoadingMore, filePath, tableName }: GlyphGridProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const hasMore = glyphs.length < totalGlyphs;
 
@@ -68,7 +100,13 @@ export function GlyphGrid({ glyphs, totalGlyphs, unitsPerEm, onLoadMore, isLoadi
         </div>
         <div className="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-2">
           {glyphs.map((glyph) => (
-            <GlyphCell key={glyph.glyph_id} glyph={glyph} unitsPerEm={unitsPerEm} />
+            <GlyphCell
+              key={glyph.glyph_id}
+              glyph={glyph}
+              unitsPerEm={unitsPerEm}
+              filePath={filePath}
+              tableName={tableName}
+            />
           ))}
         </div>
         {hasMore && (

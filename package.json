@@ -14,6 +14,7 @@
     "@tauri-apps/plugin-dialog": "^2.6.0",
     "@tauri-apps/plugin-fs": "^2.4.5",
     "@tauri-apps/plugin-opener": "^2",
+    "canvaskit-wasm": "^0.40.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "golden-layout": "^2.6.0",

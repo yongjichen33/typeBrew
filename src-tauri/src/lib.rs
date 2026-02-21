@@ -43,6 +43,18 @@ fn update_head_table(
     font_parser::update_head_table(&file_path, &updates, &cache)
 }
 
+#[tauri::command]
+fn save_glyph_outline(
+    file_path: String,
+    glyph_id: u32,
+    svg_path: String,
+    table_name: String,
+    cache: State<FontCache>,
+) -> Result<(), String> {
+    let args = font_parser::SaveGlyphOutlineArgs { glyph_id, svg_path, table_name };
+    font_parser::save_glyph_outline(&file_path, &args, &cache)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize font cache
@@ -78,7 +90,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![parse_font_file, get_font_table, get_glyph_outlines, update_head_table])
+        .invoke_handler(tauri::generate_handler![parse_font_file, get_font_table, get_glyph_outlines, update_head_table, save_glyph_outline])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

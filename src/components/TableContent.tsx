@@ -69,6 +69,8 @@ export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableN
         unitsPerEm={glyphData.unitsPerEm}
         onLoadMore={onLoadMore}
         isLoadingMore={isLoadingMore}
+        filePath={filePath ?? ''}
+        tableName={tableName ?? ''}
       />
     );
   }

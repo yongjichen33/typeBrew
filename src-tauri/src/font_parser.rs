@@ -562,3 +562,359 @@ pub fn update_head_table(
 
     Ok(())
 }
+
+// ── Glyph outline save ────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct SaveGlyphOutlineArgs {
+    pub glyph_id: u32,
+    /// SVG path string in the same format the backend produces (Y negated).
+    pub svg_path: String,
+    /// "glyf", "CFF ", or "CFF2"
+    pub table_name: String,
+}
+
+#[allow(dead_code)]
+enum SvgCmd {
+    MoveTo(f32, f32),
+    LineTo(f32, f32),
+    QuadTo(f32, f32, f32, f32),
+    CurveTo(f32, f32, f32, f32, f32, f32),
+    Close,
+}
+
+/// Tokenise an SVG path string into command letters and number strings.
+/// Handles whitespace/comma separators, negative numbers, and scientific notation.
+fn tokenize_svg_path(path: &str) -> Vec<String> {
+    let mut tokens: Vec<String> = Vec::new();
+    let mut chars = path.chars().peekable();
+
+    while let Some(&c) = chars.peek() {
+        match c {
+            'M' | 'm' | 'L' | 'l' | 'Q' | 'q' | 'C' | 'c' | 'Z' | 'z' => {
+                tokens.push(c.to_string());
+                chars.next();
+            }
+            '0'..='9' | '.' => {
+                let mut s = String::new();
+                while let Some(&d) = chars.peek() {
+                    if d.is_ascii_digit() || d == '.' {
+                        s.push(d);
+                        chars.next();
+                    } else if (d == 'e' || d == 'E') && !s.is_empty() {
+                        s.push(d);
+                        chars.next();
+                        if let Some(&sign) = chars.peek() {
+                            if sign == '+' || sign == '-' {
+                                s.push(sign);
+                                chars.next();
+                            }
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                if !s.is_empty() {
+                    tokens.push(s);
+                }
+            }
+            '-' | '+' => {
+                let mut s = String::new();
+                s.push(c);
+                chars.next();
+                while let Some(&d) = chars.peek() {
+                    if d.is_ascii_digit() || d == '.' {
+                        s.push(d);
+                        chars.next();
+                    } else if (d == 'e' || d == 'E') && s.len() > 1 {
+                        s.push(d);
+                        chars.next();
+                        if let Some(&sign) = chars.peek() {
+                            if sign == '+' || sign == '-' {
+                                s.push(sign);
+                                chars.next();
+                            }
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                // Only push if it's actually a number (more than just the sign)
+                if s.len() > 1 {
+                    tokens.push(s);
+                }
+            }
+            ' ' | '\t' | '\n' | '\r' | ',' => {
+                chars.next();
+            }
+            _ => {
+                chars.next();
+            }
+        }
+    }
+    tokens
+}
+
+fn parse_svg_path_cmds(path: &str) -> Result<Vec<SvgCmd>, String> {
+    let tokens = tokenize_svg_path(path);
+
+    let mut cmds = Vec::new();
+    let mut i = 0usize;
+
+    let next_f = |idx: &mut usize| -> Result<f32, String> {
+        let s = tokens.get(*idx).ok_or_else(|| "unexpected end of path".to_string())?;
+        *idx += 1;
+        s.parse::<f32>().map_err(|e| format!("bad number '{}': {}", s, e))
+    };
+
+    while i < tokens.len() {
+        match tokens[i].as_str() {
+            "M" | "m" => {
+                i += 1;
+                let x = next_f(&mut i)?;
+                // Y in svg_path is already negated (-y_font); negate again → font-space Y-up
+                let y = -next_f(&mut i)?;
+                cmds.push(SvgCmd::MoveTo(x, y));
+            }
+            "L" | "l" => {
+                i += 1;
+                let x = next_f(&mut i)?;
+                let y = -next_f(&mut i)?;
+                cmds.push(SvgCmd::LineTo(x, y));
+            }
+            "Q" | "q" => {
+                i += 1;
+                let cx = next_f(&mut i)?;
+                let cy = -next_f(&mut i)?;
+                let x = next_f(&mut i)?;
+                let y = -next_f(&mut i)?;
+                cmds.push(SvgCmd::QuadTo(cx, cy, x, y));
+            }
+            "C" | "c" => {
+                i += 1;
+                let cx1 = next_f(&mut i)?;
+                let cy1 = -next_f(&mut i)?;
+                let cx2 = next_f(&mut i)?;
+                let cy2 = -next_f(&mut i)?;
+                let x = next_f(&mut i)?;
+                let y = -next_f(&mut i)?;
+                cmds.push(SvgCmd::CurveTo(cx1, cy1, cx2, cy2, x, y));
+            }
+            "Z" | "z" => {
+                i += 1;
+                cmds.push(SvgCmd::Close);
+            }
+            _ => {
+                i += 1; // skip unrecognised token
+            }
+        }
+    }
+    Ok(cmds)
+}
+
+/// Build raw TrueType SimpleGlyph bytes from a list of SVG-derived path commands.
+/// All Y values must already be in font-space (Y-up).
+/// Returns empty Vec for empty paths (space glyph).
+fn build_glyf_glyph_bytes(cmds: &[SvgCmd]) -> Result<Vec<u8>, String> {
+    // points per contour: (x_font, y_font, is_on_curve)
+    let mut contours: Vec<Vec<(i16, i16, bool)>> = Vec::new();
+    let mut cur: Vec<(i16, i16, bool)> = Vec::new();
+
+    for cmd in cmds {
+        match cmd {
+            SvgCmd::MoveTo(x, y) => {
+                if !cur.is_empty() { contours.push(std::mem::take(&mut cur)); }
+                cur.push((x.round() as i16, y.round() as i16, true));
+            }
+            SvgCmd::LineTo(x, y) => {
+                cur.push((x.round() as i16, y.round() as i16, true));
+            }
+            SvgCmd::QuadTo(cx, cy, x, y) => {
+                cur.push((cx.round() as i16, cy.round() as i16, false));
+                cur.push((x.round() as i16, y.round() as i16, true));
+            }
+            SvgCmd::CurveTo(..) => {
+                return Err("Cubic Bézier (C) not supported in glyf table. \
+                    Use a CFF font for cubic curves.".into());
+            }
+            SvgCmd::Close => {
+                if !cur.is_empty() { contours.push(std::mem::take(&mut cur)); }
+            }
+        }
+    }
+    if !cur.is_empty() { contours.push(cur); }
+    if contours.is_empty() { return Ok(Vec::new()); }
+
+    // Flatten
+    let mut pts: Vec<(i16, i16, bool)> = Vec::new();
+    let mut end_pts: Vec<u16> = Vec::new();
+    for c in &contours {
+        pts.extend_from_slice(c);
+        end_pts.push((pts.len() - 1) as u16);
+    }
+
+    let x_min = pts.iter().map(|p| p.0).min().unwrap();
+    let x_max = pts.iter().map(|p| p.0).max().unwrap();
+    let y_min = pts.iter().map(|p| p.1).min().unwrap();
+    let y_max = pts.iter().map(|p| p.1).max().unwrap();
+
+    let mut buf: Vec<u8> = Vec::new();
+
+    // numberOfContours (big-endian i16)
+    buf.extend((contours.len() as i16).to_be_bytes());
+    // bounding box
+    buf.extend(x_min.to_be_bytes());
+    buf.extend(y_min.to_be_bytes());
+    buf.extend(x_max.to_be_bytes());
+    buf.extend(y_max.to_be_bytes());
+    // endPtsOfContours
+    for ep in &end_pts { buf.extend(ep.to_be_bytes()); }
+    // instructionLength = 0
+    buf.extend(0u16.to_be_bytes());
+    // flags (uncompressed: no SHORT_VECTOR bits)
+    for &(_, _, on) in &pts { buf.push(if on { 0x01 } else { 0x00 }); }
+    // x-coordinates (relative i16 deltas, big-endian)
+    let mut prev: i16 = 0;
+    for &(x, _, _) in &pts { let d = x - prev; buf.extend(d.to_be_bytes()); prev = x; }
+    // y-coordinates (relative i16 deltas, big-endian)
+    prev = 0;
+    for &(_, y, _) in &pts { let d = y - prev; buf.extend(d.to_be_bytes()); prev = y; }
+
+    Ok(buf)
+}
+
+fn parse_loca_offsets(loca: &[u8], n_plus_one: usize, is_long: bool) -> Vec<u32> {
+    let mut v = Vec::with_capacity(n_plus_one);
+    if is_long {
+        for i in 0..n_plus_one {
+            let b = i * 4;
+            if b + 4 > loca.len() { v.push(0); continue; }
+            v.push(u32::from_be_bytes([loca[b], loca[b+1], loca[b+2], loca[b+3]]));
+        }
+    } else {
+        for i in 0..n_plus_one {
+            let b = i * 2;
+            if b + 2 > loca.len() { v.push(0); continue; }
+            v.push(u16::from_be_bytes([loca[b], loca[b+1]]) as u32 * 2);
+        }
+    }
+    v
+}
+
+fn rebuild_glyf_with_patch(
+    glyf: &[u8],
+    offsets: &[u32],       // n+1 entries
+    glyph_id: usize,
+    new_glyph: &[u8],
+    is_long: bool,
+) -> Result<(Vec<u8>, Vec<u8>), String> {
+    let n = offsets.len().saturating_sub(1);
+    let mut new_glyf: Vec<u8> = Vec::new();
+    let mut new_offsets: Vec<u32> = Vec::with_capacity(offsets.len());
+
+    for i in 0..n {
+        new_offsets.push(new_glyf.len() as u32);
+        if i == glyph_id {
+            new_glyf.extend_from_slice(new_glyph);
+        } else {
+            let start = offsets[i] as usize;
+            let end = offsets[i + 1] as usize;
+            if start < end && end <= glyf.len() {
+                new_glyf.extend_from_slice(&glyf[start..end]);
+            }
+        }
+        // Pad to 4-byte boundary (required by OpenType spec)
+        while new_glyf.len() % 4 != 0 { new_glyf.push(0); }
+    }
+    new_offsets.push(new_glyf.len() as u32); // sentinel
+
+    // Build loca bytes
+    let new_loca = if is_long {
+        let mut v: Vec<u8> = Vec::with_capacity(new_offsets.len() * 4);
+        for &o in &new_offsets { v.extend(o.to_be_bytes()); }
+        v
+    } else {
+        // Short loca stores offset/2 as uint16
+        let mut v: Vec<u8> = Vec::with_capacity(new_offsets.len() * 2);
+        for &o in &new_offsets {
+            if o > 0x1FFFE {
+                return Err("glyf table too large for short loca format".into());
+            }
+            v.extend(((o / 2) as u16).to_be_bytes());
+        }
+        v
+    };
+
+    Ok((new_glyf, new_loca))
+}
+
+pub fn save_glyph_outline(
+    file_path: &str,
+    args: &SaveGlyphOutlineArgs,
+    cache: &FontCache,
+) -> Result<(), String> {
+    let table = args.table_name.trim();
+    if table != "glyf" {
+        return Err(format!(
+            "Saving '{}' outlines is not yet supported. Only the glyf table can be saved.",
+            table
+        ));
+    }
+
+    let bytes = cache.get(file_path).unwrap_or_else(|| {
+        fs::read(file_path).unwrap_or_default()
+    });
+    if bytes.is_empty() {
+        return Err(format!("Failed to read font file: {}", file_path));
+    }
+
+    let font = RawFontRef::new(&bytes)
+        .map_err(|e| format!("Invalid font file: {:?}", e))?;
+
+    // Parse the SVG path back to font-space points
+    let cmds = parse_svg_path_cmds(&args.svg_path)?;
+    let new_glyph_bytes = build_glyf_glyph_bytes(&cmds)?;
+
+    // Read loca + glyf raw bytes
+    use skrifa::raw::types::Tag;
+    let head = font.head().map_err(|e| format!("head: {:?}", e))?;
+    let is_long = head.index_to_loc_format() != 0;
+    let num_glyphs = font.maxp().map_err(|e| format!("maxp: {:?}", e))?.num_glyphs() as usize;
+
+    let loca_data = font
+        .table_data(Tag::new(b"loca"))
+        .ok_or_else(|| "No loca table in font".to_string())?;
+    let glyf_data = font
+        .table_data(Tag::new(b"glyf"))
+        .ok_or_else(|| "No glyf table in font".to_string())?;
+
+    let offsets = parse_loca_offsets(loca_data.as_bytes(), num_glyphs + 1, is_long);
+    if args.glyph_id as usize >= num_glyphs {
+        return Err(format!(
+            "glyph_id {} out of range (font has {} glyphs)",
+            args.glyph_id, num_glyphs
+        ));
+    }
+
+    let (new_glyf, new_loca) =
+        rebuild_glyf_with_patch(glyf_data.as_bytes(), &offsets, args.glyph_id as usize, &new_glyph_bytes, is_long)?;
+
+    // Rebuild font with patched glyf/loca, copy all other tables
+    use write_fonts::FontBuilder;
+    use write_fonts::types::Tag as WTag;
+
+    let new_font_bytes = FontBuilder::new()
+        .add_raw(WTag::new(b"glyf"), new_glyf)
+        .add_raw(WTag::new(b"loca"), new_loca)
+        .copy_missing_tables(font)
+        .build();
+
+    fs::write(file_path, &new_font_bytes)
+        .map_err(|e| format!("Failed to write font: {}", e))?;
+
+    // Invalidate caches
+    cache.fonts.lock().unwrap().insert(file_path.to_string(), new_font_bytes);
+    cache.outlines.lock().unwrap().remove(file_path);
+
+    Ok(())
+}
