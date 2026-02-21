@@ -1,4 +1,4 @@
-import { MousePointer2, Pen, Undo2, Redo2, Save, Loader2, Circle, Square, Hand } from 'lucide-react';
+import { MousePointer2, Pen, Undo2, Redo2, Save, Loader2, Circle, Square, Hand, Navigation, Hash } from 'lucide-react';
 import type { ToolMode, DrawPointType } from '@/lib/editorTypes';
 
 interface EditorToolbarProps {
@@ -13,6 +13,10 @@ interface EditorToolbarProps {
   isDirty: boolean;
   isSaving: boolean;
   onSave: () => void;
+  showDirection: boolean;
+  onSetShowDirection: (show: boolean) => void;
+  showCoordinates: boolean;
+  onSetShowCoordinates: (show: boolean) => void;
 }
 
 function ToolButton({
@@ -58,6 +62,10 @@ export function EditorToolbar({
   isDirty,
   isSaving,
   onSave,
+  showDirection,
+  onSetShowDirection,
+  showCoordinates,
+  onSetShowCoordinates,
 }: EditorToolbarProps) {
   return (
     <div className="flex items-center gap-1 px-3 py-1 border-b bg-muted/30 shrink-0">
@@ -117,6 +125,21 @@ export function EditorToolbar({
       />
 
       <div className="flex-1" />
+
+      {/* View toggles */}
+      <div className="w-px h-5 bg-border mx-1" />
+      <ToolButton
+        icon={<Navigation size={15} />}
+        label="Show direction"
+        active={showDirection}
+        onClick={() => onSetShowDirection(!showDirection)}
+      />
+      <ToolButton
+        icon={<Hash size={15} />}
+        label="Show coordinates"
+        active={showCoordinates}
+        onClick={() => onSetShowCoordinates(!showCoordinates)}
+      />
 
       {/* Save */}
       <button

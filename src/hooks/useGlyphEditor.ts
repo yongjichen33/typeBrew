@@ -159,6 +159,14 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, isSaving: action.saving };
     }
 
+    case 'SET_SHOW_DIRECTION': {
+      return { ...state, showDirection: action.showDirection };
+    }
+
+    case 'SET_SHOW_COORDINATES': {
+      return { ...state, showCoordinates: action.showCoordinates };
+    }
+
     default:
       return state;
   }
@@ -175,6 +183,8 @@ export function makeInitialState(vt: ViewTransform): EditorState {
     isSaving: false,
     undoStack: [],
     redoStack: [],
+    showDirection: false,
+    showCoordinates: false,
   };
 }
 

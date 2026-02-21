@@ -76,6 +76,8 @@ export interface EditorState {
   isSaving: boolean;
   undoStack: EditablePath[][];
   redoStack: EditablePath[][];
+  showDirection: boolean;
+  showCoordinates: boolean;
 }
 
 // ---- Actions ----
@@ -95,7 +97,9 @@ export type EditorAction =
   | { type: 'UNDO' }
   | { type: 'REDO' }
   | { type: 'MARK_SAVED' }
-  | { type: 'SET_SAVING'; saving: boolean };
+  | { type: 'SET_SAVING'; saving: boolean }
+  | { type: 'SET_SHOW_DIRECTION'; showDirection: boolean }
+  | { type: 'SET_SHOW_COORDINATES'; showCoordinates: boolean };
 
 // ---- Context value ----
 

@@ -110,7 +110,10 @@ export function renderFrame(
   toolMode: string,
   canvasWidth: number,
   canvasHeight: number,
+  showDirection: boolean,
 ): void {
+  if (!ck || !skCanvas) return;
+
   const Paint = ck.Paint;
 
   skCanvas.clear(ck.Color4f(1, 1, 1, 1));
@@ -287,36 +290,38 @@ export function renderFrame(
   }
 
   // ---- 6. Direction arrows on on-curve points ----
-  const ARROW_HEIGHT = 14;   // triangle height in screen pixels
-  const ARROW_HALF_W = 7;   // half-width of triangle base
-  const ARROW_OFFSET = 18;  // offset from point center
-  const arrowPaint = new Paint();
-  arrowPaint.setAntiAlias(true);
-  arrowPaint.setStyle(ck.PaintStyle.Fill);
-  arrowPaint.setColor(C.directionArrow);
+  if (showDirection) {
+    const ARROW_HEIGHT = 14;   // triangle height in screen pixels
+    const ARROW_HALF_W = 7;   // half-width of triangle base
+    const ARROW_OFFSET = 18;  // offset from point center
+    const arrowPaint = new Paint();
+    arrowPaint.setAntiAlias(true);
+    arrowPaint.setStyle(ck.PaintStyle.Fill);
+    arrowPaint.setColor(C.directionArrow);
 
-  for (const { sx, sy, dx, dy } of collectArrows(paths, vt)) {
-    const len = Math.sqrt(dx * dx + dy * dy);
-    if (len < 1) continue;
-    const nx = dx / len;
-    const ny = dy / len;
-    // Tip of triangle in direction of travel, offset away from the point
-    const tipX = sx + nx * ARROW_OFFSET;
-    const tipY = sy + ny * ARROW_OFFSET;
-    const baseX = sx + nx * (ARROW_OFFSET - ARROW_HEIGHT);
-    const baseY = sy + ny * (ARROW_OFFSET - ARROW_HEIGHT);
-    const perpX = -ny * ARROW_HALF_W;
-    const perpY =  nx * ARROW_HALF_W;
+    const arrowPath = new ck.Path();
+    for (const { sx, sy, dx, dy } of collectArrows(paths, vt)) {
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len < 1) continue;
+      const nx = dx / len;
+      const ny = dy / len;
+      // Tip of triangle in direction of travel, offset away from the point
+      const tipX = sx + nx * ARROW_OFFSET;
+      const tipY = sy + ny * ARROW_OFFSET;
+      const baseX = sx + nx * (ARROW_OFFSET - ARROW_HEIGHT);
+      const baseY = sy + ny * (ARROW_OFFSET - ARROW_HEIGHT);
+      const perpX = -ny * ARROW_HALF_W;
+      const perpY =  nx * ARROW_HALF_W;
 
-    const tri = new ck.Path();
-    tri.moveTo(tipX, tipY);
-    tri.lineTo(baseX + perpX, baseY + perpY);
-    tri.lineTo(baseX - perpX, baseY - perpY);
-    tri.close();
-    skCanvas.drawPath(tri, arrowPaint);
-    tri.delete();
+      arrowPath.moveTo(tipX, tipY);
+      arrowPath.lineTo(baseX + perpX, baseY + perpY);
+      arrowPath.lineTo(baseX - perpX, baseY - perpY);
+      arrowPath.close();
+    }
+    skCanvas.drawPath(arrowPath, arrowPaint);
+    arrowPath.delete();
+    arrowPaint.delete();
   }
-  arrowPaint.delete();
 
   // ---- 7. Pending off-curve ghost (in draw mode) ----
   if (toolMode === 'draw' && pendingOffCurve) {
@@ -390,11 +395,14 @@ export function useEditorRenderer(
   ck: any | null,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   surfaceRef: React.MutableRefObject<any | null>,
+  surfaceValidRef: React.MutableRefObject<boolean>,
   stateRef: React.MutableRefObject<{
     paths: EditablePath[];
     selection: Selection;
     toolMode: string;
     viewTransform: ViewTransform;
+    showDirection: boolean;
+    showCoordinates: boolean;
   }>,
   metricsRef: React.MutableRefObject<FontMetrics | null>,
   extraRef: React.MutableRefObject<{
@@ -406,17 +414,26 @@ export function useEditorRenderer(
   }>,
 ) {
   const pendingRef = useRef(false);
+  const surfaceIdRef = useRef(0);
 
   const redraw = useCallback(() => {
-    const surface = surfaceRef.current;
-    if (!surface || !ck) return;
+    if (!ck || !surfaceRef.current || !surfaceValidRef.current) return;
     if (pendingRef.current) return;
     pendingRef.current = true;
 
-    surface.requestAnimationFrame((skCanvas: unknown) => {
+    const currentSurfaceId = surfaceIdRef.current;
+    // Use browser RAF instead of surface.requestAnimationFrame to avoid
+    // "Cannot pass deleted object as a pointer of type Surface" errors that
+    // occur when the CanvasKit surface is deleted while a native RAF is pending.
+    requestAnimationFrame(() => {
+      if (!surfaceValidRef.current || surfaceIdRef.current !== currentSurfaceId || !surfaceRef.current) {
+        pendingRef.current = false;
+        return;
+      }
       pendingRef.current = false;
       const s = stateRef.current;
       const extra = extraRef.current;
+      const skCanvas = surfaceRef.current.getCanvas();
       renderFrame(
         ck, skCanvas,
         s.paths, metricsRef.current,
@@ -425,9 +442,17 @@ export function useEditorRenderer(
         extra.pendingOffCurve,
         s.toolMode,
         extra.canvasWidth, extra.canvasHeight,
+        s.showDirection ?? false,
       );
+      surfaceRef.current.flush();
     });
-  }, [ck, surfaceRef, stateRef, metricsRef, extraRef]);
+  }, [ck, surfaceRef, surfaceValidRef, stateRef, metricsRef, extraRef]);
 
-  return { redraw };
+  const registerSurface = useCallback(() => {
+    surfaceIdRef.current++;
+    surfaceValidRef.current = true;
+    pendingRef.current = false; // reset so the next redraw() call isn't skipped
+  }, [surfaceValidRef]);
+
+  return { redraw, registerSurface };
 }

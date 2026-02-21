@@ -53,6 +53,8 @@ export function GlyphEditorTab({ tabState }: Props) {
     toolMode: state.toolMode,
     drawPointType: state.drawPointType,
     viewTransform: state.viewTransform,
+    showDirection: state.showDirection,
+    showCoordinates: state.showCoordinates,
   });
   useEffect(() => {
     stateRef.current = {
@@ -61,6 +63,8 @@ export function GlyphEditorTab({ tabState }: Props) {
       toolMode: state.toolMode,
       drawPointType: state.drawPointType,
       viewTransform: state.viewTransform,
+      showDirection: state.showDirection,
+      showCoordinates: state.showCoordinates,
     };
   }, [state]);
 
@@ -185,6 +189,10 @@ export function GlyphEditorTab({ tabState }: Props) {
         isDirty={state.isDirty}
         isSaving={state.isSaving}
         onSave={handleSave}
+        showDirection={state.showDirection}
+        onSetShowDirection={(showDirection) => dispatch({ type: 'SET_SHOW_DIRECTION', showDirection })}
+        showCoordinates={state.showCoordinates}
+        onSetShowCoordinates={(showCoordinates) => dispatch({ type: 'SET_SHOW_COORDINATES', showCoordinates })}
       />
 
       {/* Canvas area */}
@@ -202,6 +210,8 @@ export function GlyphEditorTab({ tabState }: Props) {
             toolMode={state.toolMode}
             viewTransform={state.viewTransform}
             metrics={metrics}
+            showDirection={state.showDirection}
+            showCoordinates={state.showCoordinates}
             dispatch={dispatch as (action: unknown) => void}
             stateRef={stateRef}
           />

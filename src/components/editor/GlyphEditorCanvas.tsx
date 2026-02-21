@@ -17,6 +17,8 @@ interface GlyphEditorCanvasProps {
   toolMode: string;
   viewTransform: ViewTransform;
   metrics: FontMetrics;
+  showDirection: boolean;
+  showCoordinates: boolean;
   dispatch: (action: unknown) => void;
   stateRef: React.MutableRefObject<{
     paths: EditablePath[];
@@ -24,6 +26,8 @@ interface GlyphEditorCanvasProps {
     toolMode: string;
     drawPointType: string;
     viewTransform: ViewTransform;
+    showDirection: boolean;
+    showCoordinates: boolean;
   }>;
 }
 
@@ -34,6 +38,8 @@ export function GlyphEditorCanvas({
   toolMode,
   viewTransform,
   metrics,
+  showDirection,
+  showCoordinates,
   dispatch,
   stateRef,
 }: GlyphEditorCanvasProps) {
@@ -41,6 +47,7 @@ export function GlyphEditorCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const surfaceRef = useRef<any | null>(null);
+  const surfaceValidRef = useRef(false);
 
   const [canvasSize, setCanvasSize] = useState({ w: 1, h: 1 });
 
@@ -90,7 +97,7 @@ export function GlyphEditorCanvas({
     setPendingOffCurveState(pos);
   };
 
-  const { redraw } = useEditorRenderer(ck, surfaceRef, stateRef, metricsRef, extraRef);
+  const { redraw, registerSurface } = useEditorRenderer(ck, surfaceRef, surfaceValidRef, stateRef, metricsRef, extraRef);
 
   // Create/destroy CanvasKit surface when ck or canvas size changes
   useEffect(() => {
@@ -104,6 +111,7 @@ export function GlyphEditorCanvas({
 
     // Destroy old surface
     if (surfaceRef.current) {
+      surfaceValidRef.current = false;
       surfaceRef.current.delete();
       surfaceRef.current = null;
     }
@@ -115,10 +123,12 @@ export function GlyphEditorCanvas({
       return;
     }
     surfaceRef.current = surface;
+    registerSurface();
     redraw();
 
     return () => {
       if (surfaceRef.current) {
+        surfaceValidRef.current = false;
         surfaceRef.current.delete();
         surfaceRef.current = null;
       }
@@ -129,8 +139,7 @@ export function GlyphEditorCanvas({
   // Trigger redraw on relevant state changes
   useEffect(() => {
     redraw();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paths, selection, toolMode, viewTransform, rubberBand, mousePos, pendingOffCurve]);
+  }, [redraw, paths, selection, toolMode, viewTransform, rubberBand, mousePos, pendingOffCurve, showDirection, showCoordinates]);
 
   // Observe container size and update canvas dimensions
   useEffect(() => {
@@ -164,6 +173,21 @@ export function GlyphEditorCanvas({
   const { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave } =
     useEditorInteraction({ stateRef, dispatch, setRubberBand, setMousePos, setPendingOffCurve, redraw, getCanvasRect });
 
+  // Collect on-curve screen positions for coordinate labels
+  const coordLabels = showCoordinates ? paths.flatMap((path) =>
+    path.commands.flatMap((cmd) => {
+      const pt =
+        cmd.kind === 'M' || cmd.kind === 'L' ? cmd.point :
+        cmd.kind === 'Q' ? cmd.point :
+        cmd.kind === 'C' ? cmd.point :
+        null;
+      if (!pt) return [];
+      const sx = viewTransform.originX + pt.x * viewTransform.scale;
+      const sy = viewTransform.originY - pt.y * viewTransform.scale;
+      return [{ id: pt.id, label: `${Math.round(pt.x)}, ${Math.round(pt.y)}`, sx, sy }];
+    })
+  ) : [];
+
   return (
     <div ref={containerRef} className="flex-1 min-h-0 w-full relative overflow-hidden bg-white">
       <canvas
@@ -180,6 +204,19 @@ export function GlyphEditorCanvas({
         onPointerLeave={onPointerLeave}
         onWheel={(e) => onWheel(e.nativeEvent)}
       />
+      {coordLabels.length > 0 && (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {coordLabels.map(({ id, label, sx, sy }) => (
+            <span
+              key={id}
+              className="absolute text-[10px] font-mono text-gray-600 whitespace-nowrap"
+              style={{ left: sx + 8, top: sy - 6 }}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
