@@ -79,11 +79,15 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       };
     }
 
-    case 'MOVE_POINTS': {
-      const prev = clonePaths(state.paths);
-      const newPaths = applyPointDelta(state.paths, action.deltas);
-      const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), prev];
-      return { ...state, paths: newPaths, undoStack, redoStack: [], isDirty: true };
+    case 'MOVE_POINTS_LIVE': {
+      // In-flight update during drag — update paths only, no undo entry
+      return { ...state, paths: applyPointDelta(state.paths, action.deltas), isDirty: true };
+    }
+
+    case 'COMMIT_MOVE': {
+      // Drag finished — push the pre-drag snapshot as a single undo entry
+      const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), action.snapshot];
+      return { ...state, undoStack, redoStack: [] };
     }
 
     case 'ADD_POINT': {

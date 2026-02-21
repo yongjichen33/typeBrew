@@ -82,7 +82,10 @@ export interface EditorState {
 
 export type EditorAction =
   | { type: 'SET_PATHS'; paths: EditablePath[] }
-  | { type: 'MOVE_POINTS'; deltas: Map<string, Vec2> }
+  /** Apply in-flight deltas during a drag — does NOT push to undo stack. */
+  | { type: 'MOVE_POINTS_LIVE'; deltas: Map<string, Vec2> }
+  /** Commit the end of a drag: push pre-drag snapshot onto the undo stack. */
+  | { type: 'COMMIT_MOVE'; snapshot: EditablePath[] }
   | { type: 'ADD_POINT'; pathId: string; command: PathCommand }
   | { type: 'SET_SELECTION'; pointIds: Set<string> }
   | { type: 'TOGGLE_SELECTION'; pointId: string }

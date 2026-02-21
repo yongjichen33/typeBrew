@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 import type { EditablePath, ViewTransform, Selection, RubberBand } from '@/lib/editorTypes';
-import { collectAllPoints } from '@/lib/svgPathParser';
+import { collectAllPoints, clonePaths } from '@/lib/svgPathParser';
 
 const HIT_RADIUS_PX = 8;
 
@@ -94,6 +94,8 @@ export function useEditorInteraction({
     startFx: number; startFy: number;
     curFx: number; curFy: number;
     rbStartX: number; rbStartY: number;
+    /** Pre-drag snapshot saved once on pointerdown; committed to undo on pointerup. */
+    snapshot: EditablePath[] | null;
   } | null>(null);
 
   const panRef = useRef<{
@@ -138,7 +140,7 @@ export function useEditorInteraction({
       const hitId = hitTest(x, y, paths, vt);
       if (hitId) {
         const fp = toFontSpace(x, y, vt);
-        dragRef.current = { type: 'point', startFx: fp.x, startFy: fp.y, curFx: fp.x, curFy: fp.y, rbStartX: 0, rbStartY: 0 };
+        dragRef.current = { type: 'point', startFx: fp.x, startFy: fp.y, curFx: fp.x, curFy: fp.y, rbStartX: 0, rbStartY: 0, snapshot: clonePaths(paths) };
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
         if (e.shiftKey) {
           dispatch({ type: 'TOGGLE_SELECTION', pointId: hitId });
@@ -146,7 +148,7 @@ export function useEditorInteraction({
           dispatch({ type: 'SET_SELECTION', pointIds: new Set([hitId]) });
         }
       } else {
-        dragRef.current = { type: 'canvas', startFx: 0, startFy: 0, curFx: 0, curFy: 0, rbStartX: x, rbStartY: y };
+        dragRef.current = { type: 'canvas', startFx: 0, startFy: 0, curFx: 0, curFy: 0, rbStartX: x, rbStartY: y, snapshot: null };
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
         if (!e.shiftKey) dispatch({ type: 'SET_SELECTION', pointIds: new Set() });
       }
@@ -235,7 +237,7 @@ export function useEditorInteraction({
       for (const id of selection.pointIds) {
         deltas.set(id, { x: deltaX, y: deltaY });
       }
-      dispatch({ type: 'MOVE_POINTS', deltas });
+      dispatch({ type: 'MOVE_POINTS_LIVE', deltas });
       redraw();
     } else if (drag.type === 'canvas') {
       const rb: RubberBand = { x1: drag.rbStartX, y1: drag.rbStartY, x2: x, y2: y };
@@ -253,7 +255,12 @@ export function useEditorInteraction({
     const drag = dragRef.current;
     dragRef.current = null;
 
-    if (drag.type === 'canvas') {
+    if (drag.type === 'point') {
+      // Only commit if the point actually moved
+      if (drag.snapshot && (drag.curFx !== drag.startFx || drag.curFy !== drag.startFy)) {
+        dispatch({ type: 'COMMIT_MOVE', snapshot: drag.snapshot });
+      }
+    } else if (drag.type === 'canvas') {
       const ids = pointsInRect(drag.rbStartX, drag.rbStartY, x, y, paths, vt);
       if (ids.size > 0) {
         if (e.shiftKey) {
