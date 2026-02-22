@@ -14,6 +14,8 @@ const C = {
   baseline:        rgba(150, 150, 150),
   ascender:        rgba(100, 130, 200, 0.8),
   descender:       rgba(200, 100, 100, 0.8),
+  xHeight:         rgba(100, 200, 150, 0.8),
+  capHeight:       rgba(200, 150, 100, 0.8),
   advance:         rgba(100, 180, 100, 0.8),
   bbox:            rgba(180, 180, 180),
   handle:          rgba(160, 160, 160),
@@ -142,6 +144,8 @@ export function renderFrame(
   drawHLine(0, C.baseline);
   drawHLine(metrics.ascender, C.ascender);
   drawHLine(metrics.descender, C.descender);
+  if (metrics.xHeight) drawHLine(metrics.xHeight, C.xHeight);
+  if (metrics.capHeight) drawHLine(metrics.capHeight, C.capHeight);
   drawVLine(0, C.baseline);
   drawVLine(metrics.advanceWidth, C.advance);
   metricPaint.delete();

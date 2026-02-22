@@ -34,6 +34,8 @@ export interface FontMetrics {
   unitsPerEm: number;
   ascender: number;
   descender: number;
+  xHeight: number;
+  capHeight: number;
   advanceWidth: number;
   xMin: number;
   yMin: number;

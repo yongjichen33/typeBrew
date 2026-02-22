@@ -76,14 +76,26 @@ export function GlyphEditorTab({ tabState }: Props) {
     const paths = outlineDataToEditablePaths(outlineData);
     dispatch({ type: 'SET_PATHS', paths });
 
-    // Fetch hhea for ascender/descender
-    invoke<string>('get_font_table', { filePath, tableName: 'hhea' })
-      .then((json) => {
-        const hhea = JSON.parse(json);
+    // Fetch hhea for ascender/descender and OS/2 for xHeight/capHeight
+    Promise.all([
+      invoke<string>('get_font_table', { filePath, tableName: 'hhea' }),
+      invoke<string>('get_font_table', { filePath, tableName: 'OS/2' }).catch(() => null),
+    ])
+      .then(([hheaJson, os2Json]) => {
+        const hhea = JSON.parse(hheaJson);
+        let xHeight = 0;
+        let capHeight = 0;
+        if (os2Json) {
+          const os2 = JSON.parse(os2Json);
+          xHeight = Number(os2.sx_height ?? 0);
+          capHeight = Number(os2.s_cap_height ?? 0);
+        }
         const m: FontMetrics = {
           unitsPerEm,
           ascender: Number(hhea.ascender ?? 800),
           descender: Number(hhea.descender ?? -200),
+          xHeight,
+          capHeight,
           advanceWidth,
           xMin: boundsXMin,
           yMin: boundsYMin,
@@ -98,6 +110,8 @@ export function GlyphEditorTab({ tabState }: Props) {
           unitsPerEm,
           ascender: Math.round(unitsPerEm * 0.8),
           descender: -Math.round(unitsPerEm * 0.2),
+          xHeight: Math.round(unitsPerEm * 0.5),
+          capHeight: Math.round(unitsPerEm * 0.7),
           advanceWidth,
           xMin: boundsXMin,
           yMin: boundsYMin,

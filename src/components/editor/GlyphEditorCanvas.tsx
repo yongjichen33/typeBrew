@@ -188,6 +188,35 @@ export function GlyphEditorCanvas({
     })
   ) : [];
 
+  // Metric line labels (HTML overlay, since CanvasKit has no bundled fonts)
+  const metricLabels = (() => {
+    const labels: Array<{ key: string; label: string; sx?: number; sy?: number; isVertical: boolean; color: string }> = [];
+    const { originX, originY, scale } = viewTransform;
+    const W = canvasSize.w;
+    const H = canvasSize.h;
+
+    const addH = (fontY: number, label: string, color: string) => {
+      const sy = originY - fontY * scale;
+      if (sy < -10 || sy > H + 10) return;
+      labels.push({ key: label, label, sy, isVertical: false, color });
+    };
+    const addV = (fontX: number, label: string, color: string) => {
+      const sx = originX + fontX * scale;
+      if (sx < -10 || sx > W + 10) return;
+      labels.push({ key: label, label, sx, isVertical: true, color });
+    };
+
+    addH(0, 'Baseline', 'rgb(150,150,150)');
+    addH(metrics.ascender, 'Ascender', 'rgb(100,130,200)');
+    addH(metrics.descender, 'Descender', 'rgb(200,100,100)');
+    if (metrics.xHeight) addH(metrics.xHeight, 'x-height', 'rgb(100,200,150)');
+    if (metrics.capHeight) addH(metrics.capHeight, 'Cap height', 'rgb(200,150,100)');
+    addV(0, 'Origin', 'rgb(150,150,150)');
+    addV(metrics.advanceWidth, 'Advance', 'rgb(100,180,100)');
+
+    return labels;
+  })();
+
   return (
     <div ref={containerRef} className="flex-1 min-h-0 w-full relative overflow-hidden bg-white">
       <canvas
@@ -204,6 +233,22 @@ export function GlyphEditorCanvas({
         onPointerLeave={onPointerLeave}
         onWheel={(e) => onWheel(e.nativeEvent)}
       />
+      {/* Metric line labels */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {metricLabels.map(({ key, label, sx, sy, isVertical, color }) => (
+          <span
+            key={key}
+            className="absolute text-[10px] font-mono whitespace-nowrap"
+            style={
+              isVertical
+                ? { left: (sx ?? 0) + 4, top: 4, color }
+                : { right: 4, top: (sy ?? 0) - 14, color }
+            }
+          >
+            {label}
+          </span>
+        ))}
+      </div>
       {coordLabels.length > 0 && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           {coordLabels.map(({ id, label, sx, sy }) => (

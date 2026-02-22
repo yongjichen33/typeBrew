@@ -711,6 +711,8 @@ pub fn get_table_content(
                 "y_strikeout_size": table.y_strikeout_size(),
                 "y_strikeout_position": table.y_strikeout_position(),
                 "s_family_class": table.s_family_class(),
+                "sx_height": table.sx_height(),
+                "s_cap_height": table.s_cap_height(),
             }))
             .map_err(|e| format!("Failed to serialize OS/2 table: {}", e))?
         }
