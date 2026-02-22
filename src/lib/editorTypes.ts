@@ -128,6 +128,7 @@ export type EditorAction =
   | { type: 'REVERSE_PATH_DIRECTION'; pathId: string }
   | { type: 'TOGGLE_PATH_CLOSED'; pathId: string }
   | { type: 'CONVERT_SEGMENT_TYPE'; pointId: string; segmentType: SegmentType }
+  | { type: 'CONVERT_SEGMENT_TO_CURVE'; segmentId: string; curveType: 'quadratic' | 'cubic' }
   | { type: 'ADD_POINT_ON_SEGMENT'; pathId: string; insertIndex: number; point: EditablePoint };
 
 // ---- Context value ----

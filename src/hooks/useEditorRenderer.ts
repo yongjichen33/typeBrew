@@ -528,8 +528,10 @@ export function renderFrame(
 
   // ---- 9. Transformation UI (selection bounding box with handles) ----
   if (toolMode === 'node') {
-    const bbox = computeSelectionBBox(paths, selection);
-    if (bbox) {
+    const totalSelected = selection.pointIds.size + selection.segmentIds.size;
+    if (totalSelected > 1) {
+      const bbox = computeSelectionBBox(paths, selection);
+      if (bbox) {
       const [sx1, sy1] = toScreen(bbox.minX, bbox.maxY, vt);
       const [sx2, sy2] = toScreen(bbox.maxX, bbox.minY, vt);
       
@@ -598,6 +600,7 @@ export function renderFrame(
       rotPaint.delete();
       handleFill.delete();
       handleStroke.delete();
+      }
     }
   }
 

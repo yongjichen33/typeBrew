@@ -1,4 +1,4 @@
-import { RefreshCw, X, Circle, Copy, Plus, ArrowUp, ArrowDown } from 'lucide-react';
+import { RefreshCw, X, Circle, Copy, Plus, ArrowUp, ArrowDown, Spline } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import type { EditablePath, EditablePoint, Selection, SegmentType, EditorAction } from '@/lib/editorTypes';
 import { computeClipboardData } from '@/hooks/useGlyphEditor';
@@ -313,7 +313,8 @@ export function InspectorPanel({
   };
 
   const selectionBBox = computeSelectionBBox(paths, selection);
-  const hasSelection = selectedPoints.length > 0 || selection.segmentIds.size > 0;
+  const totalSelected = selection.pointIds.size + selection.segmentIds.size;
+  const showTransformBox = totalSelected > 1 && selectionBBox;
   
   const [transformValues, setTransformValues] = useState({
     x: 0,
@@ -327,7 +328,7 @@ export function InspectorPanel({
   
   useEffect(() => {
     const selectionKey = `${Array.from(selection.pointIds).join(',')}:${Array.from(selection.segmentIds).join(',')}`;
-    if (selectionBBox && selectionKey !== lastSelectionKeyRef.current) {
+    if (showTransformBox && selectionKey !== lastSelectionKeyRef.current) {
       lastSelectionKeyRef.current = selectionKey;
       setTransformValues({
         x: Math.round((selectionBBox.minX + selectionBBox.maxX) / 2),
@@ -337,7 +338,7 @@ export function InspectorPanel({
         rotation: 0,
       });
     }
-  }, [selectionBBox, selection.pointIds, selection.segmentIds]);
+  }, [showTransformBox, selectionBBox, selection.pointIds, selection.segmentIds]);
 
   const handleApplyTransform = () => {
     if (!selectionBBox) return;
@@ -370,7 +371,7 @@ export function InspectorPanel({
       <h3 className="text-sm font-medium mb-3">Inspector</h3>
 
       {/* Transform Controls */}
-      {hasSelection && selectionBBox && (
+      {showTransformBox && (
         <Section title="Transform">
           <InputField
             label="X"
@@ -453,11 +454,35 @@ export function InspectorPanel({
             {selectedSegments[0].kind === 'cubic' && 'Cubic Curve'}
             : ({Math.round(selectedSegments[0].startPoint.x)}, {Math.round(selectedSegments[0].startPoint.y)}) → ({Math.round(selectedSegments[0].endPoint.x)}, {Math.round(selectedSegments[0].endPoint.y)})
           </p>
-          <Button
-            icon={<Plus size={12} />}
-            label={hasCurveSegment ? 'Add Point on Curve' : 'Add Point on Line'}
-            onClick={handleAddPointOnSegment}
-          />
+          <div className="space-y-1">
+            <Button
+              icon={<Plus size={12} />}
+              label={hasCurveSegment ? 'Add Point on Curve' : 'Add Point on Line'}
+              onClick={handleAddPointOnSegment}
+            />
+            {selectedSegments[0].kind === 'line' && (
+              <>
+                <Button
+                  icon={<Spline size={12} />}
+                  label="Convert to Quadratic"
+                  onClick={() => dispatch({ 
+                    type: 'CONVERT_SEGMENT_TO_CURVE', 
+                    segmentId: `${selectedSegments[0].pathId}:${selectedSegments[0].startPointId}:${selectedSegments[0].endPointId}`,
+                    curveType: 'quadratic'
+                  })}
+                />
+                <Button
+                  icon={<Spline size={12} />}
+                  label="Convert to Cubic"
+                  onClick={() => dispatch({ 
+                    type: 'CONVERT_SEGMENT_TO_CURVE', 
+                    segmentId: `${selectedSegments[0].pathId}:${selectedSegments[0].startPointId}:${selectedSegments[0].endPointId}`,
+                    curveType: 'cubic'
+                  })}
+                />
+              </>
+            )}
+          </div>
         </Section>
       )}
 

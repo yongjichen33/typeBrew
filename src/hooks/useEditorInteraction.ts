@@ -414,30 +414,34 @@ export function useEditorInteraction({
 
     // Node tool: select and drag points and segments
     if (toolMode === 'node') {
-      // First check for transform handle hit
-      const bbox = computeSelectionBBox(paths, selection);
-      if (bbox) {
-        const hitHandle = hitTestTransformHandle(x, y, bbox, vt);
-        if (hitHandle) {
-          const fp = toFontSpace(x, y, vt);
-          const center = { x: (bbox.minX + bbox.maxX) / 2, y: (bbox.minY + bbox.maxY) / 2 };
-          dragRef.current = {
-            type: 'transform',
-            startFx: fp.x,
-            startFy: fp.y,
-            curFx: fp.x,
-            curFy: fp.y,
-            rbStartX: 0,
-            rbStartY: 0,
-            snapshot: clonePaths(paths),
-            transformHandle: hitHandle,
-            transformBBox: bbox,
-            transformCenter: center,
-            startScreenX: x,
-            startScreenY: y,
-          };
-          (e.target as HTMLElement).setPointerCapture(e.pointerId);
-          return;
+      const totalSelected = selection.pointIds.size + selection.segmentIds.size;
+      
+      // Check for transform handle hit (only if more than one element selected)
+      if (totalSelected > 1) {
+        const bbox = computeSelectionBBox(paths, selection);
+        if (bbox) {
+          const hitHandle = hitTestTransformHandle(x, y, bbox, vt);
+          if (hitHandle) {
+            const fp = toFontSpace(x, y, vt);
+            const center = { x: (bbox.minX + bbox.maxX) / 2, y: (bbox.minY + bbox.maxY) / 2 };
+            dragRef.current = {
+              type: 'transform',
+              startFx: fp.x,
+              startFy: fp.y,
+              curFx: fp.x,
+              curFy: fp.y,
+              rbStartX: 0,
+              rbStartY: 0,
+              snapshot: clonePaths(paths),
+              transformHandle: hitHandle,
+              transformBBox: bbox,
+              transformCenter: center,
+              startScreenX: x,
+              startScreenY: y,
+            };
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+            return;
+          }
         }
       }
 
@@ -543,13 +547,18 @@ export function useEditorInteraction({
 
     if (!dragRef.current) {
       if (toolMode === 'node') {
-        const { paths } = stateRef.current;
-        const bbox = computeSelectionBBox(paths, selection);
-        if (bbox) {
-          const hoveredHandle = hitTestTransformHandle(x, y, bbox, vt);
-          if (hoveredHandleRef.current !== hoveredHandle) {
-            hoveredHandleRef.current = hoveredHandle;
-            redraw();
+        const totalSelected = selection.pointIds.size + selection.segmentIds.size;
+        if (totalSelected > 1) {
+          const { paths } = stateRef.current;
+          const bbox = computeSelectionBBox(paths, selection);
+          if (bbox) {
+            const hoveredHandle = hitTestTransformHandle(x, y, bbox, vt);
+            if (hoveredHandleRef.current !== hoveredHandle) {
+              hoveredHandleRef.current = hoveredHandle;
+              redraw();
+            }
+          } else {
+            hoveredHandleRef.current = null;
           }
         } else {
           hoveredHandleRef.current = null;

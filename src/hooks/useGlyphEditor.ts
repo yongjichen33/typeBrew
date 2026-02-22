@@ -459,6 +459,117 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return state;
     }
 
+    case 'CONVERT_SEGMENT_TO_CURVE': {
+      const { segmentId, curveType } = action;
+      const [pathId, startPointId] = segmentId.split(':');
+      
+      const prev = clonePaths(state.paths);
+      let startPoint: EditablePoint | null = null;
+      
+      const newPaths = state.paths.map((path) => {
+        if (path.id !== pathId) return path;
+        
+        const newCommands: PathCommand[] = [];
+        
+        for (let i = 0; i < path.commands.length; i++) {
+          const cmd = path.commands[i];
+          
+          if (cmd.kind === 'M') {
+            if (cmd.point.id === startPointId) {
+              startPoint = cmd.point;
+            }
+            newCommands.push(cmd);
+          } else if (cmd.kind === 'L') {
+            if (startPoint && segmentId === `${pathId}:${startPoint.id}:${cmd.point.id}`) {
+              const endPoint = cmd.point;
+              const midX = (startPoint.x + endPoint.x) / 2;
+              const midY = (startPoint.y + endPoint.y) / 2;
+              
+              if (curveType === 'quadratic') {
+                const ctrlId = `ctrl-${Date.now()}`;
+                newCommands.push({
+                  kind: 'Q' as const,
+                  ctrl: {
+                    id: ctrlId,
+                    x: midX,
+                    y: midY,
+                    type: 'off-curve-quad' as const,
+                  },
+                  point: endPoint,
+                });
+              } else {
+                const ctrl1Id = `ctrl1-${Date.now()}`;
+                const ctrl2Id = `ctrl2-${Date.now()}`;
+                const thirdX = startPoint.x + (endPoint.x - startPoint.x) / 3;
+                const thirdY = startPoint.y + (endPoint.y - startPoint.y) / 3;
+                const twoThirdX = startPoint.x + 2 * (endPoint.x - startPoint.x) / 3;
+                const twoThirdY = startPoint.y + 2 * (endPoint.y - startPoint.y) / 3;
+                
+                newCommands.push({
+                  kind: 'C' as const,
+                  ctrl1: {
+                    id: ctrl1Id,
+                    x: thirdX,
+                    y: thirdY,
+                    type: 'off-curve-cubic' as const,
+                  },
+                  ctrl2: {
+                    id: ctrl2Id,
+                    x: twoThirdX,
+                    y: twoThirdY,
+                    type: 'off-curve-cubic' as const,
+                  },
+                  point: endPoint,
+                });
+              }
+            } else {
+              newCommands.push(cmd);
+            }
+            startPoint = cmd.point;
+          } else if (cmd.kind === 'Q') {
+            if (cmd.point.id === startPointId) {
+              startPoint = cmd.point;
+            }
+            newCommands.push(cmd);
+            startPoint = cmd.point;
+          } else if (cmd.kind === 'C') {
+            if (cmd.point.id === startPointId) {
+              startPoint = cmd.point;
+            }
+            newCommands.push(cmd);
+            startPoint = cmd.point;
+          } else {
+            newCommands.push(cmd);
+          }
+        }
+        
+        return { ...path, commands: newCommands };
+      });
+      
+      const newPointIds = new Set(state.selection.pointIds);
+      for (const path of newPaths) {
+        if (path.id === pathId) {
+          for (const cmd of path.commands) {
+            if (cmd.kind === 'Q' && cmd.ctrl.id.startsWith('ctrl-')) {
+              newPointIds.add(cmd.ctrl.id);
+            } else if (cmd.kind === 'C') {
+              if (cmd.ctrl1.id.startsWith('ctrl1-')) newPointIds.add(cmd.ctrl1.id);
+              if (cmd.ctrl2.id.startsWith('ctrl2-')) newPointIds.add(cmd.ctrl2.id);
+            }
+          }
+        }
+      }
+      
+      return {
+        ...state,
+        paths: newPaths,
+        selection: { ...state.selection, pointIds: newPointIds },
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        redoStack: [],
+        isDirty: true,
+      };
+    }
+
     case 'PASTE_CLIPBOARD': {
       const { points, segments } = action.clipboard;
       if (points.length === 0 && segments.length === 0) return state;
