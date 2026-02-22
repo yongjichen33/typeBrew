@@ -57,11 +57,9 @@ function pointToSegmentDistance(
   const lenSq = dx * dx + dy * dy;
   
   if (lenSq === 0) {
-    // Segment is a point
     return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
   }
   
-  // Project point onto line, clamped to segment
   let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
   t = Math.max(0, Math.min(1, t));
   
@@ -71,7 +69,58 @@ function pointToSegmentDistance(
   return Math.sqrt((px - projX) ** 2 + (py - projY) ** 2);
 }
 
-/** Find the closest line segment within hit radius. Returns segment id or null. */
+/** Distance from point to quadratic Bezier curve (approximated by sampling) */
+function pointToQuadDistance(
+  px: number, py: number,
+  x0: number, y0: number,
+  cx: number, cy: number,
+  x1: number, y1: number,
+  samples: number = 10,
+): number {
+  let minDist = Infinity;
+  
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    // Quadratic Bezier: B(t) = (1-t)²P0 + 2(1-t)tC + t²P1
+    const mt = 1 - t;
+    const bx = mt * mt * x0 + 2 * mt * t * cx + t * t * x1;
+    const by = mt * mt * y0 + 2 * mt * t * cy + t * t * y1;
+    const dist = Math.sqrt((px - bx) ** 2 + (py - by) ** 2);
+    if (dist < minDist) minDist = dist;
+  }
+  
+  return minDist;
+}
+
+/** Distance from point to cubic Bezier curve (approximated by sampling) */
+function pointToCubicDistance(
+  px: number, py: number,
+  x0: number, y0: number,
+  c1x: number, c1y: number,
+  c2x: number, c2y: number,
+  x1: number, y1: number,
+  samples: number = 15,
+): number {
+  let minDist = Infinity;
+  
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    // Cubic Bezier: B(t) = (1-t)³P0 + 3(1-t)²tC1 + 3(1-t)t²C2 + t³P1
+    const mt = 1 - t;
+    const mt2 = mt * mt;
+    const mt3 = mt2 * mt;
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const bx = mt3 * x0 + 3 * mt2 * t * c1x + 3 * mt * t2 * c2x + t3 * x1;
+    const by = mt3 * y0 + 3 * mt2 * t * c1y + 3 * mt * t2 * c2y + t3 * y1;
+    const dist = Math.sqrt((px - bx) ** 2 + (py - by) ** 2);
+    if (dist < minDist) minDist = dist;
+  }
+  
+  return minDist;
+}
+
+/** Find the closest segment (line or curve) within hit radius. Returns segment id or null. */
 function hitTestSegment(
   sx: number, sy: number,
   paths: EditablePath[],
@@ -88,7 +137,6 @@ function hitTestSegment(
       if (cmd.kind === 'M') {
         lastOnCurve = cmd.point;
       } else if (cmd.kind === 'L' && lastOnCurve) {
-        // Only check line segments (not curves)
         const p1 = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
         const p2 = toScreen(cmd.point.x, cmd.point.y, vt);
         
@@ -99,8 +147,27 @@ function hitTestSegment(
         }
         lastOnCurve = cmd.point;
       } else if (cmd.kind === 'Q' && lastOnCurve) {
+        const p0 = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
+        const pc = toScreen(cmd.ctrl.x, cmd.ctrl.y, vt);
+        const p1 = toScreen(cmd.point.x, cmd.point.y, vt);
+        
+        const dist = pointToQuadDistance(sx, sy, p0.x, p0.y, pc.x, pc.y, p1.x, p1.y);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+        }
         lastOnCurve = cmd.point;
       } else if (cmd.kind === 'C' && lastOnCurve) {
+        const p0 = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
+        const c1 = toScreen(cmd.ctrl1.x, cmd.ctrl1.y, vt);
+        const c2 = toScreen(cmd.ctrl2.x, cmd.ctrl2.y, vt);
+        const p1 = toScreen(cmd.point.x, cmd.point.y, vt);
+        
+        const dist = pointToCubicDistance(sx, sy, p0.x, p0.y, c1.x, c1.y, c2.x, c2.y, p1.x, p1.y);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+        }
         lastOnCurve = cmd.point;
       }
     }

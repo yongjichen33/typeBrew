@@ -15,6 +15,8 @@ interface Segment {
   kind: 'line' | 'quad' | 'cubic';
   startPoint: EditablePoint;
   endPoint: EditablePoint;
+  ctrl1?: EditablePoint;
+  ctrl2?: EditablePoint;
 }
 
 function getSelectedPoints(paths: EditablePath[], selection: Selection): EditablePoint[] {
@@ -68,7 +70,7 @@ function getSelectedPathIds(paths: EditablePath[], selection: Selection): string
   return Array.from(pathIds);
 }
 
-function getSelectedLineSegments(paths: EditablePath[], selection: Selection): Segment[] {
+function getSelectedSegments(paths: EditablePath[], selection: Selection): Segment[] {
   const segments: Segment[] = [];
   
   for (const path of paths) {
@@ -94,9 +96,36 @@ function getSelectedLineSegments(paths: EditablePath[], selection: Selection): S
           });
         }
         lastOnCurve = cmd.point;
-      } else if (cmd.kind === 'Q') {
+      } else if (cmd.kind === 'Q' && lastOnCurve) {
+        const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+        if (selection.segmentIds.has(segmentId)) {
+          segments.push({
+            pathId: path.id,
+            startPointId: lastOnCurve.id,
+            endPointId: cmd.point.id,
+            startIndex: i,
+            kind: 'quad',
+            startPoint: lastOnCurve,
+            endPoint: cmd.point,
+            ctrl1: cmd.ctrl,
+          });
+        }
         lastOnCurve = cmd.point;
-      } else if (cmd.kind === 'C') {
+      } else if (cmd.kind === 'C' && lastOnCurve) {
+        const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+        if (selection.segmentIds.has(segmentId)) {
+          segments.push({
+            pathId: path.id,
+            startPointId: lastOnCurve.id,
+            endPointId: cmd.point.id,
+            startIndex: i,
+            kind: 'cubic',
+            startPoint: lastOnCurve,
+            endPoint: cmd.point,
+            ctrl1: cmd.ctrl1,
+            ctrl2: cmd.ctrl2,
+          });
+        }
         lastOnCurve = cmd.point;
       }
     }
@@ -172,8 +201,9 @@ export function InspectorPanel({
   const selectedPath = selectedPathIds.length === 1 
     ? paths.find(p => p.id === selectedPathIds[0]) 
     : null;
-  const selectedLineSegments = getSelectedLineSegments(paths, selection);
-  const hasLineSelected = selectedLineSegments.length > 0;
+  const selectedSegments = getSelectedSegments(paths, selection);
+  const hasSegmentSelected = selectedSegments.length > 0;
+  const hasCurveSegment = selectedSegments.some(s => s.kind === 'quad' || s.kind === 'cubic');
 
   const handleDeletePoints = () => {
     dispatch({ type: 'DELETE_SELECTED_POINTS' });
@@ -183,15 +213,39 @@ export function InspectorPanel({
     dispatch({ type: 'COPY_SELECTED_POINTS' });
   };
 
-  const handleAddPointOnLine = () => {
-    if (selectedLineSegments.length === 0) return;
-    const segment = selectedLineSegments[0];
-    const midX = (segment.startPoint.x + segment.endPoint.x) / 2;
-    const midY = (segment.startPoint.y + segment.endPoint.y) / 2;
+  const handleAddPointOnSegment = () => {
+    if (selectedSegments.length === 0) return;
+    const segment = selectedSegments[0];
+    
+    // For curves, add point at t=0.5 on the curve
+    let x: number, y: number;
+    if (segment.kind === 'line') {
+      x = (segment.startPoint.x + segment.endPoint.x) / 2;
+      y = (segment.startPoint.y + segment.endPoint.y) / 2;
+    } else if (segment.kind === 'quad' && segment.ctrl1) {
+      // Quadratic bezier at t=0.5
+      const t = 0.5;
+      const mt = 1 - t;
+      x = mt * mt * segment.startPoint.x + 2 * mt * t * segment.ctrl1.x + t * t * segment.endPoint.x;
+      y = mt * mt * segment.startPoint.y + 2 * mt * t * segment.ctrl1.y + t * t * segment.endPoint.y;
+    } else if (segment.kind === 'cubic' && segment.ctrl1 && segment.ctrl2) {
+      // Cubic bezier at t=0.5
+      const t = 0.5;
+      const mt = 1 - t;
+      const mt2 = mt * mt;
+      const mt3 = mt2 * mt;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      x = mt3 * segment.startPoint.x + 3 * mt2 * t * segment.ctrl1.x + 3 * mt * t2 * segment.ctrl2.x + t3 * segment.endPoint.x;
+      y = mt3 * segment.startPoint.y + 3 * mt2 * t * segment.ctrl1.y + 3 * mt * t2 * segment.ctrl2.y + t3 * segment.endPoint.y;
+    } else {
+      return;
+    }
+    
     const newPoint: EditablePoint = {
       id: `pt-mid-${Date.now()}`,
-      x: midX,
-      y: midY,
+      x,
+      y,
       type: 'on-curve',
     };
     dispatch({
@@ -250,16 +304,19 @@ export function InspectorPanel({
         )}
       </Section>
 
-      {/* Line Segment Actions */}
-      {hasLineSelected && (
-        <Section title="Line Segment">
+      {/* Segment Actions */}
+      {hasSegmentSelected && (
+        <Section title={hasCurveSegment ? 'Curve Segment' : 'Line Segment'}>
           <p className="text-xs text-muted-foreground mb-2">
-            Line selected: ({Math.round(selectedLineSegments[0].startPoint.x)}, {Math.round(selectedLineSegments[0].startPoint.y)}) → ({Math.round(selectedLineSegments[0].endPoint.x)}, {Math.round(selectedLineSegments[0].endPoint.y)})
+            {selectedSegments[0].kind === 'line' && 'Line'}
+            {selectedSegments[0].kind === 'quad' && 'Quadratic Curve'}
+            {selectedSegments[0].kind === 'cubic' && 'Cubic Curve'}
+            : ({Math.round(selectedSegments[0].startPoint.x)}, {Math.round(selectedSegments[0].startPoint.y)}) → ({Math.round(selectedSegments[0].endPoint.x)}, {Math.round(selectedSegments[0].endPoint.y)})
           </p>
           <Button
             icon={<Plus size={12} />}
-            label="Add Point on Line"
-            onClick={handleAddPointOnLine}
+            label={hasCurveSegment ? 'Add Point on Curve' : 'Add Point on Line'}
+            onClick={handleAddPointOnSegment}
           />
         </Section>
       )}

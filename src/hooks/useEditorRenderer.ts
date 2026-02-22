@@ -243,7 +243,7 @@ export function renderFrame(
   }
   handlePaint.delete();
 
-  // ---- 4b. Highlight selected segments ----
+  // ---- 4b. Highlight selected segments (lines and curves) ----
   if (selection.segmentIds.size > 0) {
     const segmentPaint = new Paint();
     segmentPaint.setAntiAlias(true);
@@ -266,8 +266,33 @@ export function renderFrame(
           }
           lastOnCurve = cmd.point;
         } else if (cmd.kind === 'Q' && lastOnCurve) {
+          const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+          if (selection.segmentIds.has(segmentId)) {
+            const [x0, y0] = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
+            const [cx, cy] = toScreen(cmd.ctrl.x, cmd.ctrl.y, vt);
+            const [x1, y1] = toScreen(cmd.point.x, cmd.point.y, vt);
+            
+            const highlightPath = new ck.Path();
+            highlightPath.moveTo(x0, y0);
+            highlightPath.quadTo(cx, cy, x1, y1);
+            skCanvas.drawPath(highlightPath, segmentPaint);
+            highlightPath.delete();
+          }
           lastOnCurve = cmd.point;
         } else if (cmd.kind === 'C' && lastOnCurve) {
+          const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+          if (selection.segmentIds.has(segmentId)) {
+            const [x0, y0] = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
+            const [c1x, c1y] = toScreen(cmd.ctrl1.x, cmd.ctrl1.y, vt);
+            const [c2x, c2y] = toScreen(cmd.ctrl2.x, cmd.ctrl2.y, vt);
+            const [x1, y1] = toScreen(cmd.point.x, cmd.point.y, vt);
+            
+            const highlightPath = new ck.Path();
+            highlightPath.moveTo(x0, y0);
+            highlightPath.cubicTo(c1x, c1y, c2x, c2y, x1, y1);
+            skCanvas.drawPath(highlightPath, segmentPaint);
+            highlightPath.delete();
+          }
           lastOnCurve = cmd.point;
         }
       }
