@@ -243,6 +243,38 @@ export function renderFrame(
   }
   handlePaint.delete();
 
+  // ---- 4b. Highlight selected segments ----
+  if (selection.segmentIds.size > 0) {
+    const segmentPaint = new Paint();
+    segmentPaint.setAntiAlias(true);
+    segmentPaint.setStyle(ck.PaintStyle.Stroke);
+    segmentPaint.setStrokeWidth(4);
+    segmentPaint.setColor(C.selectedFill);
+
+    for (const path of paths) {
+      let lastOnCurve: { id: string; x: number; y: number } | null = null;
+      
+      for (const cmd of path.commands) {
+        if (cmd.kind === 'M') {
+          lastOnCurve = cmd.point;
+        } else if (cmd.kind === 'L' && lastOnCurve) {
+          const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+          if (selection.segmentIds.has(segmentId)) {
+            const [x1, y1] = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
+            const [x2, y2] = toScreen(cmd.point.x, cmd.point.y, vt);
+            skCanvas.drawLine(x1, y1, x2, y2, segmentPaint);
+          }
+          lastOnCurve = cmd.point;
+        } else if (cmd.kind === 'Q' && lastOnCurve) {
+          lastOnCurve = cmd.point;
+        } else if (cmd.kind === 'C' && lastOnCurve) {
+          lastOnCurve = cmd.point;
+        }
+      }
+    }
+    segmentPaint.delete();
+  }
+
   // ---- 5. Points ----
   const ON_R = 5;
   const OFF_SIZE = 7;
@@ -407,6 +439,8 @@ export function useEditorRenderer(
     viewTransform: ViewTransform;
     showDirection: boolean;
     showCoordinates: boolean;
+    activePathId: string | null;
+    isDrawingPath: boolean;
   }>,
   metricsRef: React.MutableRefObject<FontMetrics | null>,
   extraRef: React.MutableRefObject<{

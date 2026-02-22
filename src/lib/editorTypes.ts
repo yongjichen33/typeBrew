@@ -1,4 +1,5 @@
-export type ToolMode = 'select' | 'draw' | 'hand';
+export type ToolMode = 'pen' | 'node' | 'knife' | 'scale' | 'rotate' | 'skew' | 'hand';
+export type SegmentType = 'line' | 'curve';
 export type DrawPointType = 'on-curve' | 'off-curve';
 export type PointType = 'on-curve' | 'off-curve-quad' | 'off-curve-cubic';
 
@@ -56,6 +57,7 @@ export interface ViewTransform {
 /** Currently selected point IDs. */
 export interface Selection {
   pointIds: Set<string>;
+  segmentIds: Set<string>; // Format: "pathId:startPointId:endPointId"
 }
 
 /** Rubber-band selection rect in screen pixels. */
@@ -72,7 +74,6 @@ export interface EditorState {
   paths: EditablePath[];
   selection: Selection;
   toolMode: ToolMode;
-  drawPointType: DrawPointType;
   viewTransform: ViewTransform;
   isDirty: boolean;
   isSaving: boolean;
@@ -80,28 +81,44 @@ export interface EditorState {
   redoStack: EditablePath[][];
   showDirection: boolean;
   showCoordinates: boolean;
+  // Drawing state for pen tool
+  activePathId: string | null;
+  isDrawingPath: boolean;
+  // Clipboard
+  clipboard: EditablePoint[];
 }
 
 // ---- Actions ----
 
 export type EditorAction =
   | { type: 'SET_PATHS'; paths: EditablePath[] }
-  /** Apply in-flight deltas during a drag — does NOT push to undo stack. */
   | { type: 'MOVE_POINTS_LIVE'; deltas: Map<string, Vec2> }
-  /** Commit the end of a drag: push pre-drag snapshot onto the undo stack. */
   | { type: 'COMMIT_MOVE'; snapshot: EditablePath[] }
   | { type: 'ADD_POINT'; pathId: string; command: PathCommand }
-  | { type: 'SET_SELECTION'; pointIds: Set<string> }
+  | { type: 'APPEND_TO_ACTIVE_PATH'; command: PathCommand }
+  | { type: 'CLOSE_ACTIVE_PATH' }
+  | { type: 'START_NEW_PATH'; path: EditablePath }
+  | { type: 'SET_ACTIVE_PATH'; pathId: string | null }
+  | { type: 'SET_DRAWING_STATE'; isDrawing: boolean }
+  | { type: 'SET_SELECTION'; pointIds: Set<string>; segmentIds?: Set<string> }
   | { type: 'TOGGLE_SELECTION'; pointId: string }
+  | { type: 'TOGGLE_SEGMENT_SELECTION'; segmentId: string }
+  | { type: 'CLEAR_SELECTION' }
   | { type: 'SET_TOOL_MODE'; mode: ToolMode }
-  | { type: 'SET_DRAW_POINT_TYPE'; drawPointType: DrawPointType }
   | { type: 'SET_VIEW_TRANSFORM'; vt: ViewTransform }
   | { type: 'UNDO' }
   | { type: 'REDO' }
   | { type: 'MARK_SAVED' }
   | { type: 'SET_SAVING'; saving: boolean }
   | { type: 'SET_SHOW_DIRECTION'; showDirection: boolean }
-  | { type: 'SET_SHOW_COORDINATES'; showCoordinates: boolean };
+  | { type: 'SET_SHOW_COORDINATES'; showCoordinates: boolean }
+  | { type: 'DELETE_SELECTED_POINTS' }
+  | { type: 'COPY_SELECTED_POINTS' }
+  | { type: 'PASTE_POINTS' }
+  | { type: 'REVERSE_PATH_DIRECTION'; pathId: string }
+  | { type: 'TOGGLE_PATH_CLOSED'; pathId: string }
+  | { type: 'CONVERT_SEGMENT_TYPE'; pointId: string; segmentType: SegmentType }
+  | { type: 'ADD_POINT_ON_SEGMENT'; pathId: string; insertIndex: number; point: EditablePoint };
 
 // ---- Context value ----
 

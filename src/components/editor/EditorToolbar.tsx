@@ -1,11 +1,23 @@
-import { MousePointer2, Pen, Undo2, Redo2, Save, Loader2, Circle, Square, Hand, Navigation, Hash } from 'lucide-react';
-import type { ToolMode, DrawPointType } from '@/lib/editorTypes';
+import {
+  PenTool,
+  MousePointer2,
+  Scissors,
+  Scale,
+  RotateCcw,
+  FlipHorizontal,
+  Hand,
+  Undo2,
+  Redo2,
+  Save,
+  Loader2,
+  Navigation,
+  Hash,
+} from 'lucide-react';
+import type { ToolMode } from '@/lib/editorTypes';
 
 interface EditorToolbarProps {
   toolMode: ToolMode;
   onSetMode: (mode: ToolMode) => void;
-  drawPointType: DrawPointType;
-  onSetDrawPointType: (type: DrawPointType) => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -50,11 +62,17 @@ function ToolButton({
   );
 }
 
+function ToolDivider() {
+  return <div className="w-px h-5 bg-border mx-1" />;
+}
+
+function ToolGroup({ children }: { children: React.ReactNode }) {
+  return <div className="flex items-center">{children}</div>;
+}
+
 export function EditorToolbar({
   toolMode,
   onSetMode,
-  drawPointType,
-  onSetDrawPointType,
   canUndo,
   canRedo,
   onUndo,
@@ -68,78 +86,102 @@ export function EditorToolbar({
   onSetShowCoordinates,
 }: EditorToolbarProps) {
   return (
-    <div className="flex items-center gap-1 px-3 py-1 border-b bg-muted/30 shrink-0">
-      {/* Mode buttons */}
-      <ToolButton
-        icon={<MousePointer2 size={15} />}
-        label="Select (V)"
-        active={toolMode === 'select'}
-        onClick={() => onSetMode('select')}
-      />
-      <ToolButton
-        icon={<Pen size={15} />}
-        label="Draw (P)"
-        active={toolMode === 'draw'}
-        onClick={() => onSetMode('draw')}
-      />
-      <ToolButton
-        icon={<Hand size={15} />}
-        label="Hand (H)"
-        active={toolMode === 'hand'}
-        onClick={() => onSetMode('hand')}
-      />
+    <div className="flex items-center gap-2 px-3 py-1 border-b bg-muted/30 shrink-0">
+      {/* Tool Palette */}
+      <ToolGroup>
+        <ToolButton
+          icon={<MousePointer2 size={15} />}
+          label="Node Tool (N) - Select and edit points"
+          active={toolMode === 'node'}
+          onClick={() => onSetMode('node')}
+        />
+        <ToolButton
+          icon={<PenTool size={15} />}
+          label="Pen Tool (P) - Draw Bezier curves"
+          active={toolMode === 'pen'}
+          onClick={() => onSetMode('pen')}
+        />
+        <ToolButton
+          icon={<Scissors size={15} />}
+          label="Knife (K) - Cut paths"
+          active={toolMode === 'knife'}
+          onClick={() => onSetMode('knife')}
+        />
+      </ToolGroup>
 
-      {/* Draw sub-options: on-curve / off-curve point type */}
-      {toolMode === 'draw' && (
-        <>
-          <div className="w-px h-5 bg-border mx-1" />
-          <ToolButton
-            icon={<Circle size={13} />}
-            label="On-curve point"
-            active={drawPointType === 'on-curve'}
-            onClick={() => onSetDrawPointType('on-curve')}
-          />
-          <ToolButton
-            icon={<Square size={13} />}
-            label="Off-curve point"
-            active={drawPointType === 'off-curve'}
-            onClick={() => onSetDrawPointType('off-curve')}
-          />
-        </>
-      )}
+      <ToolDivider />
 
-      <div className="w-px h-5 bg-border mx-1" />
+      {/* Transform tools */}
+      <ToolGroup>
+        <ToolButton
+          icon={<Scale size={15} />}
+          label="Scale (S)"
+          active={toolMode === 'scale'}
+          onClick={() => onSetMode('scale')}
+        />
+        <ToolButton
+          icon={<RotateCcw size={15} />}
+          label="Rotate (R)"
+          active={toolMode === 'rotate'}
+          onClick={() => onSetMode('rotate')}
+        />
+        <ToolButton
+          icon={<FlipHorizontal size={15} />}
+          label="Skew"
+          active={toolMode === 'skew'}
+          onClick={() => onSetMode('skew')}
+        />
+      </ToolGroup>
+
+      <ToolDivider />
+
+      {/* Hand tool */}
+      <ToolGroup>
+        <ToolButton
+          icon={<Hand size={15} />}
+          label="Hand (H) - Pan view"
+          active={toolMode === 'hand'}
+          onClick={() => onSetMode('hand')}
+        />
+      </ToolGroup>
+
+      <ToolDivider />
 
       {/* Undo / Redo */}
-      <ToolButton
-        icon={<Undo2 size={15} />}
-        label="Undo (Ctrl+Z)"
-        disabled={!canUndo}
-        onClick={onUndo}
-      />
-      <ToolButton
-        icon={<Redo2 size={15} />}
-        label="Redo (Ctrl+Shift+Z)"
-        disabled={!canRedo}
-        onClick={onRedo}
-      />
+      <ToolGroup>
+        <ToolButton
+          icon={<Undo2 size={15} />}
+          label="Undo (Ctrl+Z)"
+          disabled={!canUndo}
+          onClick={onUndo}
+        />
+        <ToolButton
+          icon={<Redo2 size={15} />}
+          label="Redo (Ctrl+Shift+Z)"
+          disabled={!canRedo}
+          onClick={onRedo}
+        />
+      </ToolGroup>
 
       <div className="flex-1" />
 
       {/* View toggles */}
-      <div className="w-px h-5 bg-border mx-1" />
-      <ToolButton
-        icon={<Navigation size={15} />}
-        label="Show direction"
-        active={showDirection}
-        onClick={() => onSetShowDirection(!showDirection)}
-      />
-      <ToolButton
-        icon={<Hash size={15} />}
-        label="Show coordinates"
-        active={showCoordinates}
-        onClick={() => onSetShowCoordinates(!showCoordinates)}
-      />
+      <ToolGroup>
+        <ToolButton
+          icon={<Navigation size={15} />}
+          label="Show direction"
+          active={showDirection}
+          onClick={() => onSetShowDirection(!showDirection)}
+        />
+        <ToolButton
+          icon={<Hash size={15} />}
+          label="Show coordinates"
+          active={showCoordinates}
+          onClick={() => onSetShowCoordinates(!showCoordinates)}
+        />
+      </ToolGroup>
+
+      <ToolDivider />
 
       {/* Save */}
       <button

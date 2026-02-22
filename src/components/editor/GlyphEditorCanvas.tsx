@@ -24,10 +24,11 @@ interface GlyphEditorCanvasProps {
     paths: EditablePath[];
     selection: Selection;
     toolMode: string;
-    drawPointType: string;
     viewTransform: ViewTransform;
     showDirection: boolean;
     showCoordinates: boolean;
+    activePathId: string | null;
+    isDrawingPath: boolean;
   }>;
 }
 

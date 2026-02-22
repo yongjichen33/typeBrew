@@ -12,6 +12,14 @@ function toFontSpace(sx: number, sy: number, vt: ViewTransform): { x: number; y:
   };
 }
 
+/** Convert font-space coordinates to screen (canvas). */
+function toScreen(fx: number, fy: number, vt: ViewTransform): { x: number; y: number } {
+  return {
+    x: vt.originX + fx * vt.scale,
+    y: vt.originY - fy * vt.scale,
+  };
+}
+
 /** Find the closest point within hit radius (screen pixels). Returns point id or null. */
 function hitTest(
   sx: number, sy: number,
@@ -19,7 +27,7 @@ function hitTest(
   vt: ViewTransform,
 ): string | null {
   const pts = collectAllPoints(paths);
-  const hitSq = (HIT_RADIUS_PX / vt.scale) ** 2; // in font-space units²
+  const hitSq = (HIT_RADIUS_PX / vt.scale) ** 2;
   const fp = toFontSpace(sx, sy, vt);
 
   let closestId: string | null = null;
@@ -32,6 +40,69 @@ function hitTest(
     if (dsq < closestSq) {
       closestSq = dsq;
       closestId = pt.id;
+    }
+  }
+
+  return closestId;
+}
+
+/** Distance from point (px, py) to line segment (x1,y1)-(x2,y2) */
+function pointToSegmentDistance(
+  px: number, py: number,
+  x1: number, y1: number,
+  x2: number, y2: number,
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  
+  if (lenSq === 0) {
+    // Segment is a point
+    return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+  }
+  
+  // Project point onto line, clamped to segment
+  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+  
+  return Math.sqrt((px - projX) ** 2 + (py - projY) ** 2);
+}
+
+/** Find the closest line segment within hit radius. Returns segment id or null. */
+function hitTestSegment(
+  sx: number, sy: number,
+  paths: EditablePath[],
+  vt: ViewTransform,
+): string | null {
+  const hitRadius = HIT_RADIUS_PX;
+  let closestId: string | null = null;
+  let closestDist = hitRadius;
+
+  for (const path of paths) {
+    let lastOnCurve: { id: string; x: number; y: number } | null = null;
+
+    for (const cmd of path.commands) {
+      if (cmd.kind === 'M') {
+        lastOnCurve = cmd.point;
+      } else if (cmd.kind === 'L' && lastOnCurve) {
+        // Only check line segments (not curves)
+        const p1 = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
+        const p2 = toScreen(cmd.point.x, cmd.point.y, vt);
+        
+        const dist = pointToSegmentDistance(sx, sy, p1.x, p1.y, p2.x, p2.y);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+        }
+        lastOnCurve = cmd.point;
+      } else if (cmd.kind === 'Q' && lastOnCurve) {
+        lastOnCurve = cmd.point;
+      } else if (cmd.kind === 'C' && lastOnCurve) {
+        lastOnCurve = cmd.point;
+      }
     }
   }
 
@@ -68,8 +139,11 @@ interface InteractionParams {
     paths: EditablePath[];
     selection: Selection;
     toolMode: string;
-    drawPointType: string;
     viewTransform: ViewTransform;
+    showDirection: boolean;
+    showCoordinates: boolean;
+    activePathId: string | null;
+    isDrawingPath: boolean;
   }>;
   dispatch: (action: unknown) => void;
   setRubberBand: (rb: RubberBand | null) => void;
@@ -114,7 +188,7 @@ export function useEditorInteraction({
 
   const onPointerDown = useCallback((e: PointerEvent) => {
     const { x, y } = getEventPos(e);
-    const { toolMode, drawPointType, paths, viewTransform: vt, selection } = stateRef.current;
+    const { toolMode, paths, viewTransform: vt, selection } = stateRef.current;
 
     // Middle mouse = pan
     if (e.button === 1) {
@@ -136,66 +210,85 @@ export function useEditorInteraction({
       return;
     }
 
-    if (toolMode === 'select') {
-      const hitId = hitTest(x, y, paths, vt);
-      if (hitId) {
+    // Node tool: select and drag points and segments
+    if (toolMode === 'node') {
+      // First check for point hit
+      const hitPointId = hitTest(x, y, paths, vt);
+      
+      if (hitPointId) {
+        // Point was hit - select/deselect point
         const fp = toFontSpace(x, y, vt);
         dragRef.current = { type: 'point', startFx: fp.x, startFy: fp.y, curFx: fp.x, curFy: fp.y, rbStartX: 0, rbStartY: 0, snapshot: clonePaths(paths) };
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
         if (e.shiftKey) {
-          dispatch({ type: 'TOGGLE_SELECTION', pointId: hitId });
-        } else if (!selection.pointIds.has(hitId)) {
-          dispatch({ type: 'SET_SELECTION', pointIds: new Set([hitId]) });
+          dispatch({ type: 'TOGGLE_SELECTION', pointId: hitPointId });
+        } else if (!selection.pointIds.has(hitPointId)) {
+          dispatch({ type: 'SET_SELECTION', pointIds: new Set([hitPointId]) });
         }
       } else {
-        dragRef.current = { type: 'canvas', startFx: 0, startFy: 0, curFx: 0, curFy: 0, rbStartX: x, rbStartY: y, snapshot: null };
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        if (!e.shiftKey) dispatch({ type: 'SET_SELECTION', pointIds: new Set() });
+        // Check for segment hit
+        const hitSegmentId = hitTestSegment(x, y, paths, vt);
+        
+        if (hitSegmentId) {
+          // Segment was hit - select/deselect segment
+          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          if (e.shiftKey) {
+            dispatch({ type: 'TOGGLE_SEGMENT_SELECTION', segmentId: hitSegmentId });
+          } else if (!selection.segmentIds.has(hitSegmentId)) {
+            dispatch({ type: 'SET_SELECTION', pointIds: new Set(), segmentIds: new Set([hitSegmentId]) });
+          }
+        } else {
+          // Nothing hit - start rubber band or clear selection
+          dragRef.current = { type: 'canvas', startFx: 0, startFy: 0, curFx: 0, curFy: 0, rbStartX: x, rbStartY: y, snapshot: null };
+          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          if (!e.shiftKey) dispatch({ type: 'CLEAR_SELECTION' });
+        }
       }
-    } else if (toolMode === 'draw') {
+    }
+
+    // Pen tool: draw bezier curves
+    if (toolMode === 'pen') {
       const fp = toFontSpace(x, y, vt);
+      const { activePathId, isDrawingPath } = stateRef.current;
 
-      if (drawPointType === 'off-curve') {
-        // Buffer this point as a pending control; will be consumed on next on-curve click
-        pendingOffCurveRef.current = { x: fp.x, y: fp.y };
-        setPendingOffCurve({ x: fp.x, y: fp.y });
-        redraw();
-        return;
-      }
+      // Check if active path still exists and has points
+      const activePath = activePathId ? paths.find(p => p.id === activePathId) : null;
+      const canAppend = activePathId && isDrawingPath && activePath && activePath.commands.length > 0;
 
-      // on-curve click: consume any pending off-curve to form a Q command
-      const pending = pendingOffCurveRef.current;
-      const id = `pt-draw-${Date.now()}`;
-
-      if (paths.length === 0) {
+      if (!canAppend) {
+        // Start a new path
+        const newPathId = `path-${Date.now()}`;
+        const pointId = `pt-${Date.now()}`;
         const newPath = {
-          id: `path-${Date.now()}`,
-          commands: [{ kind: 'M' as const, point: { id, x: fp.x, y: fp.y, type: 'on-curve' as const } }],
+          id: newPathId,
+          commands: [{ kind: 'M' as const, point: { id: pointId, x: fp.x, y: fp.y, type: 'on-curve' as const } }],
         };
-        dispatch({ type: 'SET_PATHS', paths: [newPath] });
-        pendingOffCurveRef.current = null;
-        setPendingOffCurve(null);
+        dispatch({ type: 'START_NEW_PATH', path: newPath });
       } else {
-        const lastPath = paths[paths.length - 1];
+        // Add point to existing path
+        const pointId = `pt-${Date.now()}`;
+        const pending = pendingOffCurveRef.current;
+
         if (pending) {
-          // Pending off-curve + this on-curve → quadratic segment
-          const ctrlId = `pt-ctrl-${Date.now()}`;
+          // Create cubic curve with pending control point
+          const ctrl1Id = `pt-ctrl1-${Date.now()}`;
+          const ctrl2Id = `pt-ctrl2-${Date.now()}`;
           dispatch({
-            type: 'ADD_POINT',
-            pathId: lastPath.id,
+            type: 'APPEND_TO_ACTIVE_PATH',
             command: {
-              kind: 'Q' as const,
-              ctrl: { id: ctrlId, x: pending.x, y: pending.y, type: 'off-curve-quad' as const },
-              point: { id, x: fp.x, y: fp.y, type: 'on-curve' as const },
+              kind: 'C' as const,
+              ctrl1: { id: ctrl1Id, x: pending.x, y: pending.y, type: 'off-curve-cubic' as const },
+              ctrl2: { id: ctrl2Id, x: fp.x, y: fp.y, type: 'off-curve-cubic' as const },
+              point: { id: pointId, x: fp.x, y: fp.y, type: 'on-curve' as const },
             },
           });
           pendingOffCurveRef.current = null;
           setPendingOffCurve(null);
         } else {
+          // Create line
           dispatch({
-            type: 'ADD_POINT',
-            pathId: lastPath.id,
-            command: { kind: 'L' as const, point: { id, x: fp.x, y: fp.y, type: 'on-curve' as const } },
+            type: 'APPEND_TO_ACTIVE_PATH',
+            command: { kind: 'L' as const, point: { id: pointId, x: fp.x, y: fp.y, type: 'on-curve' as const } },
           });
         }
       }

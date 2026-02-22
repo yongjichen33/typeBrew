@@ -7,6 +7,7 @@ import { useGlyphEditor } from '@/hooks/useGlyphEditor';
 import { editablePathToSvg, outlineDataToEditablePaths } from '@/lib/svgPathParser';
 import { EditorToolbar } from './EditorToolbar';
 import { GlyphEditorCanvas } from './GlyphEditorCanvas';
+import { InspectorPanel } from './InspectorPanel';
 import type { GlyphEditorTabState, FontMetrics, ViewTransform } from '@/lib/editorTypes';
 
 /** Compute an initial view transform that fits the glyph in the canvas. */
@@ -51,20 +52,22 @@ export function GlyphEditorTab({ tabState }: Props) {
     paths: state.paths,
     selection: state.selection,
     toolMode: state.toolMode,
-    drawPointType: state.drawPointType,
     viewTransform: state.viewTransform,
     showDirection: state.showDirection,
     showCoordinates: state.showCoordinates,
+    activePathId: state.activePathId,
+    isDrawingPath: state.isDrawingPath,
   });
   useEffect(() => {
     stateRef.current = {
       paths: state.paths,
       selection: state.selection,
       toolMode: state.toolMode,
-      drawPointType: state.drawPointType,
       viewTransform: state.viewTransform,
       showDirection: state.showDirection,
       showCoordinates: state.showCoordinates,
+      activePathId: state.activePathId,
+      isDrawingPath: state.isDrawingPath,
     };
   }, [state]);
 
@@ -138,8 +141,10 @@ export function GlyphEditorTab({ tabState }: Props) {
 
   // Keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'v' || e.key === 'V') dispatch({ type: 'SET_TOOL_MODE', mode: 'select' });
-    if (e.key === 'p' || e.key === 'P') dispatch({ type: 'SET_TOOL_MODE', mode: 'draw' });
+    if (e.key === 'n' || e.key === 'N') dispatch({ type: 'SET_TOOL_MODE', mode: 'node' });
+    if (e.key === 'p' || e.key === 'P') dispatch({ type: 'SET_TOOL_MODE', mode: 'pen' });
+    if (e.key === 'h' || e.key === 'H') dispatch({ type: 'SET_TOOL_MODE', mode: 'hand' });
+    if (e.key === 'k' || e.key === 'K') dispatch({ type: 'SET_TOOL_MODE', mode: 'knife' });
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
       e.preventDefault();
       dispatch({ type: 'UNDO' });
@@ -147,6 +152,21 @@ export function GlyphEditorTab({ tabState }: Props) {
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') {
       e.preventDefault();
       dispatch({ type: 'REDO' });
+    }
+    // Copy
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      e.preventDefault();
+      dispatch({ type: 'COPY_SELECTED_POINTS' });
+    }
+    // Paste
+    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      e.preventDefault();
+      dispatch({ type: 'PASTE_POINTS' });
+    }
+    // Delete
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      dispatch({ type: 'DELETE_SELECTED_POINTS' });
     }
   }, [dispatch]);
 
@@ -196,8 +216,6 @@ export function GlyphEditorTab({ tabState }: Props) {
       <EditorToolbar
         toolMode={state.toolMode}
         onSetMode={(mode) => dispatch({ type: 'SET_TOOL_MODE', mode })}
-        drawPointType={state.drawPointType}
-        onSetDrawPointType={(drawPointType) => dispatch({ type: 'SET_DRAW_POINT_TYPE', drawPointType })}
         canUndo={state.undoStack.length > 0}
         canRedo={state.redoStack.length > 0}
         onUndo={() => dispatch({ type: 'UNDO' })}
@@ -211,7 +229,7 @@ export function GlyphEditorTab({ tabState }: Props) {
         onSetShowCoordinates={(showCoordinates) => dispatch({ type: 'SET_SHOW_COORDINATES', showCoordinates })}
       />
 
-      {/* Canvas area */}
+      {/* Canvas area with Inspector */}
       <div ref={containerRef} className="flex-1 min-h-0 flex">
         {!ck || !metrics ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground gap-2">
@@ -219,18 +237,25 @@ export function GlyphEditorTab({ tabState }: Props) {
             <span className="text-sm">Loading editor…</span>
           </div>
         ) : (
-          <GlyphEditorCanvas
-            ck={ck}
-            paths={state.paths}
-            selection={state.selection}
-            toolMode={state.toolMode}
-            viewTransform={state.viewTransform}
-            metrics={metrics}
-            showDirection={state.showDirection}
-            showCoordinates={state.showCoordinates}
-            dispatch={dispatch as (action: unknown) => void}
-            stateRef={stateRef}
-          />
+          <>
+            <GlyphEditorCanvas
+              ck={ck}
+              paths={state.paths}
+              selection={state.selection}
+              toolMode={state.toolMode}
+              viewTransform={state.viewTransform}
+              metrics={metrics}
+              showDirection={state.showDirection}
+              showCoordinates={state.showCoordinates}
+              dispatch={dispatch as (action: unknown) => void}
+              stateRef={stateRef}
+            />
+            <InspectorPanel
+              selection={state.selection}
+              paths={state.paths}
+              dispatch={dispatch as (action: unknown) => void}
+            />
+          </>
         )}
       </div>
     </div>
