@@ -5,6 +5,9 @@ import type {
   EditablePath,
   EditablePoint,
   ViewTransform,
+  PathCommand,
+  ClipboardData,
+  Selection,
 } from '@/lib/editorTypes';
 import { clonePaths } from '@/lib/svgPathParser';
 
@@ -65,6 +68,76 @@ function getPoint(paths: EditablePath[], id: string): EditablePoint | null {
   return null;
 }
 
+export function computeClipboardData(paths: EditablePath[], selection: Selection): ClipboardData {
+  const clipboard: ClipboardData = { points: [], segments: [] };
+  
+  for (const path of paths) {
+    let lastOnCurve: EditablePoint | null = null;
+    
+    for (const cmd of path.commands) {
+      if (cmd.kind === 'M') {
+        if (selection.pointIds.has(cmd.point.id)) {
+          clipboard.points.push({ ...cmd.point });
+        }
+        lastOnCurve = cmd.point;
+      } else if (cmd.kind === 'L' && lastOnCurve) {
+        const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+        const shouldCopySegment = selection.segmentIds.has(segmentId) ||
+          selection.pointIds.has(cmd.point.id);
+        
+        if (shouldCopySegment) {
+          clipboard.segments.push({
+            kind: 'L',
+            startPoint: { ...lastOnCurve },
+            endPoint: { ...cmd.point },
+          });
+        } else if (selection.pointIds.has(cmd.point.id)) {
+          clipboard.points.push({ ...cmd.point });
+        }
+        lastOnCurve = cmd.point;
+      } else if (cmd.kind === 'Q' && lastOnCurve) {
+        const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+        const shouldCopySegment = selection.segmentIds.has(segmentId) ||
+          selection.pointIds.has(cmd.point.id) ||
+          selection.pointIds.has(cmd.ctrl.id);
+        
+        if (shouldCopySegment) {
+          clipboard.segments.push({
+            kind: 'Q',
+            startPoint: { ...lastOnCurve },
+            endPoint: { ...cmd.point },
+            ctrl1: { ...cmd.ctrl },
+          });
+        } else if (selection.pointIds.has(cmd.point.id)) {
+          clipboard.points.push({ ...cmd.point });
+        }
+        lastOnCurve = cmd.point;
+      } else if (cmd.kind === 'C' && lastOnCurve) {
+        const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+        const shouldCopySegment = selection.segmentIds.has(segmentId) ||
+          selection.pointIds.has(cmd.point.id) ||
+          selection.pointIds.has(cmd.ctrl1.id) ||
+          selection.pointIds.has(cmd.ctrl2.id);
+        
+        if (shouldCopySegment) {
+          clipboard.segments.push({
+            kind: 'C',
+            startPoint: { ...lastOnCurve },
+            endPoint: { ...cmd.point },
+            ctrl1: { ...cmd.ctrl1 },
+            ctrl2: { ...cmd.ctrl2 },
+          });
+        } else if (selection.pointIds.has(cmd.point.id)) {
+          clipboard.points.push({ ...cmd.point });
+        }
+        lastOnCurve = cmd.point;
+      }
+    }
+  }
+  
+  return clipboard;
+}
+
 function reducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case 'SET_PATHS': {
@@ -79,12 +152,10 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case 'MOVE_POINTS_LIVE': {
-      // In-flight update during drag — update paths only, no undo entry
       return { ...state, paths: applyPointDelta(state.paths, action.deltas), isDirty: true };
     }
 
     case 'COMMIT_MOVE': {
-      // Drag finished — push the pre-drag snapshot as a single undo entry
       const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), action.snapshot];
       return { ...state, undoStack, redoStack: [] };
     }
@@ -242,7 +313,6 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     case 'DELETE_SELECTED_POINTS': {
       if (state.selection.pointIds.size === 0) return state;
       const prev = clonePaths(state.paths);
-      // Filter out selected points - simplified version
       const newPaths = state.paths.map((path) => ({
         ...path,
         commands: path.commands.filter((cmd) => {
@@ -261,7 +331,6 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         }),
       })).filter((p) => p.commands.length > 0);
       
-      // Check if active path still exists
       const activePathStillExists = state.activePathId && newPaths.some(p => p.id === state.activePathId);
       
       return {
@@ -280,7 +349,6 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       const prev = clonePaths(state.paths);
       const newPaths = state.paths.map((p) => {
         if (p.id !== action.pathId) return p;
-        // Simplified: just toggle a flag for direction (full reversal is complex)
         return p;
       });
       return {
@@ -313,83 +381,128 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case 'CONVERT_SEGMENT_TYPE': {
-      // Simplified - would need more complex logic for proper conversion
       return state;
     }
 
-    case 'COPY_SELECTED_POINTS': {
-      if (state.selection.pointIds.size === 0) return state;
-      const pointsToCopy: EditablePoint[] = [];
-      for (const path of state.paths) {
-        for (const cmd of path.commands) {
-          if (cmd.kind === 'M' || cmd.kind === 'L') {
-            if (state.selection.pointIds.has(cmd.point.id)) {
-              pointsToCopy.push({ ...cmd.point });
-            }
-          } else if (cmd.kind === 'Q') {
-            if (state.selection.pointIds.has(cmd.ctrl.id)) {
-              pointsToCopy.push({ ...cmd.ctrl });
-            }
-            if (state.selection.pointIds.has(cmd.point.id)) {
-              pointsToCopy.push({ ...cmd.point });
-            }
-          } else if (cmd.kind === 'C') {
-            if (state.selection.pointIds.has(cmd.ctrl1.id)) {
-              pointsToCopy.push({ ...cmd.ctrl1 });
-            }
-            if (state.selection.pointIds.has(cmd.ctrl2.id)) {
-              pointsToCopy.push({ ...cmd.ctrl2 });
-            }
-            if (state.selection.pointIds.has(cmd.point.id)) {
-              pointsToCopy.push({ ...cmd.point });
-            }
-          }
-        }
-      }
-      return { ...state, clipboard: pointsToCopy };
-    }
-
-    case 'PASTE_POINTS': {
-      if (state.clipboard.length === 0 || !state.activePathId) return state;
+    case 'PASTE_CLIPBOARD': {
+      const { points, segments } = action.clipboard;
+      if (points.length === 0 && segments.length === 0) return state;
+      
       const prev = clonePaths(state.paths);
-      const newPaths = state.paths.map((p) => {
-        if (p.id !== state.activePathId) return p;
-        const newCommands = [...p.commands];
-        // Remove trailing Z if present
-        const hasZ = newCommands[newCommands.length - 1]?.kind === 'Z';
-        if (hasZ) newCommands.pop();
+      const offsetX = action.offsetX ?? 50;
+      const offsetY = action.offsetY ?? 50;
+      
+      const newPathId = `path-paste-${Date.now()}`;
+      const newCommands: PathCommand[] = [];
+      let idCounter = 0;
+      const genId = () => `pt-paste-${Date.now()}-${++idCounter}`;
+      
+      for (const seg of segments) {
+        const startId = genId();
+        const endId = genId();
         
-        for (const pt of state.clipboard) {
-          const newId = `pt-paste-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+        newCommands.push({
+          kind: 'M' as const,
+          point: {
+            id: startId,
+            x: seg.startPoint.x + offsetX,
+            y: seg.startPoint.y + offsetY,
+            type: 'on-curve' as const,
+          },
+        });
+        
+        if (seg.kind === 'L') {
           newCommands.push({
             kind: 'L' as const,
-            point: { ...pt, id: newId, x: pt.x + 50, y: pt.y + 50 },
+            point: {
+              id: endId,
+              x: seg.endPoint.x + offsetX,
+              y: seg.endPoint.y + offsetY,
+              type: 'on-curve' as const,
+            },
+          });
+        } else if (seg.kind === 'Q') {
+          const ctrlId = genId();
+          const ctrl = seg.ctrl1!;
+          newCommands.push({
+            kind: 'Q' as const,
+            ctrl: {
+              id: ctrlId,
+              x: ctrl.x + offsetX,
+              y: ctrl.y + offsetY,
+              type: 'off-curve-quad' as const,
+            },
+            point: {
+              id: endId,
+              x: seg.endPoint.x + offsetX,
+              y: seg.endPoint.y + offsetY,
+              type: 'on-curve' as const,
+            },
+          });
+        } else if (seg.kind === 'C') {
+          const ctrl1Id = genId();
+          const ctrl2Id = genId();
+          const ctrl1 = seg.ctrl1!;
+          const ctrl2 = seg.ctrl2!;
+          newCommands.push({
+            kind: 'C' as const,
+            ctrl1: {
+              id: ctrl1Id,
+              x: ctrl1.x + offsetX,
+              y: ctrl1.y + offsetY,
+              type: 'off-curve-cubic' as const,
+            },
+            ctrl2: {
+              id: ctrl2Id,
+              x: ctrl2.x + offsetX,
+              y: ctrl2.y + offsetY,
+              type: 'off-curve-cubic' as const,
+            },
+            point: {
+              id: endId,
+              x: seg.endPoint.x + offsetX,
+              y: seg.endPoint.y + offsetY,
+              type: 'on-curve' as const,
+            },
           });
         }
-        if (hasZ) newCommands.push({ kind: 'Z' as const });
-        return { ...p, commands: newCommands };
-      });
-      return {
-        ...state,
-        paths: newPaths,
-        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
-        redoStack: [],
-        isDirty: true,
+      }
+      
+      for (const pt of points) {
+        const pointId = genId();
+        if (newCommands.length === 0) {
+          newCommands.push({
+            kind: 'M' as const,
+            point: {
+              id: pointId,
+              x: pt.x + offsetX,
+              y: pt.y + offsetY,
+              type: 'on-curve' as const,
+            },
+          });
+        } else {
+          newCommands.push({
+            kind: 'L' as const,
+            point: {
+              id: pointId,
+              x: pt.x + offsetX,
+              y: pt.y + offsetY,
+              type: 'on-curve' as const,
+            },
+          });
+        }
+      }
+      
+      if (newCommands.length === 0) return state;
+      
+      const newPath: EditablePath = {
+        id: newPathId,
+        commands: newCommands,
       };
-    }
-
-    case 'ADD_POINT_ON_SEGMENT': {
-      const prev = clonePaths(state.paths);
-      const newPaths = state.paths.map((p) => {
-        if (p.id !== action.pathId) return p;
-        const newCommands = [...p.commands];
-        // Insert point at the specified index
-        newCommands.splice(action.insertIndex, 0, { kind: 'L' as const, point: action.point });
-        return { ...p, commands: newCommands };
-      });
+      
       return {
         ...state,
-        paths: newPaths,
+        paths: [...state.paths, newPath],
         undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
         redoStack: [],
         isDirty: true,
@@ -415,7 +528,6 @@ export function makeInitialState(vt: ViewTransform): EditorState {
     showCoordinates: false,
     activePathId: null,
     isDrawingPath: false,
-    clipboard: [],
   };
 }
 

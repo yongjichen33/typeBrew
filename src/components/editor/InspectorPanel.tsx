@@ -1,10 +1,12 @@
 import { RefreshCw, X, Circle, Copy, Plus, ArrowUp, ArrowDown } from 'lucide-react';
-import type { EditablePath, EditablePoint, Selection, SegmentType } from '@/lib/editorTypes';
+import type { EditablePath, EditablePoint, Selection, SegmentType, EditorAction } from '@/lib/editorTypes';
+import { computeClipboardData } from '@/hooks/useGlyphEditor';
+import { setClipboard } from '@/lib/glyphClipboard';
 
 interface InspectorPanelProps {
   selection: Selection;
   paths: EditablePath[];
-  dispatch: (action: unknown) => void;
+  dispatch: (action: EditorAction) => void;
 }
 
 interface Segment {
@@ -210,7 +212,8 @@ export function InspectorPanel({
   };
 
   const handleCopyPoints = () => {
-    dispatch({ type: 'COPY_SELECTED_POINTS' });
+    const clipboardData = computeClipboardData(paths, selection);
+    setClipboard(clipboardData);
   };
 
   const handleAddPointOnSegment = () => {

@@ -3,7 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { useCanvasKit } from '@/hooks/useCanvasKit';
-import { useGlyphEditor } from '@/hooks/useGlyphEditor';
+import { useGlyphEditor, computeClipboardData } from '@/hooks/useGlyphEditor';
+import { getClipboard, setClipboard, setFocusedGlyphId, useFocusedGlyphId } from '@/lib/glyphClipboard';
 import { editablePathToSvg, outlineDataToEditablePaths } from '@/lib/svgPathParser';
 import { EditorToolbar } from './EditorToolbar';
 import { GlyphEditorCanvas } from './GlyphEditorCanvas';
@@ -139,41 +140,45 @@ export function GlyphEditorTab({ tabState }: Props) {
     }
   }, [metrics, vtInitialized, dispatch]);
 
-  // Keyboard shortcuts
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'n' || e.key === 'N') dispatch({ type: 'SET_TOOL_MODE', mode: 'node' });
-    if (e.key === 'p' || e.key === 'P') dispatch({ type: 'SET_TOOL_MODE', mode: 'pen' });
-    if (e.key === 'h' || e.key === 'H') dispatch({ type: 'SET_TOOL_MODE', mode: 'hand' });
-    if (e.key === 'k' || e.key === 'K') dispatch({ type: 'SET_TOOL_MODE', mode: 'knife' });
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
-      e.preventDefault();
-      dispatch({ type: 'UNDO' });
-    }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') {
-      e.preventDefault();
-      dispatch({ type: 'REDO' });
-    }
-    // Copy
-    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-      e.preventDefault();
-      dispatch({ type: 'COPY_SELECTED_POINTS' });
-    }
-    // Paste
-    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-      e.preventDefault();
-      dispatch({ type: 'PASTE_POINTS' });
-    }
-    // Delete
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      e.preventDefault();
-      dispatch({ type: 'DELETE_SELECTED_POINTS' });
-    }
-  }, [dispatch]);
+  const focusedId = useFocusedGlyphId();
+  const isFocused = focusedId === glyphId;
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isFocused) return;
+      
+      if (e.key === 'n' || e.key === 'N') dispatch({ type: 'SET_TOOL_MODE', mode: 'node' });
+      if (e.key === 'p' || e.key === 'P') dispatch({ type: 'SET_TOOL_MODE', mode: 'pen' });
+      if (e.key === 'h' || e.key === 'H') dispatch({ type: 'SET_TOOL_MODE', mode: 'hand' });
+      if (e.key === 'k' || e.key === 'K') dispatch({ type: 'SET_TOOL_MODE', mode: 'knife' });
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        dispatch({ type: 'UNDO' });
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        dispatch({ type: 'REDO' });
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        e.preventDefault();
+        const { paths, selection } = stateRef.current;
+        const clipboardData = computeClipboardData(paths, selection);
+        setClipboard(clipboardData);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        e.preventDefault();
+        const clipboardData = getClipboard();
+        dispatch({ type: 'PASTE_CLIPBOARD', clipboard: clipboardData });
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        dispatch({ type: 'DELETE_SELECTED_POINTS' });
+      }
+    };
+    
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
+  }, [dispatch, isFocused]);
 
   // Save handler
   const handleSave = useCallback(async () => {
@@ -230,7 +235,11 @@ export function GlyphEditorTab({ tabState }: Props) {
       />
 
       {/* Canvas area with Inspector */}
-      <div ref={containerRef} className="flex-1 min-h-0 flex">
+      <div 
+        ref={containerRef}
+        onMouseDown={() => setFocusedGlyphId(glyphId)}
+        className="flex-1 min-h-0 flex"
+      >
         {!ck || !metrics ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground gap-2">
             <Loader2 className="h-5 w-5 animate-spin" />

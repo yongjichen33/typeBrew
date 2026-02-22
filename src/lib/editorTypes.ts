@@ -70,6 +70,17 @@ export interface RubberBand {
 
 // ---- Editor state ----
 
+export interface ClipboardData {
+  points: EditablePoint[];
+  segments: Array<{
+    kind: 'L' | 'Q' | 'C';
+    startPoint: EditablePoint;
+    endPoint: EditablePoint;
+    ctrl1?: EditablePoint;
+    ctrl2?: EditablePoint;
+  }>;
+}
+
 export interface EditorState {
   paths: EditablePath[];
   selection: Selection;
@@ -81,11 +92,8 @@ export interface EditorState {
   redoStack: EditablePath[][];
   showDirection: boolean;
   showCoordinates: boolean;
-  // Drawing state for pen tool
   activePathId: string | null;
   isDrawingPath: boolean;
-  // Clipboard
-  clipboard: EditablePoint[];
 }
 
 // ---- Actions ----
@@ -113,8 +121,7 @@ export type EditorAction =
   | { type: 'SET_SHOW_DIRECTION'; showDirection: boolean }
   | { type: 'SET_SHOW_COORDINATES'; showCoordinates: boolean }
   | { type: 'DELETE_SELECTED_POINTS' }
-  | { type: 'COPY_SELECTED_POINTS' }
-  | { type: 'PASTE_POINTS' }
+  | { type: 'PASTE_CLIPBOARD'; clipboard: ClipboardData; offsetX?: number; offsetY?: number }
   | { type: 'REVERSE_PATH_DIRECTION'; pathId: string }
   | { type: 'TOGGLE_PATH_CLOSED'; pathId: string }
   | { type: 'CONVERT_SEGMENT_TYPE'; pointId: string; segmentType: SegmentType }
