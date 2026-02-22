@@ -43,9 +43,9 @@ function toScreen(
 }
 
 // ---------- direction arrows ----------
-/** Collect (screen x, screen y, dx, dy) for every on-curve point, representing
- *  the direction the contour is travelling when it leaves that point (outgoing).
- *  Always uses lookahead to the next point. */
+/** Collect arrows at the midpoint of each segment, showing the direction of travel.
+ *  For lines: midpoint with direction toward end.
+ *  For curves: point at t=0.5 with tangent direction. */
 function collectArrows(
   paths: EditablePath[],
   vt: ViewTransform,
@@ -53,42 +53,64 @@ function collectArrows(
   const arrows: Array<{ sx: number; sy: number; dx: number; dy: number }> = [];
 
   for (const path of paths) {
-    const cmds = path.commands;
-    const onCurvePoints: Array<{ kind: string; point: { x: number; y: number }; ctrl?: { x: number; y: number }; ctrl1?: { x: number; y: number }; ctrl2?: { x: number; y: number } }> = [];
+    let lastOnCurve: { x: number; y: number } | null = null;
 
-    for (const cmd of cmds) {
-      if (cmd.kind === 'M' || cmd.kind === 'L') {
-        onCurvePoints.push(cmd);
-      } else if (cmd.kind === 'Q') {
-        onCurvePoints.push(cmd);
-      } else if (cmd.kind === 'C') {
-        onCurvePoints.push(cmd);
+    for (const cmd of path.commands) {
+      if (cmd.kind === 'M') {
+        lastOnCurve = cmd.point;
+      } else if (cmd.kind === 'L' && lastOnCurve) {
+        const midX = (lastOnCurve.x + cmd.point.x) / 2;
+        const midY = (lastOnCurve.y + cmd.point.y) / 2;
+        const [sx, sy] = toScreen(midX, midY, vt);
+        const [ex, ey] = toScreen(cmd.point.x, cmd.point.y, vt);
+        const dx = ex - sx;
+        const dy = ey - sy;
+        if (Math.sqrt(dx * dx + dy * dy) > 1) {
+          arrows.push({ sx, sy, dx, dy });
+        }
+        lastOnCurve = cmd.point;
+      } else if (cmd.kind === 'Q' && lastOnCurve) {
+        const t = 0.5;
+        const mt = 1 - t;
+        const p0 = lastOnCurve;
+        const p1 = cmd.ctrl;
+        const p2 = cmd.point;
+        const midX = mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x;
+        const midY = mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y;
+        const tangentX = 2 * (mt * (p1.x - p0.x) + t * (p2.x - p1.x));
+        const tangentY = 2 * (mt * (p1.y - p0.y) + t * (p2.y - p1.y));
+        const [sx, sy] = toScreen(midX, midY, vt);
+        const [tx, ty] = toScreen(midX + tangentX, midY + tangentY, vt);
+        const dx = tx - sx;
+        const dy = ty - sy;
+        if (Math.sqrt(dx * dx + dy * dy) > 1) {
+          arrows.push({ sx, sy, dx, dy });
+        }
+        lastOnCurve = cmd.point;
+      } else if (cmd.kind === 'C' && lastOnCurve) {
+        const t = 0.5;
+        const mt = 1 - t;
+        const mt2 = mt * mt;
+        const mt3 = mt2 * mt;
+        const t2 = t * t;
+        const t3 = t2 * t;
+        const p0 = lastOnCurve;
+        const p1 = cmd.ctrl1;
+        const p2 = cmd.ctrl2;
+        const p3 = cmd.point;
+        const midX = mt3 * p0.x + 3 * mt2 * t * p1.x + 3 * mt * t2 * p2.x + t3 * p3.x;
+        const midY = mt3 * p0.y + 3 * mt2 * t * p1.y + 3 * mt * t2 * p2.y + t3 * p3.y;
+        const tangentX = 3 * (mt2 * (p1.x - p0.x) + 2 * mt * t * (p2.x - p1.x) + t2 * (p3.x - p2.x));
+        const tangentY = 3 * (mt2 * (p1.y - p0.y) + 2 * mt * t * (p2.y - p1.y) + t2 * (p3.y - p2.y));
+        const [sx, sy] = toScreen(midX, midY, vt);
+        const [tx, ty] = toScreen(midX + tangentX, midY + tangentY, vt);
+        const dx = tx - sx;
+        const dy = ty - sy;
+        if (Math.sqrt(dx * dx + dy * dy) > 1) {
+          arrows.push({ sx, sy, dx, dy });
+        }
+        lastOnCurve = cmd.point;
       }
-    }
-
-    for (let i = 0; i < onCurvePoints.length; i++) {
-      const cmd = onCurvePoints[i];
-      const [sx, sy] = toScreen(cmd.point.x, cmd.point.y, vt);
-      
-      const next = onCurvePoints[i + 1];
-      if (!next) continue;
-      
-      let targetFx: number, targetFy: number;
-      if (next.kind === 'L') {
-        targetFx = next.point.x;
-        targetFy = next.point.y;
-      } else if (next.kind === 'Q' && next.ctrl) {
-        targetFx = next.ctrl.x;
-        targetFy = next.ctrl.y;
-      } else if (next.kind === 'C' && next.ctrl1) {
-        targetFx = next.ctrl1.x;
-        targetFy = next.ctrl1.y;
-      } else {
-        continue;
-      }
-      
-      const [tsx, tsy] = toScreen(targetFx, targetFy, vt);
-      arrows.push({ sx, sy, dx: tsx - sx, dy: tsy - sy });
     }
   }
 
@@ -128,26 +150,33 @@ export function renderFrame(
   metricPaint.setStyle(ck.PaintStyle.Stroke);
   metricPaint.setStrokeWidth(1);
 
-  const drawHLine = (fontY: number, color: Float32Array) => {
+  const drawHLine = (fontY: number, color: Float32Array, xStart: number, xEnd: number) => {
     const [, sy] = toScreen(0, fontY, vt);
     if (sy < -10 || sy > canvasHeight + 10) return;
+    const [sx1] = toScreen(xStart, 0, vt);
+    const [sx2] = toScreen(xEnd, 0, vt);
     metricPaint.setColor(color);
-    skCanvas.drawLine(0, sy, canvasWidth, sy, metricPaint);
+    skCanvas.drawLine(sx1, sy, sx2, sy, metricPaint);
   };
-  const drawVLine = (fontX: number, color: Float32Array) => {
+  const drawVLine = (fontX: number, color: Float32Array, yStart: number, yEnd: number) => {
     const [sx] = toScreen(fontX, 0, vt);
     if (sx < -10 || sx > canvasWidth + 10) return;
+    const [, sy1] = toScreen(0, yStart, vt);
+    const [, sy2] = toScreen(0, yEnd, vt);
     metricPaint.setColor(color);
-    skCanvas.drawLine(sx, 0, sx, canvasHeight, metricPaint);
+    skCanvas.drawLine(sx, sy1, sx, sy2, metricPaint);
   };
 
-  drawHLine(0, C.baseline);
-  drawHLine(metrics.ascender, C.ascender);
-  drawHLine(metrics.descender, C.descender);
-  if (metrics.xHeight) drawHLine(metrics.xHeight, C.xHeight);
-  if (metrics.capHeight) drawHLine(metrics.capHeight, C.capHeight);
-  drawVLine(0, C.baseline);
-  drawVLine(metrics.advanceWidth, C.advance);
+  const minY = Math.min(metrics.descender, 0);
+  const maxY = Math.max(metrics.ascender, metrics.xHeight ?? 0, metrics.capHeight ?? 0);
+
+  drawHLine(0, C.baseline, 0, metrics.advanceWidth);
+  drawHLine(metrics.ascender, C.ascender, 0, metrics.advanceWidth);
+  drawHLine(metrics.descender, C.descender, 0, metrics.advanceWidth);
+  if (metrics.xHeight) drawHLine(metrics.xHeight, C.xHeight, 0, metrics.advanceWidth);
+  if (metrics.capHeight) drawHLine(metrics.capHeight, C.capHeight, 0, metrics.advanceWidth);
+  drawVLine(0, C.baseline, minY, maxY);
+  drawVLine(metrics.advanceWidth, C.advance, minY, maxY);
   metricPaint.delete();
 
   // ---- 2. Bounding box ----
@@ -350,11 +379,10 @@ export function renderFrame(
     }
   }
 
-  // ---- 6. Direction arrows on on-curve points ----
+  // ---- 6. Direction arrows on segments ----
   if (showDirection) {
-    const ARROW_HEIGHT = 14;   // triangle height in screen pixels
-    const ARROW_HALF_W = 7;   // half-width of triangle base
-    const ARROW_OFFSET = 18;  // offset from point center
+    const ARROW_HEIGHT = 12;
+    const ARROW_HALF_W = 5;
     const arrowPaint = new Paint();
     arrowPaint.setAntiAlias(true);
     arrowPaint.setStyle(ck.PaintStyle.Fill);
@@ -366,13 +394,12 @@ export function renderFrame(
       if (len < 1) continue;
       const nx = dx / len;
       const ny = dy / len;
-      // Tip of triangle in direction of travel, offset away from the point
-      const tipX = sx + nx * ARROW_OFFSET;
-      const tipY = sy + ny * ARROW_OFFSET;
-      const baseX = sx + nx * (ARROW_OFFSET - ARROW_HEIGHT);
-      const baseY = sy + ny * (ARROW_OFFSET - ARROW_HEIGHT);
+      const tipX = sx + nx * ARROW_HEIGHT / 2;
+      const tipY = sy + ny * ARROW_HEIGHT / 2;
+      const baseX = sx - nx * ARROW_HEIGHT / 2;
+      const baseY = sy - ny * ARROW_HEIGHT / 2;
       const perpX = -ny * ARROW_HALF_W;
-      const perpY =  nx * ARROW_HALF_W;
+      const perpY = nx * ARROW_HALF_W;
 
       arrowPath.moveTo(tipX, tipY);
       arrowPath.lineTo(baseX + perpX, baseY + perpY);

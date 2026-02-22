@@ -174,18 +174,28 @@ export function GlyphEditorCanvas({
   const { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave } =
     useEditorInteraction({ stateRef, dispatch, setRubberBand, setMousePos, setPendingOffCurve, redraw, getCanvasRect });
 
-  // Collect on-curve screen positions for coordinate labels
   const coordLabels = showCoordinates ? paths.flatMap((path) =>
     path.commands.flatMap((cmd) => {
-      const pt =
-        cmd.kind === 'M' || cmd.kind === 'L' ? cmd.point :
-        cmd.kind === 'Q' ? cmd.point :
-        cmd.kind === 'C' ? cmd.point :
-        null;
-      if (!pt) return [];
-      const sx = viewTransform.originX + pt.x * viewTransform.scale;
-      const sy = viewTransform.originY - pt.y * viewTransform.scale;
-      return [{ id: pt.id, label: `${Math.round(pt.x)}, ${Math.round(pt.y)}`, sx, sy }];
+      const labels: Array<{ id: string; label: string; sx: number; sy: number; color: string }> = [];
+      const { originX, originY, scale } = viewTransform;
+      
+      const addLabel = (pt: { id: string; x: number; y: number }, color: string) => {
+        const sx = originX + pt.x * scale;
+        const sy = originY - pt.y * scale;
+        labels.push({ id: pt.id, label: `${Math.round(pt.x)}, ${Math.round(pt.y)}`, sx, sy, color });
+      };
+      
+      if (cmd.kind === 'M' || cmd.kind === 'L') {
+        addLabel(cmd.point, 'rgb(70,70,70)');
+      } else if (cmd.kind === 'Q') {
+        addLabel(cmd.ctrl, 'rgb(100,149,237)');
+        addLabel(cmd.point, 'rgb(70,70,70)');
+      } else if (cmd.kind === 'C') {
+        addLabel(cmd.ctrl1, 'rgb(100,149,237)');
+        addLabel(cmd.ctrl2, 'rgb(100,149,237)');
+        addLabel(cmd.point, 'rgb(70,70,70)');
+      }
+      return labels;
     })
   ) : [];
 
@@ -193,18 +203,11 @@ export function GlyphEditorCanvas({
   const metricLabels = (() => {
     const labels: Array<{ key: string; label: string; sx?: number; sy?: number; isVertical: boolean; color: string }> = [];
     const { originX, originY, scale } = viewTransform;
-    const W = canvasSize.w;
-    const H = canvasSize.h;
-
+    const advanceX = originX + metrics.advanceWidth * scale;
     const addH = (fontY: number, label: string, color: string) => {
       const sy = originY - fontY * scale;
-      if (sy < -10 || sy > H + 10) return;
-      labels.push({ key: label, label, sy, isVertical: false, color });
-    };
-    const addV = (fontX: number, label: string, color: string) => {
-      const sx = originX + fontX * scale;
-      if (sx < -10 || sx > W + 10) return;
-      labels.push({ key: label, label, sx, isVertical: true, color });
+      if (sy < -10 || sy > canvasSize.h + 10) return;
+      labels.push({ key: label, label, sx: advanceX, sy, isVertical: false, color });
     };
 
     addH(0, 'Baseline', 'rgb(150,150,150)');
@@ -212,8 +215,7 @@ export function GlyphEditorCanvas({
     addH(metrics.descender, 'Descender', 'rgb(200,100,100)');
     if (metrics.xHeight) addH(metrics.xHeight, 'x-height', 'rgb(100,200,150)');
     if (metrics.capHeight) addH(metrics.capHeight, 'Cap height', 'rgb(200,150,100)');
-    addV(0, 'Origin', 'rgb(150,150,150)');
-    addV(metrics.advanceWidth, 'Advance', 'rgb(100,180,100)');
+
 
     return labels;
   })();
@@ -242,8 +244,8 @@ export function GlyphEditorCanvas({
             className="absolute text-[10px] font-mono whitespace-nowrap"
             style={
               isVertical
-                ? { left: (sx ?? 0) + 4, top: 4, color }
-                : { right: 4, top: (sy ?? 0) - 14, color }
+                ? { left: (sx ?? 0) + 4, top: (sy ?? 4) - 14, color }
+                : { left: (sx ?? 0) + 4, top: (sy ?? 0) - 14, color }
             }
           >
             {label}
@@ -252,11 +254,11 @@ export function GlyphEditorCanvas({
       </div>
       {coordLabels.length > 0 && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {coordLabels.map(({ id, label, sx, sy }) => (
+          {coordLabels.map(({ id, label, sx, sy, color }) => (
             <span
               key={id}
-              className="absolute text-[10px] font-mono text-gray-600 whitespace-nowrap"
-              style={{ left: sx + 8, top: sy - 6 }}
+              className="absolute text-[10px] font-mono whitespace-nowrap"
+              style={{ left: sx + 8, top: sy - 6, color }}
             >
               {label}
             </span>
