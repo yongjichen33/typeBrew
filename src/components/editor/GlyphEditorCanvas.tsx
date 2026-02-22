@@ -171,7 +171,7 @@ export function GlyphEditorCanvas({
 
   const getCanvasRect = () => canvasRef.current?.getBoundingClientRect() ?? null;
 
-  const { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave } =
+  const { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave, getCursor } =
     useEditorInteraction({ stateRef, dispatch, setRubberBand, setMousePos, setPendingOffCurve, redraw, getCanvasRect });
 
   const coordLabels = showCoordinates ? paths.flatMap((path) =>
@@ -227,7 +227,7 @@ export function GlyphEditorCanvas({
         style={{
           width: canvasSize.w,
           height: canvasSize.h,
-          cursor: toolMode === 'draw' ? 'crosshair' : toolMode === 'hand' ? 'grab' : 'default',
+          cursor: toolMode === 'pen' ? 'crosshair' : toolMode === 'hand' ? 'grab' : toolMode === 'node' ? getCursor() : 'default',
           display: 'block',
         }}
         onPointerDown={(e) => onPointerDown(e.nativeEvent)}

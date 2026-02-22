@@ -1,7 +1,9 @@
 import { RefreshCw, X, Circle, Copy, Plus, ArrowUp, ArrowDown } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 import type { EditablePath, EditablePoint, Selection, SegmentType, EditorAction } from '@/lib/editorTypes';
 import { computeClipboardData } from '@/hooks/useGlyphEditor';
 import { setClipboard } from '@/lib/glyphClipboard';
+import { computeSelectionBBox } from '@/hooks/useEditorInteraction';
 
 interface InspectorPanelProps {
   selection: Selection;
@@ -193,6 +195,45 @@ function Button({
   );
 }
 
+function InputField({ 
+  label, 
+  value, 
+  onChange, 
+  unit,
+  min,
+  max,
+  step = 1,
+}: { 
+  label: string; 
+  value: number; 
+  onChange: (value: number) => void;
+  unit?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+}) {
+  return (
+    <div className="flex justify-between items-center py-1">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            if (!isNaN(v)) onChange(v);
+          }}
+          min={min}
+          max={max}
+          step={step}
+          className="w-14 px-1.5 py-0.5 text-xs font-mono text-right bg-background border rounded"
+        />
+        {unit && <span className="text-[10px] text-muted-foreground">{unit}</span>}
+      </div>
+    </div>
+  );
+}
+
 export function InspectorPanel({
   selection,
   paths,
@@ -271,9 +312,105 @@ export function InspectorPanel({
     }
   };
 
+  const selectionBBox = computeSelectionBBox(paths, selection);
+  const hasSelection = selectedPoints.length > 0 || selection.segmentIds.size > 0;
+  
+  const [transformValues, setTransformValues] = useState({
+    x: 0,
+    y: 0,
+    scaleX: 100,
+    scaleY: 100,
+    rotation: 0,
+  });
+
+  const lastSelectionKeyRef = useRef<string>('');
+  
+  useEffect(() => {
+    const selectionKey = `${Array.from(selection.pointIds).join(',')}:${Array.from(selection.segmentIds).join(',')}`;
+    if (selectionBBox && selectionKey !== lastSelectionKeyRef.current) {
+      lastSelectionKeyRef.current = selectionKey;
+      setTransformValues({
+        x: Math.round((selectionBBox.minX + selectionBBox.maxX) / 2),
+        y: Math.round((selectionBBox.minY + selectionBBox.maxY) / 2),
+        scaleX: 100,
+        scaleY: 100,
+        rotation: 0,
+      });
+    }
+  }, [selectionBBox, selection.pointIds, selection.segmentIds]);
+
+  const handleApplyTransform = () => {
+    if (!selectionBBox) return;
+    const centerX = (selectionBBox.minX + selectionBBox.maxX) / 2;
+    const centerY = (selectionBBox.minY + selectionBBox.maxY) / 2;
+    
+    dispatch({
+      type: 'APPLY_TRANSFORM',
+      transform: {
+        translateX: transformValues.x - centerX,
+        translateY: transformValues.y - centerY,
+        scaleX: transformValues.scaleX / 100,
+        scaleY: transformValues.scaleY / 100,
+        rotation: transformValues.rotation,
+        centerX,
+        centerY,
+      },
+    });
+    
+    setTransformValues(prev => ({
+      ...prev,
+      scaleX: 100,
+      scaleY: 100,
+      rotation: 0,
+    }));
+  };
+
   return (
     <div className="w-56 border-l bg-muted/20 p-3 overflow-y-auto shrink-0">
       <h3 className="text-sm font-medium mb-3">Inspector</h3>
+
+      {/* Transform Controls */}
+      {hasSelection && selectionBBox && (
+        <Section title="Transform">
+          <InputField
+            label="X"
+            value={transformValues.x}
+            onChange={(v) => setTransformValues(prev => ({ ...prev, x: v }))}
+          />
+          <InputField
+            label="Y"
+            value={transformValues.y}
+            onChange={(v) => setTransformValues(prev => ({ ...prev, y: v }))}
+          />
+          <InputField
+            label="Scale X"
+            value={transformValues.scaleX}
+            onChange={(v) => setTransformValues(prev => ({ ...prev, scaleX: v }))}
+            unit="%"
+            step={1}
+          />
+          <InputField
+            label="Scale Y"
+            value={transformValues.scaleY}
+            onChange={(v) => setTransformValues(prev => ({ ...prev, scaleY: v }))}
+            unit="%"
+            step={1}
+          />
+          <InputField
+            label="Rotation"
+            value={transformValues.rotation}
+            onChange={(v) => setTransformValues(prev => ({ ...prev, rotation: v }))}
+            unit="°"
+            step={1}
+          />
+          <button
+            onClick={handleApplyTransform}
+            className="mt-2 w-full px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
+          >
+            Apply Transform
+          </button>
+        </Section>
+      )}
 
       {/* Point Selection Info */}
       <Section title="Selected Points">

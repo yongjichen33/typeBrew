@@ -120,6 +120,122 @@ function pointToCubicDistance(
   return minDist;
 }
 
+export type TransformHandle = 
+  | 'tl' | 'tr' | 'bl' | 'br' 
+  | 'tm' | 'bm' | 'lm' | 'rm' 
+  | 'rotate' | 'move'
+  | null;
+
+export interface SelectionBBox {
+  minX: number; minY: number; maxX: number; maxY: number;
+}
+
+export function computeSelectionBBox(
+  paths: EditablePath[],
+  selection: Selection,
+): SelectionBBox | null {
+  const selectedPoints: Array<{ x: number; y: number }> = [];
+
+  for (const path of paths) {
+    let lastOnCurve: { id: string; x: number; y: number } | null = null;
+
+    for (const cmd of path.commands) {
+      if (cmd.kind === 'M') {
+        if (selection.pointIds.has(cmd.point.id)) {
+          selectedPoints.push(cmd.point);
+        }
+        lastOnCurve = cmd.point;
+      } else if (cmd.kind === 'L' && lastOnCurve) {
+        const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+        if (selection.segmentIds.has(segmentId)) {
+          selectedPoints.push(lastOnCurve);
+          selectedPoints.push(cmd.point);
+        } else if (selection.pointIds.has(cmd.point.id)) {
+          selectedPoints.push(cmd.point);
+        }
+        lastOnCurve = cmd.point;
+      } else if (cmd.kind === 'Q' && lastOnCurve) {
+        const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+        if (selection.segmentIds.has(segmentId)) {
+          selectedPoints.push(lastOnCurve);
+          selectedPoints.push(cmd.ctrl);
+          selectedPoints.push(cmd.point);
+        } else {
+          if (selection.pointIds.has(cmd.ctrl.id)) selectedPoints.push(cmd.ctrl);
+          if (selection.pointIds.has(cmd.point.id)) selectedPoints.push(cmd.point);
+        }
+        lastOnCurve = cmd.point;
+      } else if (cmd.kind === 'C' && lastOnCurve) {
+        const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+        if (selection.segmentIds.has(segmentId)) {
+          selectedPoints.push(lastOnCurve);
+          selectedPoints.push(cmd.ctrl1);
+          selectedPoints.push(cmd.ctrl2);
+          selectedPoints.push(cmd.point);
+        } else {
+          if (selection.pointIds.has(cmd.ctrl1.id)) selectedPoints.push(cmd.ctrl1);
+          if (selection.pointIds.has(cmd.ctrl2.id)) selectedPoints.push(cmd.ctrl2);
+          if (selection.pointIds.has(cmd.point.id)) selectedPoints.push(cmd.point);
+        }
+        lastOnCurve = cmd.point;
+      }
+    }
+  }
+
+  if (selectedPoints.length === 0) return null;
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const pt of selectedPoints) {
+    if (pt.x < minX) minX = pt.x;
+    if (pt.y < minY) minY = pt.y;
+    if (pt.x > maxX) maxX = pt.x;
+    if (pt.y > maxY) maxY = pt.y;
+  }
+
+  return { minX, minY, maxX, maxY };
+}
+
+function hitTestTransformHandle(
+  sx: number, sy: number,
+  bbox: SelectionBBox,
+  vt: ViewTransform,
+): TransformHandle {
+  const p1 = toScreen(bbox.minX, bbox.maxY, vt);
+  const p2 = toScreen(bbox.maxX, bbox.minY, vt);
+  
+  const padding = 8;
+  const left = p1.x - padding;
+  const top = p1.y - padding;
+  const right = p2.x + padding;
+  const bottom = p2.y + padding;
+  const midX = (left + right) / 2;
+  const midY = (top + bottom) / 2;
+  
+  const HANDLE_R = 8;
+  const ROTATION_R = 10;
+  const ROTATION_OFFSET = 20;
+  const rotationY = top - ROTATION_OFFSET;
+
+  const dist = (x1: number, y1: number, x2: number, y2: number) => 
+    Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+
+  if (dist(sx, sy, midX, rotationY) < ROTATION_R) return 'rotate';
+  if (dist(sx, sy, left, top) < HANDLE_R) return 'tl';
+  if (dist(sx, sy, right, top) < HANDLE_R) return 'tr';
+  if (dist(sx, sy, left, bottom) < HANDLE_R) return 'bl';
+  if (dist(sx, sy, right, bottom) < HANDLE_R) return 'br';
+  if (dist(sx, sy, midX, top) < HANDLE_R) return 'tm';
+  if (dist(sx, sy, midX, bottom) < HANDLE_R) return 'bm';
+  if (dist(sx, sy, left, midY) < HANDLE_R) return 'lm';
+  if (dist(sx, sy, right, midY) < HANDLE_R) return 'rm';
+
+  if (sx >= left && sx <= right && sy >= top && sy <= bottom) {
+    return 'move';
+  }
+
+  return null;
+}
+
 /** Find the closest segment (line or curve) within hit radius. Returns segment id or null. */
 function hitTestSegment(
   sx: number, sy: number,
@@ -231,12 +347,16 @@ export function useEditorInteraction({
   getCanvasRect,
 }: InteractionParams) {
   const dragRef = useRef<{
-    type: 'point' | 'canvas';
+    type: 'point' | 'canvas' | 'transform';
     startFx: number; startFy: number;
     curFx: number; curFy: number;
     rbStartX: number; rbStartY: number;
-    /** Pre-drag snapshot saved once on pointerdown; committed to undo on pointerup. */
     snapshot: EditablePath[] | null;
+    transformHandle?: TransformHandle;
+    transformBBox?: SelectionBBox;
+    transformCenter?: { x: number; y: number };
+    startScreenX?: number;
+    startScreenY?: number;
   } | null>(null);
 
   const panRef = useRef<{
@@ -244,8 +364,23 @@ export function useEditorInteraction({
     startX: number; startY: number;
   } | null>(null);
 
-  /** Pending off-curve control point (font-space) waiting to be paired with the next on-curve click. */
   const pendingOffCurveRef = useRef<{ x: number; y: number } | null>(null);
+  const hoveredHandleRef = useRef<TransformHandle>(null);
+
+  const getCursor = useCallback((): string => {
+    if (dragRef.current?.type === 'transform' && dragRef.current.transformHandle === 'move') {
+      return 'grabbing';
+    }
+    const handle = hoveredHandleRef.current;
+    if (!handle) return 'default';
+    if (handle === 'move') return 'grab';
+    if (handle === 'rotate') return 'crosshair';
+    if (handle === 'tl' || handle === 'br') return 'nwse-resize';
+    if (handle === 'tr' || handle === 'bl') return 'nesw-resize';
+    if (handle === 'tm' || handle === 'bm') return 'ns-resize';
+    if (handle === 'lm' || handle === 'rm') return 'ew-resize';
+    return 'default';
+  }, []);
 
   const getEventPos = useCallback((e: PointerEvent | WheelEvent) => {
     const rect = getCanvasRect();
@@ -279,7 +414,34 @@ export function useEditorInteraction({
 
     // Node tool: select and drag points and segments
     if (toolMode === 'node') {
-      // First check for point hit
+      // First check for transform handle hit
+      const bbox = computeSelectionBBox(paths, selection);
+      if (bbox) {
+        const hitHandle = hitTestTransformHandle(x, y, bbox, vt);
+        if (hitHandle) {
+          const fp = toFontSpace(x, y, vt);
+          const center = { x: (bbox.minX + bbox.maxX) / 2, y: (bbox.minY + bbox.maxY) / 2 };
+          dragRef.current = {
+            type: 'transform',
+            startFx: fp.x,
+            startFy: fp.y,
+            curFx: fp.x,
+            curFy: fp.y,
+            rbStartX: 0,
+            rbStartY: 0,
+            snapshot: clonePaths(paths),
+            transformHandle: hitHandle,
+            transformBBox: bbox,
+            transformCenter: center,
+            startScreenX: x,
+            startScreenY: y,
+          };
+          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          return;
+        }
+      }
+
+      // Check for point hit
       const hitPointId = hitTest(x, y, paths, vt);
       
       if (hitPointId) {
@@ -380,6 +542,21 @@ export function useEditorInteraction({
     setMousePos({ x, y });
 
     if (!dragRef.current) {
+      if (toolMode === 'node') {
+        const { paths } = stateRef.current;
+        const bbox = computeSelectionBBox(paths, selection);
+        if (bbox) {
+          const hoveredHandle = hitTestTransformHandle(x, y, bbox, vt);
+          if (hoveredHandleRef.current !== hoveredHandle) {
+            hoveredHandleRef.current = hoveredHandle;
+            redraw();
+          }
+        } else {
+          hoveredHandleRef.current = null;
+        }
+      } else {
+        hoveredHandleRef.current = null;
+      }
       if (toolMode === 'draw' || toolMode === 'select') redraw();
       return;
     }
@@ -402,6 +579,140 @@ export function useEditorInteraction({
     } else if (drag.type === 'canvas') {
       const rb: RubberBand = { x1: drag.rbStartX, y1: drag.rbStartY, x2: x, y2: y };
       setRubberBand(rb);
+      redraw();
+    } else if (drag.type === 'transform' && drag.transformBBox && drag.transformCenter && drag.snapshot) {
+      const fp = toFontSpace(x, y, vt);
+      const bbox = drag.transformBBox;
+      const center = drag.transformCenter;
+      const handle = drag.transformHandle;
+
+      const deltas = new Map<string, { x: number; y: number }>();
+      
+      const collectPointsFromPaths = (paths: EditablePath[]) => {
+        const pts: Array<{ id: string; x: number; y: number }> = [];
+        for (const path of paths) {
+          let lastOnCurve: { id: string; x: number; y: number } | null = null;
+          for (const cmd of path.commands) {
+            if (cmd.kind === 'M') {
+              if (selection.pointIds.has(cmd.point.id)) pts.push(cmd.point);
+              lastOnCurve = cmd.point;
+            } else if (cmd.kind === 'L' && lastOnCurve) {
+              const segId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+              if (selection.segmentIds.has(segId)) {
+                pts.push(lastOnCurve);
+                pts.push(cmd.point);
+              } else if (selection.pointIds.has(cmd.point.id)) {
+                pts.push(cmd.point);
+              }
+              lastOnCurve = cmd.point;
+            } else if (cmd.kind === 'Q' && lastOnCurve) {
+              const segId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+              if (selection.segmentIds.has(segId)) {
+                pts.push(lastOnCurve);
+                pts.push(cmd.ctrl);
+                pts.push(cmd.point);
+              } else {
+                if (selection.pointIds.has(cmd.ctrl.id)) pts.push(cmd.ctrl);
+                if (selection.pointIds.has(cmd.point.id)) pts.push(cmd.point);
+              }
+              lastOnCurve = cmd.point;
+            } else if (cmd.kind === 'C' && lastOnCurve) {
+              const segId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+              if (selection.segmentIds.has(segId)) {
+                pts.push(lastOnCurve);
+                pts.push(cmd.ctrl1);
+                pts.push(cmd.ctrl2);
+                pts.push(cmd.point);
+              } else {
+                if (selection.pointIds.has(cmd.ctrl1.id)) pts.push(cmd.ctrl1);
+                if (selection.pointIds.has(cmd.ctrl2.id)) pts.push(cmd.ctrl2);
+                if (selection.pointIds.has(cmd.point.id)) pts.push(cmd.point);
+              }
+              lastOnCurve = cmd.point;
+            }
+          }
+        }
+        return pts;
+      };
+
+      const originalPoints = collectPointsFromPaths(drag.snapshot);
+      const currentPoints = collectPointsFromPaths(stateRef.current.paths);
+      
+      const getCurrentPos = (id: string) => currentPoints.find(p => p.id === id);
+
+      if (handle === 'rotate') {
+        const startAngle = Math.atan2(drag.startFy - center.y, drag.startFx - center.x);
+        const currentAngle = Math.atan2(fp.y - center.y, fp.x - center.x);
+        const angleDelta = currentAngle - startAngle;
+        const cos = Math.cos(angleDelta);
+        const sin = Math.sin(angleDelta);
+
+        for (const origPt of originalPoints) {
+          const dx = origPt.x - center.x;
+          const dy = origPt.y - center.y;
+          const targetX = center.x + dx * cos - dy * sin;
+          const targetY = center.y + dx * sin + dy * cos;
+          
+          const currentPt = getCurrentPos(origPt.id);
+          if (currentPt) {
+            deltas.set(origPt.id, { x: targetX - currentPt.x, y: targetY - currentPt.y });
+          }
+        }
+      } else if (handle === 'move') {
+        const deltaX = fp.x - drag.startFx;
+        const deltaY = fp.y - drag.startFy;
+
+        for (const origPt of originalPoints) {
+          const targetX = origPt.x + deltaX;
+          const targetY = origPt.y + deltaY;
+          
+          const currentPt = getCurrentPos(origPt.id);
+          if (currentPt) {
+            deltas.set(origPt.id, { x: targetX - currentPt.x, y: targetY - currentPt.y });
+          }
+        }
+      } else {
+        let scaleX = 1, scaleY = 1;
+        const bboxW = bbox.maxX - bbox.minX;
+        const bboxH = bbox.maxY - bbox.minY;
+        
+        const screenBboxW = bboxW * vt.scale;
+        const screenBboxH = bboxH * vt.scale;
+        
+        const screenDeltaX = x - (drag.startScreenX ?? x);
+        const screenDeltaY = y - (drag.startScreenY ?? y);
+
+        if (handle === 'tl' || handle === 'tr' || handle === 'tm') {
+          scaleY = screenBboxH > 0 ? 1 - screenDeltaY / screenBboxH : 1;
+        }
+        if (handle === 'bl' || handle === 'br' || handle === 'bm') {
+          scaleY = screenBboxH > 0 ? 1 + screenDeltaY / screenBboxH : 1;
+        }
+        if (handle === 'tl' || handle === 'bl' || handle === 'lm') {
+          scaleX = screenBboxW > 0 ? 1 - screenDeltaX / screenBboxW : 1;
+        }
+        if (handle === 'tr' || handle === 'br' || handle === 'rm') {
+          scaleX = screenBboxW > 0 ? 1 + screenDeltaX / screenBboxW : 1;
+        }
+
+        if (e.shiftKey && (handle === 'tl' || handle === 'tr' || handle === 'bl' || handle === 'br')) {
+          const maxScale = Math.max(Math.abs(scaleX), Math.abs(scaleY));
+          scaleX = scaleX < 0 ? -maxScale : maxScale;
+          scaleY = scaleY < 0 ? -maxScale : maxScale;
+        }
+
+        for (const origPt of originalPoints) {
+          const targetX = center.x + (origPt.x - center.x) * scaleX;
+          const targetY = center.y + (origPt.y - center.y) * scaleY;
+          
+          const currentPt = getCurrentPos(origPt.id);
+          if (currentPt) {
+            deltas.set(origPt.id, { x: targetX - currentPt.x, y: targetY - currentPt.y });
+          }
+        }
+      }
+
+      dispatch({ type: 'TRANSFORM_POINTS_LIVE', deltas });
       redraw();
     }
   }, [stateRef, dispatch, getEventPos, setRubberBand, setMousePos, redraw]);
@@ -431,6 +742,11 @@ export function useEditorInteraction({
       }
       setRubberBand(null);
       redraw();
+    } else if (drag.type === 'transform') {
+      if (drag.snapshot) {
+        dispatch({ type: 'COMMIT_TRANSFORM', snapshot: drag.snapshot });
+      }
+      redraw();
     }
   }, [stateRef, dispatch, getEventPos, setRubberBand, redraw]);
 
@@ -448,8 +764,9 @@ export function useEditorInteraction({
 
   const onPointerLeave = useCallback(() => {
     setMousePos(null);
+    hoveredHandleRef.current = null;
     redraw();
   }, [setMousePos, redraw]);
 
-  return { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave };
+  return { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave, getCursor };
 }

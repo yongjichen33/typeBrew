@@ -160,6 +160,81 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, undoStack, redoStack: [] };
     }
 
+    case 'TRANSFORM_POINTS_LIVE': {
+      return { ...state, paths: applyPointDelta(state.paths, action.deltas), isDirty: true };
+    }
+
+    case 'COMMIT_TRANSFORM': {
+      const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), action.snapshot];
+      return { ...state, undoStack, redoStack: [] };
+    }
+
+    case 'APPLY_TRANSFORM': {
+      const { translateX = 0, translateY = 0, scaleX = 1, scaleY = 1, rotation = 0, centerX, centerY } = action.transform;
+      const prev = clonePaths(state.paths);
+      
+      const cos = Math.cos(rotation * Math.PI / 180);
+      const sin = Math.sin(rotation * Math.PI / 180);
+      
+      const newPaths = state.paths.map((path) => ({
+        ...path,
+        commands: path.commands.map((cmd) => {
+          if (cmd.kind === 'M' || cmd.kind === 'L') {
+            let x = cmd.point.x;
+            let y = cmd.point.y;
+            x = centerX + (x - centerX) * scaleX;
+            y = centerY + (y - centerY) * scaleY;
+            const rx = centerX + (x - centerX) * cos - (y - centerY) * sin;
+            const ry = centerY + (x - centerX) * sin + (y - centerY) * cos;
+            return { ...cmd, point: { ...cmd.point, x: rx + translateX, y: ry + translateY } };
+          } else if (cmd.kind === 'Q') {
+            let cx = cmd.ctrl.x, cy = cmd.ctrl.y;
+            cx = centerX + (cx - centerX) * scaleX;
+            cy = centerY + (cy - centerY) * scaleY;
+            const rcx = centerX + (cx - centerX) * cos - (cy - centerY) * sin;
+            const rcy = centerY + (cx - centerX) * sin + (cy - centerY) * cos;
+            
+            let px = cmd.point.x, py = cmd.point.y;
+            px = centerX + (px - centerX) * scaleX;
+            py = centerY + (py - centerY) * scaleY;
+            const rpx = centerX + (px - centerX) * cos - (py - centerY) * sin;
+            const rpy = centerY + (px - centerX) * sin + (py - centerY) * cos;
+            
+            return { ...cmd, ctrl: { ...cmd.ctrl, x: rcx + translateX, y: rcy + translateY }, point: { ...cmd.point, x: rpx + translateX, y: rpy + translateY } };
+          } else if (cmd.kind === 'C') {
+            let c1x = cmd.ctrl1.x, c1y = cmd.ctrl1.y;
+            c1x = centerX + (c1x - centerX) * scaleX;
+            c1y = centerY + (c1y - centerY) * scaleY;
+            const rc1x = centerX + (c1x - centerX) * cos - (c1y - centerY) * sin;
+            const rc1y = centerY + (c1x - centerX) * sin + (c1y - centerY) * cos;
+            
+            let c2x = cmd.ctrl2.x, c2y = cmd.ctrl2.y;
+            c2x = centerX + (c2x - centerX) * scaleX;
+            c2y = centerY + (c2y - centerY) * scaleY;
+            const rc2x = centerX + (c2x - centerX) * cos - (c2y - centerY) * sin;
+            const rc2y = centerY + (c2x - centerX) * sin + (c2y - centerY) * cos;
+            
+            let px = cmd.point.x, py = cmd.point.y;
+            px = centerX + (px - centerX) * scaleX;
+            py = centerY + (py - centerY) * scaleY;
+            const rpx = centerX + (px - centerX) * cos - (py - centerY) * sin;
+            const rpy = centerY + (px - centerX) * sin + (py - centerY) * cos;
+            
+            return { 
+              ...cmd, 
+              ctrl1: { ...cmd.ctrl1, x: rc1x + translateX, y: rc1y + translateY },
+              ctrl2: { ...cmd.ctrl2, x: rc2x + translateX, y: rc2y + translateY },
+              point: { ...cmd.point, x: rpx + translateX, y: rpy + translateY }
+            };
+          }
+          return cmd;
+        }),
+      }));
+      
+      const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), prev];
+      return { ...state, paths: newPaths, undoStack, redoStack: [], isDirty: true };
+    }
+
     case 'ADD_POINT': {
       const prev = clonePaths(state.paths);
       const newPaths = state.paths.map((p) => {
