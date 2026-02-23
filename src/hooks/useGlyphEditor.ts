@@ -674,12 +674,15 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       
       const newPathId = `path-paste-${Date.now()}`;
       const newCommands: PathCommand[] = [];
+      const newPointIds = new Set<string>();
       let idCounter = 0;
       const genId = () => `pt-paste-${Date.now()}-${++idCounter}`;
       
       for (const seg of segments) {
         const startId = genId();
         const endId = genId();
+        newPointIds.add(startId);
+        newPointIds.add(endId);
         
         newCommands.push({
           kind: 'M' as const,
@@ -704,6 +707,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         } else if (seg.kind === 'Q') {
           const ctrlId = genId();
           const ctrl = seg.ctrl1!;
+          newPointIds.add(ctrlId);
           newCommands.push({
             kind: 'Q' as const,
             ctrl: {
@@ -724,6 +728,8 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
           const ctrl2Id = genId();
           const ctrl1 = seg.ctrl1!;
           const ctrl2 = seg.ctrl2!;
+          newPointIds.add(ctrl1Id);
+          newPointIds.add(ctrl2Id);
           newCommands.push({
             kind: 'C' as const,
             ctrl1: {
@@ -750,6 +756,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       
       for (const pt of points) {
         const pointId = genId();
+        newPointIds.add(pointId);
         if (newCommands.length === 0) {
           newCommands.push({
             kind: 'M' as const,
@@ -783,6 +790,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return {
         ...state,
         paths: [...state.paths, newPath],
+        selection: { pointIds: newPointIds, segmentIds: new Set() },
         undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
         redoStack: [],
         isDirty: true,
