@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
@@ -80,9 +80,29 @@ function GlyphCell({
   );
 }
 
-export function GlyphGrid({ glyphs, totalGlyphs, unitsPerEm, onLoadMore, isLoadingMore, filePath, tableName }: GlyphGridProps) {
+export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLoadMore, isLoadingMore, filePath, tableName }: GlyphGridProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const hasMore = glyphs.length < totalGlyphs;
+  const hasMore = initialGlyphs.length < totalGlyphs;
+  const [glyphs, setGlyphs] = useState(initialGlyphs);
+
+  useEffect(() => {
+    setGlyphs(initialGlyphs);
+  }, [initialGlyphs]);
+
+  useEffect(() => {
+    const handleGlyphSaved = (data: { filePath: string; glyphId: number; svgPath: string }) => {
+      if (data.filePath !== filePath) return;
+      
+      setGlyphs(prev => prev.map(g => 
+        g.glyph_id === data.glyphId 
+          ? { ...g, svg_path: data.svgPath }
+          : g
+      ));
+    };
+
+    editorEventBus.setGlyphSavedHandler(handleGlyphSaved);
+    return () => editorEventBus.clearGlyphSavedHandler();
+  }, [filePath]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;

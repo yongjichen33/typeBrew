@@ -1,13 +1,10 @@
 import type { GlyphEditorTabState } from './editorTypes';
 
 type OpenEditorHandler = (state: GlyphEditorTabState) => void;
+type GlyphSavedHandler = (data: { filePath: string; glyphId: number; svgPath: string }) => void;
 
-/**
- * Module-level event bus that bridges the Golden Layout component isolation
- * boundary. GlyphGrid (inside a GL tab) can call `emit` to open a new
- * editor tab, which is handled by FontViewer via `setHandler`.
- */
 let _handler: OpenEditorHandler | null = null;
+let _glyphSavedHandler: GlyphSavedHandler | null = null;
 
 export const editorEventBus = {
   setHandler(fn: OpenEditorHandler): void {
@@ -18,5 +15,14 @@ export const editorEventBus = {
   },
   emit(state: GlyphEditorTabState): void {
     _handler?.(state);
+  },
+  setGlyphSavedHandler(fn: GlyphSavedHandler): void {
+    _glyphSavedHandler = fn;
+  },
+  clearGlyphSavedHandler(): void {
+    _glyphSavedHandler = null;
+  },
+  emitGlyphSaved(data: { filePath: string; glyphId: number; svgPath: string }): void {
+    _glyphSavedHandler?.(data);
   },
 };

@@ -6,6 +6,7 @@ import { useCanvasKit } from '@/hooks/useCanvasKit';
 import { useGlyphEditor, computeClipboardData } from '@/hooks/useGlyphEditor';
 import { getClipboard, setClipboard, setFocusedGlyphId, useFocusedGlyphId } from '@/lib/glyphClipboard';
 import { editablePathToSvg, outlineDataToEditablePaths } from '@/lib/svgPathParser';
+import { editorEventBus } from '@/lib/editorEventBus';
 import { EditorToolbar } from './EditorToolbar';
 import { GlyphEditorCanvas } from './GlyphEditorCanvas';
 import { InspectorPanel } from './InspectorPanel';
@@ -161,6 +162,27 @@ export function GlyphEditorTab({ tabState }: Props) {
   const focusedId = useFocusedGlyphId();
   const isFocused = focusedId === glyphId;
 
+  // Save handler
+  const handleSave = useCallback(async () => {
+    if (state.isSaving) return;
+    dispatch({ type: 'SET_SAVING', saving: true });
+    try {
+      const svgPathOut = editablePathToSvg(state.paths);
+      await invoke('save_glyph_outline', {
+        filePath,
+        glyphId,
+        svgPath: svgPathOut,
+        tableName,
+      });
+      dispatch({ type: 'MARK_SAVED' });
+      editorEventBus.emitGlyphSaved({ filePath, glyphId, svgPath: svgPathOut });
+      toast.success('Glyph saved');
+    } catch (error) {
+      dispatch({ type: 'SET_SAVING', saving: false });
+      toast.error(`Failed to save glyph: ${error}`);
+    }
+  }, [state.paths, state.isSaving, filePath, glyphId, tableName, dispatch]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isFocused) return;
@@ -171,6 +193,15 @@ export function GlyphEditorTab({ tabState }: Props) {
                              activeEl?.getAttribute('contenteditable') === 'true';
       
       if (isInputFocused) {
+        return;
+      }
+      
+      // Ctrl/Cmd + S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (state.isDirty && !state.isSaving) {
+          handleSave();
+        }
         return;
       }
       
@@ -205,26 +236,7 @@ export function GlyphEditorTab({ tabState }: Props) {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [dispatch, isFocused]);
-
-  // Save handler
-  const handleSave = useCallback(async () => {
-    dispatch({ type: 'SET_SAVING', saving: true });
-    try {
-      const svgPathOut = editablePathToSvg(state.paths);
-      await invoke('save_glyph_outline', {
-        filePath,
-        glyphId,
-        svgPath: svgPathOut,
-        tableName,
-      });
-      dispatch({ type: 'MARK_SAVED' });
-      toast.success('Glyph saved');
-    } catch (error) {
-      dispatch({ type: 'SET_SAVING', saving: false });
-      toast.error(`Failed to save glyph: ${error}`);
-    }
-  }, [state.paths, filePath, glyphId, tableName, dispatch]);
+  }, [dispatch, isFocused, state.isDirty, state.isSaving, handleSave]);
 
   // Format tab breadcrumb
   const fileName = filePath.split(/[\\/]/).pop() ?? filePath;

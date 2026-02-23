@@ -437,21 +437,31 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case 'DELETE_SELECTED_POINTS': {
-      if (state.selection.pointIds.size === 0) return state;
+      if (state.selection.pointIds.size === 0 && state.selection.segmentIds.size === 0) return state;
       const prev = clonePaths(state.paths);
+      
+      // Collect all point IDs to delete (selected points + endpoints of selected segments)
+      const pointIdsToDelete = new Set(state.selection.pointIds);
+      
+      for (const segmentId of state.selection.segmentIds) {
+        const [, startPointId, endPointId] = segmentId.split(':');
+        pointIdsToDelete.add(startPointId);
+        pointIdsToDelete.add(endPointId);
+      }
+      
       const newPaths = state.paths.map((path) => ({
         ...path,
         commands: path.commands.filter((cmd) => {
           if (cmd.kind === 'M' || cmd.kind === 'L') {
-            return !state.selection.pointIds.has(cmd.point.id);
+            return !pointIdsToDelete.has(cmd.point.id);
           }
           if (cmd.kind === 'Q') {
-            return !state.selection.pointIds.has(cmd.point.id) && !state.selection.pointIds.has(cmd.ctrl.id);
+            return !pointIdsToDelete.has(cmd.point.id) && !pointIdsToDelete.has(cmd.ctrl.id);
           }
           if (cmd.kind === 'C') {
-            return !state.selection.pointIds.has(cmd.point.id) &&
-                   !state.selection.pointIds.has(cmd.ctrl1.id) &&
-                   !state.selection.pointIds.has(cmd.ctrl2.id);
+            return !pointIdsToDelete.has(cmd.point.id) &&
+                   !pointIdsToDelete.has(cmd.ctrl1.id) &&
+                   !pointIdsToDelete.has(cmd.ctrl2.id);
           }
           return true;
         }),
