@@ -171,61 +171,97 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
 
     case 'APPLY_TRANSFORM': {
       const { translateX = 0, translateY = 0, scaleX = 1, scaleY = 1, rotation = 0, centerX, centerY } = action.transform;
+      const { selection } = action;
       const prev = clonePaths(state.paths);
       
       const cos = Math.cos(rotation * Math.PI / 180);
       const sin = Math.sin(rotation * Math.PI / 180);
       
+      const transformPoint = (x: number, y: number): { x: number; y: number } => {
+        const sx = centerX + (x - centerX) * scaleX;
+        const sy = centerY + (y - centerY) * scaleY;
+        const rx = centerX + (sx - centerX) * cos - (sy - centerY) * sin;
+        const ry = centerY + (sx - centerX) * sin + (sy - centerY) * cos;
+        return { x: rx + translateX, y: ry + translateY };
+      };
+      
+      const pointsToTransform = new Set<string>(selection.pointIds);
+      
+      for (const path of state.paths) {
+        let lastOnCurveId: string | null = null;
+        
+        for (const cmd of path.commands) {
+          if (cmd.kind === 'M') {
+            lastOnCurveId = cmd.point.id;
+          } else if (cmd.kind === 'L' && lastOnCurveId) {
+            const segmentId = `${path.id}:${lastOnCurveId}:${cmd.point.id}`;
+            if (selection.segmentIds.has(segmentId)) {
+              pointsToTransform.add(lastOnCurveId);
+              pointsToTransform.add(cmd.point.id);
+            }
+            lastOnCurveId = cmd.point.id;
+          } else if (cmd.kind === 'Q' && lastOnCurveId) {
+            const segmentId = `${path.id}:${lastOnCurveId}:${cmd.point.id}`;
+            if (selection.segmentIds.has(segmentId)) {
+              pointsToTransform.add(lastOnCurveId);
+              pointsToTransform.add(cmd.ctrl.id);
+              pointsToTransform.add(cmd.point.id);
+            }
+            lastOnCurveId = cmd.point.id;
+          } else if (cmd.kind === 'C' && lastOnCurveId) {
+            const segmentId = `${path.id}:${lastOnCurveId}:${cmd.point.id}`;
+            if (selection.segmentIds.has(segmentId)) {
+              pointsToTransform.add(lastOnCurveId);
+              pointsToTransform.add(cmd.ctrl1.id);
+              pointsToTransform.add(cmd.ctrl2.id);
+              pointsToTransform.add(cmd.point.id);
+            }
+            lastOnCurveId = cmd.point.id;
+          }
+        }
+      }
+      
       const newPaths = state.paths.map((path) => ({
         ...path,
         commands: path.commands.map((cmd) => {
-          if (cmd.kind === 'M' || cmd.kind === 'L') {
-            let x = cmd.point.x;
-            let y = cmd.point.y;
-            x = centerX + (x - centerX) * scaleX;
-            y = centerY + (y - centerY) * scaleY;
-            const rx = centerX + (x - centerX) * cos - (y - centerY) * sin;
-            const ry = centerY + (x - centerX) * sin + (y - centerY) * cos;
-            return { ...cmd, point: { ...cmd.point, x: rx + translateX, y: ry + translateY } };
+          if (cmd.kind === 'M') {
+            if (pointsToTransform.has(cmd.point.id)) {
+              const { x, y } = transformPoint(cmd.point.x, cmd.point.y);
+              return { ...cmd, point: { ...cmd.point, x, y } };
+            }
+            return cmd;
+          } else if (cmd.kind === 'L') {
+            if (pointsToTransform.has(cmd.point.id)) {
+              const { x, y } = transformPoint(cmd.point.x, cmd.point.y);
+              return { ...cmd, point: { ...cmd.point, x, y } };
+            }
+            return cmd;
           } else if (cmd.kind === 'Q') {
-            let cx = cmd.ctrl.x, cy = cmd.ctrl.y;
-            cx = centerX + (cx - centerX) * scaleX;
-            cy = centerY + (cy - centerY) * scaleY;
-            const rcx = centerX + (cx - centerX) * cos - (cy - centerY) * sin;
-            const rcy = centerY + (cx - centerX) * sin + (cy - centerY) * cos;
-            
-            let px = cmd.point.x, py = cmd.point.y;
-            px = centerX + (px - centerX) * scaleX;
-            py = centerY + (py - centerY) * scaleY;
-            const rpx = centerX + (px - centerX) * cos - (py - centerY) * sin;
-            const rpy = centerY + (px - centerX) * sin + (py - centerY) * cos;
-            
-            return { ...cmd, ctrl: { ...cmd.ctrl, x: rcx + translateX, y: rcy + translateY }, point: { ...cmd.point, x: rpx + translateX, y: rpy + translateY } };
+            let newCmd = cmd;
+            if (pointsToTransform.has(cmd.ctrl.id)) {
+              const { x, y } = transformPoint(cmd.ctrl.x, cmd.ctrl.y);
+              newCmd = { ...newCmd, ctrl: { ...cmd.ctrl, x, y } };
+            }
+            if (pointsToTransform.has(cmd.point.id)) {
+              const { x, y } = transformPoint(cmd.point.x, cmd.point.y);
+              newCmd = { ...newCmd, point: { ...cmd.point, x, y } };
+            }
+            return newCmd;
           } else if (cmd.kind === 'C') {
-            let c1x = cmd.ctrl1.x, c1y = cmd.ctrl1.y;
-            c1x = centerX + (c1x - centerX) * scaleX;
-            c1y = centerY + (c1y - centerY) * scaleY;
-            const rc1x = centerX + (c1x - centerX) * cos - (c1y - centerY) * sin;
-            const rc1y = centerY + (c1x - centerX) * sin + (c1y - centerY) * cos;
-            
-            let c2x = cmd.ctrl2.x, c2y = cmd.ctrl2.y;
-            c2x = centerX + (c2x - centerX) * scaleX;
-            c2y = centerY + (c2y - centerY) * scaleY;
-            const rc2x = centerX + (c2x - centerX) * cos - (c2y - centerY) * sin;
-            const rc2y = centerY + (c2x - centerX) * sin + (c2y - centerY) * cos;
-            
-            let px = cmd.point.x, py = cmd.point.y;
-            px = centerX + (px - centerX) * scaleX;
-            py = centerY + (py - centerY) * scaleY;
-            const rpx = centerX + (px - centerX) * cos - (py - centerY) * sin;
-            const rpy = centerY + (px - centerX) * sin + (py - centerY) * cos;
-            
-            return { 
-              ...cmd, 
-              ctrl1: { ...cmd.ctrl1, x: rc1x + translateX, y: rc1y + translateY },
-              ctrl2: { ...cmd.ctrl2, x: rc2x + translateX, y: rc2y + translateY },
-              point: { ...cmd.point, x: rpx + translateX, y: rpy + translateY }
-            };
+            let newCmd = cmd;
+            if (pointsToTransform.has(cmd.ctrl1.id)) {
+              const { x, y } = transformPoint(cmd.ctrl1.x, cmd.ctrl1.y);
+              newCmd = { ...newCmd, ctrl1: { ...cmd.ctrl1, x, y } };
+            }
+            if (pointsToTransform.has(cmd.ctrl2.id)) {
+              const { x, y } = transformPoint(cmd.ctrl2.x, cmd.ctrl2.y);
+              newCmd = { ...newCmd, ctrl2: { ...cmd.ctrl2, x, y } };
+            }
+            if (pointsToTransform.has(cmd.point.id)) {
+              const { x, y } = transformPoint(cmd.point.x, cmd.point.y);
+              newCmd = { ...newCmd, point: { ...cmd.point, x, y } };
+            }
+            return newCmd;
           }
           return cmd;
         }),

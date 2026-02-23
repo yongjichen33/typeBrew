@@ -11,6 +11,15 @@ import { GlyphEditorCanvas } from './GlyphEditorCanvas';
 import { InspectorPanel } from './InspectorPanel';
 import type { GlyphEditorTabState, FontMetrics, ViewTransform } from '@/lib/editorTypes';
 
+export interface TransformFeedback {
+  isActive: boolean;
+  deltaX: number;
+  deltaY: number;
+  scaleX: number;
+  scaleY: number;
+  rotation: number;
+}
+
 /** Compute an initial view transform that fits the glyph in the canvas. */
 function computeInitialVt(metrics: FontMetrics, canvasW: number, canvasH: number): ViewTransform {
   const glyphH = (metrics.yMax - metrics.yMin) || metrics.unitsPerEm;
@@ -71,6 +80,15 @@ export function GlyphEditorTab({ tabState }: Props) {
       isDrawingPath: state.isDrawingPath,
     };
   }, [state]);
+
+  const [transformFeedback, setTransformFeedback] = useState<TransformFeedback>({
+    isActive: false,
+    deltaX: 0,
+    deltaY: 0,
+    scaleX: 1,
+    scaleY: 1,
+    rotation: 0,
+  });
 
   // Load glyph data and font metrics on mount
   useEffect(() => {
@@ -146,6 +164,15 @@ export function GlyphEditorTab({ tabState }: Props) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isFocused) return;
+      
+      const activeEl = document.activeElement;
+      const isInputFocused = activeEl instanceof HTMLInputElement || 
+                             activeEl instanceof HTMLTextAreaElement ||
+                             activeEl?.getAttribute('contenteditable') === 'true';
+      
+      if (isInputFocused) {
+        return;
+      }
       
       if (e.key === 'n' || e.key === 'N') dispatch({ type: 'SET_TOOL_MODE', mode: 'node' });
       if (e.key === 'p' || e.key === 'P') dispatch({ type: 'SET_TOOL_MODE', mode: 'pen' });
@@ -258,11 +285,13 @@ export function GlyphEditorTab({ tabState }: Props) {
               showCoordinates={state.showCoordinates}
               dispatch={dispatch as (action: unknown) => void}
               stateRef={stateRef}
+              onTransformFeedback={setTransformFeedback}
             />
             <InspectorPanel
               selection={state.selection}
               paths={state.paths}
               dispatch={dispatch as (action: unknown) => void}
+              transformFeedback={transformFeedback}
             />
           </>
         )}

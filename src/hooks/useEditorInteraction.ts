@@ -334,6 +334,7 @@ interface InteractionParams {
   setPendingOffCurve: (pos: { x: number; y: number } | null) => void;
   redraw: () => void;
   getCanvasRect: () => DOMRect | null;
+  onTransformFeedback?: (feedback: { isActive: boolean; deltaX: number; deltaY: number; scaleX: number; scaleY: number; rotation: number }) => void;
 }
 
 /** Returns pointer + wheel event handlers to attach to the canvas element. */
@@ -345,6 +346,7 @@ export function useEditorInteraction({
   setPendingOffCurve,
   redraw,
   getCanvasRect,
+  onTransformFeedback,
 }: InteractionParams) {
   const dragRef = useRef<{
     type: 'point' | 'canvas' | 'transform';
@@ -653,6 +655,7 @@ export function useEditorInteraction({
         const startAngle = Math.atan2(drag.startFy - center.y, drag.startFx - center.x);
         const currentAngle = Math.atan2(fp.y - center.y, fp.x - center.x);
         const angleDelta = currentAngle - startAngle;
+        const rotation = angleDelta * 180 / Math.PI;
         const cos = Math.cos(angleDelta);
         const sin = Math.sin(angleDelta);
 
@@ -667,6 +670,8 @@ export function useEditorInteraction({
             deltas.set(origPt.id, { x: targetX - currentPt.x, y: targetY - currentPt.y });
           }
         }
+        
+        onTransformFeedback?.({ isActive: true, deltaX: 0, deltaY: 0, scaleX: 1, scaleY: 1, rotation });
       } else if (handle === 'move') {
         const deltaX = fp.x - drag.startFx;
         const deltaY = fp.y - drag.startFy;
@@ -680,6 +685,8 @@ export function useEditorInteraction({
             deltas.set(origPt.id, { x: targetX - currentPt.x, y: targetY - currentPt.y });
           }
         }
+        
+        onTransformFeedback?.({ isActive: true, deltaX, deltaY, scaleX: 1, scaleY: 1, rotation: 0 });
       } else {
         let scaleX = 1, scaleY = 1;
         const bboxW = bbox.maxX - bbox.minX;
@@ -719,12 +726,16 @@ export function useEditorInteraction({
             deltas.set(origPt.id, { x: targetX - currentPt.x, y: targetY - currentPt.y });
           }
         }
+        
+        onTransformFeedback?.({ isActive: true, deltaX: 0, deltaY: 0, scaleX, scaleY, rotation: 0 });
       }
 
       dispatch({ type: 'TRANSFORM_POINTS_LIVE', deltas });
       redraw();
+    } else {
+      onTransformFeedback?.({ isActive: false, deltaX: 0, deltaY: 0, scaleX: 1, scaleY: 1, rotation: 0 });
     }
-  }, [stateRef, dispatch, getEventPos, setRubberBand, setMousePos, redraw]);
+  }, [stateRef, dispatch, getEventPos, setRubberBand, setMousePos, redraw, onTransformFeedback]);
 
   const onPointerUp = useCallback((e: PointerEvent) => {
     const { x, y } = getEventPos(e);
@@ -755,9 +766,10 @@ export function useEditorInteraction({
       if (drag.snapshot) {
         dispatch({ type: 'COMMIT_TRANSFORM', snapshot: drag.snapshot });
       }
+      onTransformFeedback?.({ isActive: false, deltaX: 0, deltaY: 0, scaleX: 1, scaleY: 1, rotation: 0 });
       redraw();
     }
-  }, [stateRef, dispatch, getEventPos, setRubberBand, redraw]);
+  }, [stateRef, dispatch, getEventPos, setRubberBand, redraw, onTransformFeedback]);
 
   const onWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();

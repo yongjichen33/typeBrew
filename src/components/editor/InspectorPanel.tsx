@@ -1,14 +1,16 @@
 import { RefreshCw, X, Circle, Copy, Plus, ArrowUp, ArrowDown, Spline } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { EditablePath, EditablePoint, Selection, SegmentType, EditorAction } from '@/lib/editorTypes';
 import { computeClipboardData } from '@/hooks/useGlyphEditor';
 import { setClipboard } from '@/lib/glyphClipboard';
 import { computeSelectionBBox } from '@/hooks/useEditorInteraction';
+import type { TransformFeedback } from './GlyphEditorTab';
 
 interface InspectorPanelProps {
   selection: Selection;
   paths: EditablePath[];
   dispatch: (action: EditorAction) => void;
+  transformFeedback: TransformFeedback;
 }
 
 interface Segment {
@@ -238,6 +240,7 @@ export function InspectorPanel({
   selection,
   paths,
   dispatch,
+  transformFeedback,
 }: InspectorPanelProps) {
   const selectedPoints = getSelectedPoints(paths, selection);
   const selectedPathIds = getSelectedPathIds(paths, selection);
@@ -325,46 +328,94 @@ export function InspectorPanel({
   });
 
   const lastSelectionKeyRef = useRef<string>('');
+  const wasTransformActiveRef = useRef(false);
+  const prevTransformValuesRef = useRef(transformValues);
+  const isApplyingTransformRef = useRef(false);
   
   useEffect(() => {
     const selectionKey = `${Array.from(selection.pointIds).join(',')}:${Array.from(selection.segmentIds).join(',')}`;
     if (showTransformBox && selectionKey !== lastSelectionKeyRef.current) {
       lastSelectionKeyRef.current = selectionKey;
-      setTransformValues({
-        x: Math.round((selectionBBox.minX + selectionBBox.maxX) / 2),
-        y: Math.round((selectionBBox.minY + selectionBBox.maxY) / 2),
+      const newValues = {
+        x: Math.round((selectionBBox!.minX + selectionBBox!.maxX) / 2),
+        y: Math.round((selectionBBox!.minY + selectionBBox!.maxY) / 2),
         scaleX: 100,
         scaleY: 100,
         rotation: 0,
-      });
+      };
+      setTransformValues(newValues);
+      prevTransformValuesRef.current = newValues;
     }
   }, [showTransformBox, selectionBBox, selection.pointIds, selection.segmentIds]);
 
-  const handleApplyTransform = () => {
-    if (!selectionBBox) return;
+  useEffect(() => {
+    if (wasTransformActiveRef.current && !transformFeedback.isActive && selectionBBox) {
+      const newValues = {
+        ...transformValues,
+        x: Math.round((selectionBBox.minX + selectionBBox.maxX) / 2),
+        y: Math.round((selectionBBox.minY + selectionBBox.maxY) / 2),
+      };
+      setTransformValues(newValues);
+      prevTransformValuesRef.current = newValues;
+    }
+    wasTransformActiveRef.current = transformFeedback.isActive;
+  }, [transformFeedback.isActive, selectionBBox, transformValues]);
+
+  const applyTransform = useCallback((newValues: typeof transformValues) => {
+    if (!selectionBBox || isApplyingTransformRef.current) return;
+    
     const centerX = (selectionBBox.minX + selectionBBox.maxX) / 2;
     const centerY = (selectionBBox.minY + selectionBBox.maxY) / 2;
+    
+    const prev = prevTransformValuesRef.current;
+    const deltaX = newValues.x - (showTransformBox ? Math.round(centerX) : prev.x);
+    const deltaY = newValues.y - (showTransformBox ? Math.round(centerY) : prev.y);
+    const deltaScaleX = newValues.scaleX / prev.scaleX;
+    const deltaScaleY = newValues.scaleY / prev.scaleY;
+    const deltaRotation = newValues.rotation - prev.rotation;
+    
+    if (deltaX === 0 && deltaY === 0 && deltaScaleX === 1 && deltaScaleY === 1 && deltaRotation === 0) {
+      return;
+    }
+    
+    isApplyingTransformRef.current = true;
     
     dispatch({
       type: 'APPLY_TRANSFORM',
       transform: {
-        translateX: transformValues.x - centerX,
-        translateY: transformValues.y - centerY,
-        scaleX: transformValues.scaleX / 100,
-        scaleY: transformValues.scaleY / 100,
-        rotation: transformValues.rotation,
+        translateX: deltaX,
+        translateY: deltaY,
+        scaleX: deltaScaleX,
+        scaleY: deltaScaleY,
+        rotation: deltaRotation,
         centerX,
         centerY,
       },
+      selection,
     });
     
-    setTransformValues(prev => ({
-      ...prev,
-      scaleX: 100,
-      scaleY: 100,
-      rotation: 0,
-    }));
-  };
+    prevTransformValuesRef.current = newValues;
+    
+    setTimeout(() => {
+      isApplyingTransformRef.current = false;
+    }, 0);
+  }, [selectionBBox, showTransformBox, dispatch, selection]);
+
+  useEffect(() => {
+    if (transformFeedback.isActive || isApplyingTransformRef.current) return;
+    
+    const prev = prevTransformValuesRef.current;
+    const hasChanges = 
+      transformValues.x !== prev.x ||
+      transformValues.y !== prev.y ||
+      transformValues.scaleX !== prev.scaleX ||
+      transformValues.scaleY !== prev.scaleY ||
+      transformValues.rotation !== prev.rotation;
+    
+    if (hasChanges && showTransformBox) {
+      applyTransform(transformValues);
+    }
+  }, [transformValues, transformFeedback.isActive, showTransformBox, applyTransform]);
 
   return (
     <div className="w-56 border-l bg-muted/20 p-3 overflow-y-auto shrink-0">
@@ -375,41 +426,35 @@ export function InspectorPanel({
         <Section title="Transform">
           <InputField
             label="X"
-            value={transformValues.x}
+            value={transformFeedback.isActive ? transformValues.x + Math.round(transformFeedback.deltaX) : transformValues.x}
             onChange={(v) => setTransformValues(prev => ({ ...prev, x: v }))}
           />
           <InputField
             label="Y"
-            value={transformValues.y}
+            value={transformFeedback.isActive ? transformValues.y + Math.round(transformFeedback.deltaY) : transformValues.y}
             onChange={(v) => setTransformValues(prev => ({ ...prev, y: v }))}
           />
           <InputField
             label="Scale X"
-            value={transformValues.scaleX}
+            value={transformFeedback.isActive ? Math.round(transformFeedback.scaleX * 100) : transformValues.scaleX}
             onChange={(v) => setTransformValues(prev => ({ ...prev, scaleX: v }))}
             unit="%"
             step={1}
           />
           <InputField
             label="Scale Y"
-            value={transformValues.scaleY}
+            value={transformFeedback.isActive ? Math.round(transformFeedback.scaleY * 100) : transformValues.scaleY}
             onChange={(v) => setTransformValues(prev => ({ ...prev, scaleY: v }))}
             unit="%"
             step={1}
           />
           <InputField
             label="Rotation"
-            value={transformValues.rotation}
+            value={transformFeedback.isActive ? Math.round(transformFeedback.rotation * 10) / 10 : transformValues.rotation}
             onChange={(v) => setTransformValues(prev => ({ ...prev, rotation: v }))}
             unit="°"
             step={1}
           />
-          <button
-            onClick={handleApplyTransform}
-            className="mt-2 w-full px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
-          >
-            Apply Transform
-          </button>
         </Section>
       )}
 

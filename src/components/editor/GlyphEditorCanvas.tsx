@@ -8,6 +8,7 @@ import type {
   ViewTransform,
   RubberBand,
 } from '@/lib/editorTypes';
+import type { TransformFeedback } from './GlyphEditorTab';
 
 interface GlyphEditorCanvasProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,6 +31,7 @@ interface GlyphEditorCanvasProps {
     activePathId: string | null;
     isDrawingPath: boolean;
   }>;
+  onTransformFeedback?: (feedback: TransformFeedback) => void;
 }
 
 export function GlyphEditorCanvas({
@@ -43,6 +45,7 @@ export function GlyphEditorCanvas({
   showCoordinates,
   dispatch,
   stateRef,
+  onTransformFeedback,
 }: GlyphEditorCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -172,7 +175,7 @@ export function GlyphEditorCanvas({
   const getCanvasRect = () => canvasRef.current?.getBoundingClientRect() ?? null;
 
   const { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave, getCursor } =
-    useEditorInteraction({ stateRef, dispatch, setRubberBand, setMousePos, setPendingOffCurve, redraw, getCanvasRect });
+    useEditorInteraction({ stateRef, dispatch, setRubberBand, setMousePos, setPendingOffCurve, redraw, getCanvasRect, onTransformFeedback });
 
   const coordLabels = showCoordinates ? paths.flatMap((path) =>
     path.commands.flatMap((cmd) => {

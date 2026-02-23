@@ -104,7 +104,7 @@ export type EditorAction =
   | { type: 'COMMIT_MOVE'; snapshot: EditablePath[] }
   | { type: 'TRANSFORM_POINTS_LIVE'; deltas: Map<string, Vec2> }
   | { type: 'COMMIT_TRANSFORM'; snapshot: EditablePath[] }
-  | { type: 'APPLY_TRANSFORM'; transform: { translateX?: number; translateY?: number; scaleX?: number; scaleY?: number; rotation?: number; centerX: number; centerY: number } }
+  | { type: 'APPLY_TRANSFORM'; transform: { translateX?: number; translateY?: number; scaleX?: number; scaleY?: number; rotation?: number; centerX: number; centerY: number }; selection: Selection }
   | { type: 'ADD_POINT'; pathId: string; command: PathCommand }
   | { type: 'APPEND_TO_ACTIVE_PATH'; command: PathCommand }
   | { type: 'CLOSE_ACTIVE_PATH' }
