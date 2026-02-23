@@ -25,6 +25,9 @@ const C = {
   offCurveStroke:  rgba(140, 140, 140),
   selectedFill:    rgba(0, 112, 243),
   selectedStroke:  rgba(0, 80, 200),
+  hoveredFill:     rgba(255, 200, 100),
+  hoveredStroke:   rgba(200, 150, 50),
+  hoveredSegment:  rgba(255, 200, 100, 0.8),
   rubber:          rgba(0, 112, 243, 0.12),
   rubberStroke:    rgba(0, 112, 243, 0.7),
   ghostPoint:      rgba(0, 112, 243, 0.35),
@@ -230,6 +233,8 @@ export function renderFrame(
   canvasWidth: number,
   canvasHeight: number,
   showDirection: boolean,
+  hoveredPointId: string | null = null,
+  hoveredSegmentId: string | null = null,
 ): void {
   if (!ck || !skCanvas) return;
 
@@ -436,6 +441,75 @@ export function renderFrame(
     segmentPaint.delete();
   }
 
+  // ---- 4c. Highlight hovered segments ----
+  if (hoveredSegmentId && toolMode === 'node') {
+    const hoverPaint = new Paint();
+    hoverPaint.setAntiAlias(true);
+    hoverPaint.setStyle(ck.PaintStyle.Stroke);
+    hoverPaint.setStrokeWidth(4);
+    hoverPaint.setColor(C.hoveredSegment);
+
+    for (const path of paths) {
+      let lastOnCurve: { id: string; x: number; y: number } | null = null;
+      
+      for (const cmd of path.commands) {
+        if (cmd.kind === 'M') {
+          lastOnCurve = cmd.point;
+        } else if (cmd.kind === 'L' && lastOnCurve) {
+          const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+          if (segmentId === hoveredSegmentId && !selection.segmentIds.has(segmentId)) {
+            const [x1, y1] = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
+            const [x2, y2] = toScreen(cmd.point.x, cmd.point.y, vt);
+            skCanvas.drawLine(x1, y1, x2, y2, hoverPaint);
+          }
+          lastOnCurve = cmd.point;
+        } else if (cmd.kind === 'Q' && lastOnCurve) {
+          const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+          if (segmentId === hoveredSegmentId && !selection.segmentIds.has(segmentId)) {
+            const [x0, y0] = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
+            const [cx, cy] = toScreen(cmd.ctrl.x, cmd.ctrl.y, vt);
+            const [x1, y1] = toScreen(cmd.point.x, cmd.point.y, vt);
+            
+            const hoverPath = new ck.Path();
+            hoverPath.moveTo(x0, y0);
+            hoverPath.quadTo(cx, cy, x1, y1);
+            skCanvas.drawPath(hoverPath, hoverPaint);
+            hoverPath.delete();
+          }
+          lastOnCurve = cmd.point;
+        } else if (cmd.kind === 'C' && lastOnCurve) {
+          const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+          if (segmentId === hoveredSegmentId && !selection.segmentIds.has(segmentId)) {
+            const [x0, y0] = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
+            const [c1x, c1y] = toScreen(cmd.ctrl1.x, cmd.ctrl1.y, vt);
+            const [c2x, c2y] = toScreen(cmd.ctrl2.x, cmd.ctrl2.y, vt);
+            const [x1, y1] = toScreen(cmd.point.x, cmd.point.y, vt);
+            
+            const hoverPath = new ck.Path();
+            hoverPath.moveTo(x0, y0);
+            hoverPath.cubicTo(c1x, c1y, c2x, c2y, x1, y1);
+            skCanvas.drawPath(hoverPath, hoverPaint);
+            hoverPath.delete();
+          }
+          lastOnCurve = cmd.point;
+        }
+      }
+      
+      // Handle closing segment in closed path
+      const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
+      const firstOnCurve = path.commands[0]?.kind === 'M' ? path.commands[0].point : null;
+      if (isClosed && lastOnCurve && firstOnCurve && lastOnCurve.id !== firstOnCurve.id) {
+        const segmentId = `${path.id}:${lastOnCurve.id}:${firstOnCurve.id}`;
+        if (segmentId === hoveredSegmentId && !selection.segmentIds.has(segmentId)) {
+          const [x1, y1] = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
+          const [x2, y2] = toScreen(firstOnCurve.x, firstOnCurve.y, vt);
+          skCanvas.drawLine(x1, y1, x2, y2, hoverPaint);
+        }
+      }
+    }
+    hoverPaint.delete();
+  }
+
   // ---- 5. Points ----
   const ON_R = 5;
   const OFF_SIZE = 7;
@@ -445,17 +519,18 @@ export function renderFrame(
       const drawOnCurve = (pt: { id: string; x: number; y: number }) => {
         const [sx, sy] = toScreen(pt.x, pt.y, vt);
         const isSelected = selection.pointIds.has(pt.id);
+        const isHovered = hoveredPointId === pt.id;
         const fpaint = new Paint();
         fpaint.setAntiAlias(true);
         fpaint.setStyle(ck.PaintStyle.Fill);
-        fpaint.setColor(isSelected ? C.selectedFill : C.onCurveFill);
+        fpaint.setColor(isSelected ? C.selectedFill : isHovered ? C.hoveredFill : C.onCurveFill);
         skCanvas.drawCircle(sx, sy, ON_R, fpaint);
         fpaint.delete();
         const spaint = new Paint();
         spaint.setAntiAlias(true);
         spaint.setStyle(ck.PaintStyle.Stroke);
         spaint.setStrokeWidth(1.5);
-        spaint.setColor(isSelected ? C.selectedStroke : C.onCurveStroke);
+        spaint.setColor(isSelected ? C.selectedStroke : isHovered ? C.hoveredStroke : C.onCurveStroke);
         skCanvas.drawCircle(sx, sy, ON_R, spaint);
         spaint.delete();
       };
@@ -463,19 +538,20 @@ export function renderFrame(
       const drawOffCurve = (pt: { id: string; x: number; y: number }) => {
         const [sx, sy] = toScreen(pt.x, pt.y, vt);
         const isSelected = selection.pointIds.has(pt.id);
+        const isHovered = hoveredPointId === pt.id;
         const half = OFF_SIZE / 2;
         const rect = ck.LTRBRect(sx - half, sy - half, sx + half, sy + half);
         const fpaint = new Paint();
         fpaint.setAntiAlias(true);
         fpaint.setStyle(ck.PaintStyle.Fill);
-        fpaint.setColor(isSelected ? C.selectedFill : C.offCurveFill);
+        fpaint.setColor(isSelected ? C.selectedFill : isHovered ? C.hoveredFill : C.offCurveFill);
         skCanvas.drawRect(rect, fpaint);
         fpaint.delete();
         const spaint = new Paint();
         spaint.setAntiAlias(true);
         spaint.setStyle(ck.PaintStyle.Stroke);
         spaint.setStrokeWidth(1.5);
-        spaint.setColor(isSelected ? C.selectedStroke : C.offCurveStroke);
+        spaint.setColor(isSelected ? C.selectedStroke : isHovered ? C.hoveredStroke : C.offCurveStroke);
         skCanvas.drawRect(rect, spaint);
         spaint.delete();
       };
@@ -686,6 +762,8 @@ export function useEditorRenderer(
     pendingOffCurve: { x: number; y: number } | null;
     canvasWidth: number;
     canvasHeight: number;
+    hoveredPointId: string | null;
+    hoveredSegmentId: string | null;
   }>,
 ) {
   const pendingRef = useRef(false);
@@ -718,6 +796,8 @@ export function useEditorRenderer(
         s.toolMode,
         extra.canvasWidth, extra.canvasHeight,
         s.showDirection ?? false,
+        extra.hoveredPointId ?? null,
+        extra.hoveredSegmentId ?? null,
       );
       surfaceRef.current.flush();
     });

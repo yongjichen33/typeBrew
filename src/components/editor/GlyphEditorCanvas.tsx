@@ -61,10 +61,14 @@ export function GlyphEditorCanvas({
   const [rubberBand, setRubberBandState] = useState<RubberBand | null>(null);
   const [mousePos, setMousePosState] = useState<{ x: number; y: number } | null>(null);
   const [pendingOffCurve, setPendingOffCurveState] = useState<{ x: number; y: number } | null>(null);
+  const [hoveredPointId, setHoveredPointIdState] = useState<string | null>(null);
+  const [hoveredSegmentId, setHoveredSegmentIdState] = useState<string | null>(null);
 
   const rubberBandRef = useRef<RubberBand | null>(null);
   const mousePosRef = useRef<{ x: number; y: number } | null>(null);
   const pendingOffCurveRef = useRef<{ x: number; y: number } | null>(null);
+  const hoveredPointIdRef = useRef<string | null>(null);
+  const hoveredSegmentIdRef = useRef<string | null>(null);
 
   const extraRef = useRef({
     rubberBand: rubberBandRef.current,
@@ -72,6 +76,8 @@ export function GlyphEditorCanvas({
     pendingOffCurve: pendingOffCurveRef.current,
     canvasWidth: canvasSize.w,
     canvasHeight: canvasSize.h,
+    hoveredPointId: hoveredPointIdRef.current,
+    hoveredSegmentId: hoveredSegmentIdRef.current,
   });
 
   // Keep extra ref up to date
@@ -82,8 +88,10 @@ export function GlyphEditorCanvas({
       pendingOffCurve: pendingOffCurveRef.current,
       canvasWidth: canvasSize.w,
       canvasHeight: canvasSize.h,
+      hoveredPointId: hoveredPointIdRef.current,
+      hoveredSegmentId: hoveredSegmentIdRef.current,
     };
-  }, [rubberBand, mousePos, pendingOffCurve, canvasSize]);
+  }, [rubberBand, mousePos, pendingOffCurve, canvasSize, hoveredPointId, hoveredSegmentId]);
 
   const setRubberBand = (rb: RubberBand | null) => {
     rubberBandRef.current = rb;
@@ -99,6 +107,16 @@ export function GlyphEditorCanvas({
     pendingOffCurveRef.current = pos;
     extraRef.current = { ...extraRef.current, pendingOffCurve: pos };
     setPendingOffCurveState(pos);
+  };
+  const setHoveredPointId = (id: string | null) => {
+    hoveredPointIdRef.current = id;
+    extraRef.current = { ...extraRef.current, hoveredPointId: id };
+    setHoveredPointIdState(id);
+  };
+  const setHoveredSegmentId = (id: string | null) => {
+    hoveredSegmentIdRef.current = id;
+    extraRef.current = { ...extraRef.current, hoveredSegmentId: id };
+    setHoveredSegmentIdState(id);
   };
 
   const { redraw, registerSurface } = useEditorRenderer(ck, surfaceRef, surfaceValidRef, stateRef, metricsRef, extraRef);
@@ -175,7 +193,7 @@ export function GlyphEditorCanvas({
   const getCanvasRect = () => canvasRef.current?.getBoundingClientRect() ?? null;
 
   const { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave, getCursor } =
-    useEditorInteraction({ stateRef, dispatch, setRubberBand, setMousePos, setPendingOffCurve, redraw, getCanvasRect, onTransformFeedback });
+    useEditorInteraction({ stateRef, dispatch, setRubberBand, setMousePos, setPendingOffCurve, redraw, getCanvasRect, onTransformFeedback, setHoveredPointId, setHoveredSegmentId });
 
   const coordLabels = showCoordinates ? paths.flatMap((path) =>
     path.commands.flatMap((cmd) => {

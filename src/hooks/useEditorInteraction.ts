@@ -362,6 +362,8 @@ interface InteractionParams {
   redraw: () => void;
   getCanvasRect: () => DOMRect | null;
   onTransformFeedback?: (feedback: { isActive: boolean; deltaX: number; deltaY: number; scaleX: number; scaleY: number; rotation: number }) => void;
+  setHoveredPointId: (id: string | null) => void;
+  setHoveredSegmentId: (id: string | null) => void;
 }
 
 /** Returns pointer + wheel event handlers to attach to the canvas element. */
@@ -374,6 +376,8 @@ export function useEditorInteraction({
   redraw,
   getCanvasRect,
   onTransformFeedback,
+  setHoveredPointId,
+  setHoveredSegmentId,
 }: InteractionParams) {
   const dragRef = useRef<{
     type: 'point' | 'canvas' | 'transform';
@@ -576,9 +580,9 @@ export function useEditorInteraction({
 
     if (!dragRef.current) {
       if (toolMode === 'node') {
+        const { paths } = stateRef.current;
         const totalSelected = selection.pointIds.size + selection.segmentIds.size;
         if (totalSelected > 1) {
-          const { paths } = stateRef.current;
           const bbox = computeSelectionBBox(paths, selection);
           if (bbox) {
             const hoveredHandle = hitTestTransformHandle(x, y, bbox, vt);
@@ -592,8 +596,17 @@ export function useEditorInteraction({
         } else {
           hoveredHandleRef.current = null;
         }
+        
+        // Hover detection for points and segments
+        const hitPointId = hitTest(x, y, paths, vt);
+        const hitSegmentId = hitPointId ? null : hitTestSegment(x, y, paths, vt);
+        
+        setHoveredPointId(hitPointId);
+        setHoveredSegmentId(hitSegmentId);
       } else {
         hoveredHandleRef.current = null;
+        setHoveredPointId(null);
+        setHoveredSegmentId(null);
       }
       if (toolMode === 'draw' || toolMode === 'select') redraw();
       return;
@@ -826,8 +839,10 @@ export function useEditorInteraction({
   const onPointerLeave = useCallback(() => {
     setMousePos(null);
     hoveredHandleRef.current = null;
+    setHoveredPointId(null);
+    setHoveredSegmentId(null);
     redraw();
-  }, [setMousePos, redraw]);
+  }, [setMousePos, redraw, setHoveredPointId, setHoveredSegmentId]);
 
   return { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave, getCursor };
 }
