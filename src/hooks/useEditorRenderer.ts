@@ -115,6 +115,21 @@ function collectArrows(
         lastOnCurve = cmd.point;
       }
     }
+    
+    // Handle closing segment in closed path
+    const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
+    const firstOnCurve = path.commands[0]?.kind === 'M' ? path.commands[0].point : null;
+    if (isClosed && lastOnCurve && firstOnCurve) {
+      const midX = (lastOnCurve.x + firstOnCurve.x) / 2;
+      const midY = (lastOnCurve.y + firstOnCurve.y) / 2;
+      const [sx, sy] = toScreen(midX, midY, vt);
+      const [ex, ey] = toScreen(firstOnCurve.x, firstOnCurve.y, vt);
+      const dx = ex - sx;
+      const dy = ey - sy;
+      if (Math.sqrt(dx * dx + dy * dy) > 1) {
+        arrows.push({ sx, sy, dx, dy });
+      }
+    }
   }
 
   return arrows;
@@ -169,6 +184,17 @@ function computeSelectionBBox(
           if (selection.pointIds.has(cmd.point.id)) selectedPoints.push(cmd.point);
         }
         lastOnCurve = cmd.point;
+      }
+    }
+    
+    // Handle closing segment in closed path
+    const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
+    const firstOnCurve = path.commands[0]?.kind === 'M' ? path.commands[0].point : null;
+    if (isClosed && lastOnCurve && firstOnCurve && lastOnCurve.id !== firstOnCurve.id) {
+      const segmentId = `${path.id}:${lastOnCurve.id}:${firstOnCurve.id}`;
+      if (selection.segmentIds.has(segmentId)) {
+        selectedPoints.push(lastOnCurve);
+        selectedPoints.push(firstOnCurve);
       }
     }
   }
@@ -392,6 +418,18 @@ export function renderFrame(
             highlightPath.delete();
           }
           lastOnCurve = cmd.point;
+        }
+      }
+      
+      // Handle closing segment in closed path
+      const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
+      const firstOnCurve = path.commands[0]?.kind === 'M' ? path.commands[0].point : null;
+      if (isClosed && lastOnCurve && firstOnCurve && lastOnCurve.id !== firstOnCurve.id) {
+        const segmentId = `${path.id}:${lastOnCurve.id}:${firstOnCurve.id}`;
+        if (selection.segmentIds.has(segmentId)) {
+          const [x1, y1] = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
+          const [x2, y2] = toScreen(firstOnCurve.x, firstOnCurve.y, vt);
+          skCanvas.drawLine(x1, y1, x2, y2, segmentPaint);
         }
       }
     }

@@ -82,12 +82,15 @@ function getSelectedSegments(paths: EditablePath[], selection: Selection): Segme
   for (const path of paths) {
     const cmds = path.commands;
     let lastOnCurve: EditablePoint | null = null;
+    let firstOnCurve: EditablePoint | null = null;
+    const isClosed = cmds[cmds.length - 1]?.kind === 'Z';
     
     for (let i = 0; i < cmds.length; i++) {
       const cmd = cmds[i];
       
       if (cmd.kind === 'M') {
         lastOnCurve = cmd.point;
+        firstOnCurve = cmd.point;
       } else if (cmd.kind === 'L' && lastOnCurve) {
         const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
         if (selection.segmentIds.has(segmentId)) {
@@ -133,6 +136,22 @@ function getSelectedSegments(paths: EditablePath[], selection: Selection): Segme
           });
         }
         lastOnCurve = cmd.point;
+      }
+    }
+    
+    // Handle closing segment in closed path
+    if (isClosed && lastOnCurve && firstOnCurve && lastOnCurve.id !== firstOnCurve.id) {
+      const segmentId = `${path.id}:${lastOnCurve.id}:${firstOnCurve.id}`;
+      if (selection.segmentIds.has(segmentId)) {
+        segments.push({
+          pathId: path.id,
+          startPointId: lastOnCurve.id,
+          endPointId: firstOnCurve.id,
+          startIndex: cmds.length,
+          kind: 'line',
+          startPoint: lastOnCurve,
+          endPoint: firstOnCurve,
+        });
       }
     }
   }

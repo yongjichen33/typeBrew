@@ -138,6 +138,8 @@ export function computeSelectionBBox(
 
   for (const path of paths) {
     let lastOnCurve: { id: string; x: number; y: number } | null = null;
+    let firstOnCurve: { id: string; x: number; y: number } | null = null;
+    const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
 
     for (const cmd of path.commands) {
       if (cmd.kind === 'M') {
@@ -145,6 +147,7 @@ export function computeSelectionBBox(
           selectedPoints.push(cmd.point);
         }
         lastOnCurve = cmd.point;
+        firstOnCurve = cmd.point;
       } else if (cmd.kind === 'L' && lastOnCurve) {
         const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
         if (selection.segmentIds.has(segmentId)) {
@@ -178,6 +181,15 @@ export function computeSelectionBBox(
           if (selection.pointIds.has(cmd.point.id)) selectedPoints.push(cmd.point);
         }
         lastOnCurve = cmd.point;
+      }
+    }
+    
+    // Handle closing segment in closed path
+    if (isClosed && lastOnCurve && firstOnCurve && lastOnCurve.id !== firstOnCurve.id) {
+      const segmentId = `${path.id}:${lastOnCurve.id}:${firstOnCurve.id}`;
+      if (selection.segmentIds.has(segmentId)) {
+        selectedPoints.push(lastOnCurve);
+        selectedPoints.push(firstOnCurve);
       }
     }
   }
@@ -248,10 +260,13 @@ function hitTestSegment(
 
   for (const path of paths) {
     let lastOnCurve: { id: string; x: number; y: number } | null = null;
+    let firstOnCurve: { id: string; x: number; y: number } | null = null;
+    const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
 
     for (const cmd of path.commands) {
       if (cmd.kind === 'M') {
         lastOnCurve = cmd.point;
+        firstOnCurve = cmd.point;
       } else if (cmd.kind === 'L' && lastOnCurve) {
         const p1 = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
         const p2 = toScreen(cmd.point.x, cmd.point.y, vt);
@@ -285,6 +300,18 @@ function hitTestSegment(
           closestId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
         }
         lastOnCurve = cmd.point;
+      }
+    }
+    
+    // Handle closing segment (last point back to first point in closed path)
+    if (isClosed && lastOnCurve && firstOnCurve && lastOnCurve.id !== firstOnCurve.id) {
+      const p1 = toScreen(lastOnCurve.x, lastOnCurve.y, vt);
+      const p2 = toScreen(firstOnCurve.x, firstOnCurve.y, vt);
+      
+      const dist = pointToSegmentDistance(sx, sy, p1.x, p1.y, p2.x, p2.y);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestId = `${path.id}:${lastOnCurve.id}:${firstOnCurve.id}`;
       }
     }
   }
@@ -603,10 +630,14 @@ export function useEditorInteraction({
         const pts: Array<{ id: string; x: number; y: number }> = [];
         for (const path of paths) {
           let lastOnCurve: { id: string; x: number; y: number } | null = null;
+          let firstOnCurve: { id: string; x: number; y: number } | null = null;
+          const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
+          
           for (const cmd of path.commands) {
             if (cmd.kind === 'M') {
               if (selection.pointIds.has(cmd.point.id)) pts.push(cmd.point);
               lastOnCurve = cmd.point;
+              firstOnCurve = cmd.point;
             } else if (cmd.kind === 'L' && lastOnCurve) {
               const segId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
               if (selection.segmentIds.has(segId)) {
@@ -640,6 +671,15 @@ export function useEditorInteraction({
                 if (selection.pointIds.has(cmd.point.id)) pts.push(cmd.point);
               }
               lastOnCurve = cmd.point;
+            }
+          }
+          
+          // Handle closing segment in closed path
+          if (isClosed && lastOnCurve && firstOnCurve && lastOnCurve.id !== firstOnCurve.id) {
+            const segId = `${path.id}:${lastOnCurve.id}:${firstOnCurve.id}`;
+            if (selection.segmentIds.has(segId)) {
+              pts.push(lastOnCurve);
+              pts.push(firstOnCurve);
             }
           }
         }
