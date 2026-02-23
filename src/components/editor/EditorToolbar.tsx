@@ -91,7 +91,7 @@ export function EditorToolbar({
       <ToolGroup>
         <ToolButton
           icon={<MousePointer2 size={15} />}
-          label="Node Tool (N) - Select and edit points"
+          label="Select Tool (S) - Select and edit points"
           active={toolMode === 'node'}
           onClick={() => onSetMode('node')}
         />
@@ -115,7 +115,7 @@ export function EditorToolbar({
       <ToolGroup>
         <ToolButton
           icon={<Scale size={15} />}
-          label="Scale (S)"
+          label="Scale"
           active={toolMode === 'scale'}
           onClick={() => onSetMode('scale')}
         />

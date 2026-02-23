@@ -174,7 +174,7 @@ export function GlyphEditorTab({ tabState }: Props) {
         return;
       }
       
-      if (e.key === 'n' || e.key === 'N') dispatch({ type: 'SET_TOOL_MODE', mode: 'node' });
+      if (e.key === 's' || e.key === 'S') dispatch({ type: 'SET_TOOL_MODE', mode: 'node' });
       if (e.key === 'p' || e.key === 'P') dispatch({ type: 'SET_TOOL_MODE', mode: 'pen' });
       if (e.key === 'h' || e.key === 'H') dispatch({ type: 'SET_TOOL_MODE', mode: 'hand' });
       if (e.key === 'k' || e.key === 'K') dispatch({ type: 'SET_TOOL_MODE', mode: 'knife' });

@@ -610,8 +610,8 @@ export function InspectorPanel({
           <p><kbd className="px-1 bg-muted rounded">Ctrl+C</kbd> Copy points</p>
           <p><kbd className="px-1 bg-muted rounded">Del</kbd> Delete points</p>
           <p><kbd className="px-1 bg-muted rounded">Ctrl+V</kbd> Paste points</p>
+          <p><kbd className="px-1 bg-muted rounded">S</kbd> Select tool</p>
           <p><kbd className="px-1 bg-muted rounded">P</kbd> Pen tool</p>
-          <p><kbd className="px-1 bg-muted rounded">N</kbd> Node tool</p>
         </div>
       </Section>
     </div>

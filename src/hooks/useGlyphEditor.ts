@@ -740,7 +740,7 @@ export function makeInitialState(vt: ViewTransform): EditorState {
   return {
     paths: [],
     selection: { pointIds: new Set(), segmentIds: new Set() },
-    toolMode: 'pen',
+    toolMode: 'node',
     viewTransform: vt,
     isDirty: false,
     isSaving: false,
