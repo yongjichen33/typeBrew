@@ -87,6 +87,7 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
         
         if (shouldCopySegment) {
           clipboard.segments.push({
+            pathId: path.id,
             kind: 'L',
             startPoint: { ...lastOnCurve },
             endPoint: { ...cmd.point },
@@ -103,6 +104,7 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
         
         if (shouldCopySegment) {
           clipboard.segments.push({
+            pathId: path.id,
             kind: 'Q',
             startPoint: { ...lastOnCurve },
             endPoint: { ...cmd.point },
@@ -121,6 +123,7 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
         
         if (shouldCopySegment) {
           clipboard.segments.push({
+            pathId: path.id,
             kind: 'C',
             startPoint: { ...lastOnCurve },
             endPoint: { ...cmd.point },
@@ -672,124 +675,169 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       const offsetX = action.offsetX ?? 50;
       const offsetY = action.offsetY ?? 50;
       
-      const newPathId = `path-paste-${Date.now()}`;
-      const newCommands: PathCommand[] = [];
       const newPointIds = new Set<string>();
+      const newPaths: EditablePath[] = [];
       let idCounter = 0;
       const genId = () => `pt-paste-${Date.now()}-${++idCounter}`;
       
+      // Group segments by their original pathId
+      const segmentsByPath = new Map<string, typeof segments>();
       for (const seg of segments) {
-        const startId = genId();
-        const endId = genId();
-        newPointIds.add(startId);
-        newPointIds.add(endId);
+        const group = segmentsByPath.get(seg.pathId) || [];
+        group.push(seg);
+        segmentsByPath.set(seg.pathId, group);
+      }
+      
+      // Helper to create point key for deduplication
+      const pointKey = (pt: { x: number; y: number }) => 
+        `${Math.round(pt.x * 1000)}:${Math.round(pt.y * 1000)}`;
+      
+      // Create a separate path for each original path group
+      for (const [, pathSegments] of segmentsByPath) {
+        const newPathId = `path-paste-${Date.now()}-${newPaths.length}`;
+        const newCommands: PathCommand[] = [];
+        const pointIdMap = new Map<string, string>();
         
-        newCommands.push({
-          kind: 'M' as const,
-          point: {
-            id: startId,
-            x: seg.startPoint.x + offsetX,
-            y: seg.startPoint.y + offsetY,
-            type: 'on-curve' as const,
-          },
-        });
+        // Get or create a point ID, reusing if same position exists
+        const getOrCreatePointId = (origPt: { x: number; y: number }): string => {
+          const key = pointKey(origPt);
+          if (pointIdMap.has(key)) {
+            return pointIdMap.get(key)!;
+          }
+          const newId = genId();
+          pointIdMap.set(key, newId);
+          newPointIds.add(newId);
+          return newId;
+        };
         
-        if (seg.kind === 'L') {
-          newCommands.push({
-            kind: 'L' as const,
-            point: {
-              id: endId,
-              x: seg.endPoint.x + offsetX,
-              y: seg.endPoint.y + offsetY,
-              type: 'on-curve' as const,
-            },
-          });
-        } else if (seg.kind === 'Q') {
-          const ctrlId = genId();
-          const ctrl = seg.ctrl1!;
-          newPointIds.add(ctrlId);
-          newCommands.push({
-            kind: 'Q' as const,
-            ctrl: {
-              id: ctrlId,
-              x: ctrl.x + offsetX,
-              y: ctrl.y + offsetY,
-              type: 'off-curve-quad' as const,
-            },
-            point: {
-              id: endId,
-              x: seg.endPoint.x + offsetX,
-              y: seg.endPoint.y + offsetY,
-              type: 'on-curve' as const,
-            },
-          });
-        } else if (seg.kind === 'C') {
-          const ctrl1Id = genId();
-          const ctrl2Id = genId();
-          const ctrl1 = seg.ctrl1!;
-          const ctrl2 = seg.ctrl2!;
-          newPointIds.add(ctrl1Id);
-          newPointIds.add(ctrl2Id);
-          newCommands.push({
-            kind: 'C' as const,
-            ctrl1: {
-              id: ctrl1Id,
-              x: ctrl1.x + offsetX,
-              y: ctrl1.y + offsetY,
-              type: 'off-curve-cubic' as const,
-            },
-            ctrl2: {
-              id: ctrl2Id,
-              x: ctrl2.x + offsetX,
-              y: ctrl2.y + offsetY,
-              type: 'off-curve-cubic' as const,
-            },
-            point: {
-              id: endId,
-              x: seg.endPoint.x + offsetX,
-              y: seg.endPoint.y + offsetY,
-              type: 'on-curve' as const,
-            },
-          });
+        for (const seg of pathSegments) {
+          const startId = getOrCreatePointId(seg.startPoint);
+          const endId = getOrCreatePointId(seg.endPoint);
+          
+          // Only add M command if this is the first segment or if start point differs from last endpoint
+          const lastCmd = newCommands[newCommands.length - 1];
+          const needsMoveTo = newCommands.length === 0 || 
+            (lastCmd && 'point' in lastCmd && lastCmd.point.id !== startId);
+          
+          if (needsMoveTo) {
+            newCommands.push({
+              kind: 'M' as const,
+              point: {
+                id: startId,
+                x: seg.startPoint.x + offsetX,
+                y: seg.startPoint.y + offsetY,
+                type: 'on-curve' as const,
+              },
+            });
+          }
+          
+          if (seg.kind === 'L') {
+            newCommands.push({
+              kind: 'L' as const,
+              point: {
+                id: endId,
+                x: seg.endPoint.x + offsetX,
+                y: seg.endPoint.y + offsetY,
+                type: 'on-curve' as const,
+              },
+            });
+          } else if (seg.kind === 'Q') {
+            const ctrlId = genId();
+            const ctrl = seg.ctrl1!;
+            newPointIds.add(ctrlId);
+            newCommands.push({
+              kind: 'Q' as const,
+              ctrl: {
+                id: ctrlId,
+                x: ctrl.x + offsetX,
+                y: ctrl.y + offsetY,
+                type: 'off-curve-quad' as const,
+              },
+              point: {
+                id: endId,
+                x: seg.endPoint.x + offsetX,
+                y: seg.endPoint.y + offsetY,
+                type: 'on-curve' as const,
+              },
+            });
+          } else if (seg.kind === 'C') {
+            const ctrl1Id = genId();
+            const ctrl2Id = genId();
+            const ctrl1 = seg.ctrl1!;
+            const ctrl2 = seg.ctrl2!;
+            newPointIds.add(ctrl1Id);
+            newPointIds.add(ctrl2Id);
+            newCommands.push({
+              kind: 'C' as const,
+              ctrl1: {
+                id: ctrl1Id,
+                x: ctrl1.x + offsetX,
+                y: ctrl1.y + offsetY,
+                type: 'off-curve-cubic' as const,
+              },
+              ctrl2: {
+                id: ctrl2Id,
+                x: ctrl2.x + offsetX,
+                y: ctrl2.y + offsetY,
+                type: 'off-curve-cubic' as const,
+              },
+              point: {
+                id: endId,
+                x: seg.endPoint.x + offsetX,
+                y: seg.endPoint.y + offsetY,
+                type: 'on-curve' as const,
+              },
+            });
+          }
+        }
+        
+        if (newCommands.length > 0) {
+          newPaths.push({ id: newPathId, commands: newCommands });
         }
       }
       
-      for (const pt of points) {
-        const pointId = genId();
-        newPointIds.add(pointId);
-        if (newCommands.length === 0) {
-          newCommands.push({
-            kind: 'M' as const,
-            point: {
-              id: pointId,
-              x: pt.x + offsetX,
-              y: pt.y + offsetY,
-              type: 'on-curve' as const,
-            },
-          });
-        } else {
-          newCommands.push({
-            kind: 'L' as const,
-            point: {
-              id: pointId,
-              x: pt.x + offsetX,
-              y: pt.y + offsetY,
-              type: 'on-curve' as const,
-            },
-          });
+      // Handle loose points - create a separate path for them
+      if (points.length > 0) {
+        const pointsPathId = `path-paste-${Date.now()}-points`;
+        const pointsCommands: PathCommand[] = [];
+        
+        for (const pt of points) {
+          const pointId = genId();
+          newPointIds.add(pointId);
+          
+          if (pointsCommands.length === 0) {
+            pointsCommands.push({
+              kind: 'M' as const,
+              point: {
+                id: pointId,
+                x: pt.x + offsetX,
+                y: pt.y + offsetY,
+                type: 'on-curve' as const,
+              },
+            });
+          } else {
+            pointsCommands.push({
+              kind: 'L' as const,
+              point: {
+                id: pointId,
+                x: pt.x + offsetX,
+                y: pt.y + offsetY,
+                type: 'on-curve' as const,
+              },
+            });
+          }
+        }
+        
+        if (pointsCommands.length > 0) {
+          newPaths.push({ id: pointsPathId, commands: pointsCommands });
         }
       }
       
-      if (newCommands.length === 0) return state;
-      
-      const newPath: EditablePath = {
-        id: newPathId,
-        commands: newCommands,
-      };
+      if (newPaths.length === 0) return state;
       
       return {
         ...state,
-        paths: [...state.paths, newPath],
+        paths: [...state.paths, ...newPaths],
         selection: { pointIds: newPointIds, segmentIds: new Set() },
         undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
         redoStack: [],

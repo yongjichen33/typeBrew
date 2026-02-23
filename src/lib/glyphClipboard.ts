@@ -15,6 +15,7 @@ export function setClipboard(data: ClipboardData): void {
   globalClipboard = {
     points: data.points.map(p => ({ ...p })),
     segments: data.segments.map(s => ({
+      pathId: s.pathId,
       kind: s.kind,
       startPoint: { ...s.startPoint },
       endPoint: { ...s.endPoint },

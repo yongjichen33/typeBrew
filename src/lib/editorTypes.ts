@@ -73,6 +73,7 @@ export interface RubberBand {
 export interface ClipboardData {
   points: EditablePoint[];
   segments: Array<{
+    pathId: string;
     kind: 'L' | 'Q' | 'C';
     startPoint: EditablePoint;
     endPoint: EditablePoint;
