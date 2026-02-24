@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { RsTree, type TreeNode } from 'rstree-ui';
+import { FontTree, type TreeNode } from './FontTree';
 import type { FontMetadata } from '@/types/font';
+import type { ActiveTabInfo } from '@/hooks/useGoldenLayout';
 
 interface TableListProps {
   fonts: FontMetadata[];
@@ -8,6 +9,9 @@ interface TableListProps {
   selectedTable: string | null;
   searchQuery: string;
   onSelectTable: (filePath: string, table: string) => void;
+  expandedIds?: string[];
+  onExpand?: (expandedIds: string[]) => void;
+  activeTab?: ActiveTabInfo | null;
 }
 
 function tableNodeId(filePath: string, table: string): string {
@@ -20,9 +24,19 @@ export function TableList({
   selectedTable,
   searchQuery,
   onSelectTable,
+  expandedIds: controlledExpandedIds,
+  onExpand,
+  activeTab,
 }: TableListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState(400);
+  const [internalExpandedIds, setInternalExpandedIds] = useState<string[]>([]);
+  const prevActiveTabRef = useRef<ActiveTabInfo | null>(null);
+
+  // Use controlled or internal state
+  const isControlled = controlledExpandedIds !== undefined;
+  const expandedIds = isControlled ? controlledExpandedIds : internalExpandedIds;
+  const handleExpandChange = onExpand ?? setInternalExpandedIds;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -34,7 +48,7 @@ export function TableList({
     return () => observer.disconnect();
   }, []);
 
-  // Convert fonts to RsTree data format
+  // Convert fonts to tree data format
   const treeData: TreeNode[] = useMemo(() =>
     fonts.map(font => ({
       id: font.file_path,
@@ -47,20 +61,46 @@ export function TableList({
     [fonts]
   );
 
-  // Compute selected node id
+  // Compute selected node id based on activeTab or manual selection
   const selectedIds = useMemo(() => {
+    if (activeTab) {
+      if (activeTab.type === 'table') {
+        return [tableNodeId(activeTab.filePath, activeTab.tableName)];
+      }
+      return [activeTab.filePath];
+    }
     if (selectedFilePath && selectedTable) {
       return [tableNodeId(selectedFilePath, selectedTable)];
     }
     return [];
-  }, [selectedFilePath, selectedTable]);
+  }, [activeTab, selectedFilePath, selectedTable]);
+
+  // Auto-expand when activeTab changes
+  useEffect(() => {
+    const prevTab = prevActiveTabRef.current;
+    const tabChanged = (
+      (activeTab === null && prevTab !== null) ||
+      (activeTab !== null && prevTab === null) ||
+      (activeTab && prevTab && (
+        activeTab.filePath !== prevTab.filePath ||
+        activeTab.type !== prevTab.type ||
+        (activeTab.type === 'table' && prevTab.type === 'table' && activeTab.tableName !== prevTab.tableName) ||
+        (activeTab.type === 'glyph' && prevTab.type === 'glyph' && activeTab.glyphId !== prevTab.glyphId)
+      ))
+    );
+    
+    prevActiveTabRef.current = activeTab ?? null;
+    
+    if (activeTab && tabChanged && !expandedIds.includes(activeTab.filePath)) {
+      handleExpandChange([...expandedIds, activeTab.filePath]);
+    }
+  }, [activeTab, expandedIds, handleExpandChange]);
 
   // Handle node selection — only table (leaf) nodes trigger onSelectTable
   const handleSelect = useCallback((ids: string[]) => {
     const id = ids[0];
     if (!id) return;
 
-    // Font (parent) nodes don't have "::" — only table nodes do
     const sepIndex = id.indexOf('::');
     if (sepIndex === -1) return; // clicked a font node, ignore
 
@@ -76,19 +116,15 @@ export function TableList({
           No fonts opened
         </p>
       ) : (
-        <RsTree
+        <FontTree
           data={treeData}
           selectedIds={selectedIds}
+          expandedIds={expandedIds}
+          onExpand={handleExpandChange}
           onSelect={handleSelect}
           searchTerm={searchQuery}
-          autoExpandSearch={true}
-          showIcons={false}
-          showTreeLines={true}
-          clickToToggle={true}
-          autoHeight={false}
           height={containerHeight}
-          itemHeight={30}
-          treeNodeClassName="font-mono text-sm"
+          itemHeight={28}
         />
       )}
     </div>

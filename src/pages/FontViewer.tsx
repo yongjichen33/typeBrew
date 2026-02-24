@@ -1,17 +1,47 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router';
 import { listen } from '@tauri-apps/api/event';
 import { SplitPane, Pane } from 'react-split-pane';
-import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
-import { Search } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, ArrowUp, ArrowDown, FolderOpen } from 'lucide-react';
 import { TableList } from '@/components/TableList';
 import type { FontMetadata } from '@/types/font';
 import { openFontDialog } from '@/hooks/useFileUpload';
 import { useGoldenLayout } from '@/hooks/useGoldenLayout';
 import { editorEventBus } from '@/lib/editorEventBus';
 import '@/styles/golden-layout.css';
+
+function ToolbarButton({ 
+  icon, 
+  title, 
+  active, 
+  onClick 
+}: { 
+  icon: React.ReactNode; 
+  title: string; 
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      className={[
+        'flex items-center justify-center w-6 h-6 rounded transition-colors',
+        active 
+          ? 'bg-primary text-primary-foreground' 
+          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+      ].join(' ')}
+    >
+      {icon}
+    </button>
+  );
+}
+
+function ToolbarDivider() {
+  return <div className="w-px h-3 bg-border mx-0.5" />;
+}
 
 export function FontViewer() {
   const location = useLocation();
@@ -25,8 +55,11 @@ export function FontViewer() {
   );
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [sortAscending, setSortAscending] = useState(true);
 
-  const { containerRef, addTab, addEditorTab, isEmpty } = useGoldenLayout();
+  const { containerRef, addTab, addEditorTab, isEmpty, activeTab } = useGoldenLayout();
 
   // Register the glyph editor tab opener with the event bus
   useEffect(() => {
@@ -57,31 +90,102 @@ export function FontViewer() {
     addTab(filePath, table, table);
   }, [addTab]);
 
+  // Sorted fonts based on sortAscending
+  const sortedFonts = useMemo(() => {
+    return [...fonts].sort((a, b) => {
+      const cmp = a.file_name.localeCompare(b.file_name);
+      return sortAscending ? cmp : -cmp;
+    });
+  }, [fonts, sortAscending]);
+
+  // Get all font file paths for expand/collapse all
+  const allFontPaths = useMemo(() => fonts.map(f => f.file_path), [fonts]);
+  
+  // Derive allExpanded state from actual expandedIds
+  const allExpanded = useMemo(() => 
+    allFontPaths.every(path => expandedIds.includes(path)),
+    [allFontPaths, expandedIds]
+  );
+
+  const handleExpandAll = useCallback(() => {
+    setExpandedIds(allFontPaths);
+  }, [allFontPaths]);
+
+  const handleCollapseAll = useCallback(() => {
+    setExpandedIds([]);
+  }, []);
+
+  const handleToggleExpand = useCallback(() => {
+    if (allExpanded) {
+      handleCollapseAll();
+    } else {
+      handleExpandAll();
+    }
+  }, [allExpanded, handleExpandAll, handleCollapseAll]);
+
   return (
     <div className="h-screen bg-background">
       <SplitPane direction="horizontal">
         {/* Left: Font Tree */}
         <Pane defaultSize="300px" minSize="200px" maxSize="500px">
-          <Card className="h-full rounded-none border-0 border-r flex flex-col">
-            <CardHeader>
-              <div className="relative mt-2">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search tables..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8"
+          <Card className="h-full rounded-none border-0 border-r flex flex-col py-0">
+            {/* Compact Toolbar */}
+            <div className="p-1.5 border-b bg-muted/30">
+              <div className="flex items-center gap-0.5">
+                <ToolbarButton
+                  icon={<Search size={14} />}
+                  title="Search tables"
+                  active={showSearch}
+                  onClick={() => {
+                    if (showSearch) {
+                      setSearchQuery('');
+                    }
+                    setShowSearch(!showSearch);
+                  }}
+                />
+                <ToolbarButton
+                  icon={allExpanded ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                  title={allExpanded ? "Collapse all" : "Expand all"}
+                  onClick={handleToggleExpand}
+                />
+                <ToolbarButton
+                  icon={<FolderOpen size={14} />}
+                  title="Focus on active tab"
+                  onClick={() => {}}
+                  active={activeTab !== null}
+                />
+                <ToolbarDivider />
+                <ToolbarButton
+                  icon={sortAscending ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+                  title={`Sort ${sortAscending ? 'descending' : 'ascending'}`}
+                  onClick={() => setSortAscending(!sortAscending)}
                 />
               </div>
-            </CardHeader>
-            <Separator />
+              
+              {/* Search input (shown when search is active) */}
+              {showSearch && (
+                <div className="relative mt-1.5">
+                  <Search className="absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search tables..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-7 h-6 text-xs"
+                    autoFocus
+                  />
+                </div>
+              )}
+            </div>
             <CardContent className="p-0 flex-1 min-h-0 overflow-hidden">
               <TableList
-                fonts={fonts}
+                fonts={sortedFonts}
                 selectedFilePath={selectedFilePath}
                 selectedTable={selectedTable}
                 searchQuery={searchQuery}
                 onSelectTable={handleSelectTable}
+                expandedIds={expandedIds}
+                onExpand={setExpandedIds}
+                activeTab={activeTab}
               />
             </CardContent>
           </Card>

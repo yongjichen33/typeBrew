@@ -23,12 +23,18 @@ interface TableTabState {
   tableName: string;
 }
 
+export type ActiveTabInfo = 
+  | { type: 'table'; filePath: string; tableName: string }
+  | { type: 'glyph'; filePath: string; glyphId: number }
+  | null;
+
 export function useGoldenLayout() {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const layoutRef = useRef<GoldenLayout | null>(null);
   const reactRootsRef = useRef<Map<string, Root>>(new Map());
   const openTabsRef = useRef<Map<string, ComponentContainer>>(new Map());
   const [isEmpty, setIsEmpty] = useState(true);
+  const [activeTab, setActiveTab] = useState<ActiveTabInfo>(null);
 
   useEffect(() => {
     if (!container) return;
@@ -54,11 +60,16 @@ export function useGoldenLayout() {
         );
 
         setIsEmpty(false);
+        setActiveTab({ type: 'table', filePath: tabState.filePath, tableName: tabState.tableName });
 
         glContainer.addEventListener('beforeComponentRelease', () => {
           const r = reactRootsRef.current.get(key);
           if (r) { r.unmount(); reactRootsRef.current.delete(key); }
           openTabsRef.current.delete(key);
+        });
+
+        glContainer.addEventListener('focus', () => {
+          setActiveTab({ type: 'table', filePath: tabState.filePath, tableName: tabState.tableName });
         });
 
         return undefined;
@@ -79,11 +90,16 @@ export function useGoldenLayout() {
         root.render(<GlyphEditorTab tabState={tabState} />);
 
         setIsEmpty(false);
+        setActiveTab({ type: 'glyph', filePath: tabState.filePath, glyphId: tabState.glyphId });
 
         glContainer.addEventListener('beforeComponentRelease', () => {
           const r = reactRootsRef.current.get(key);
           if (r) { r.unmount(); reactRootsRef.current.delete(key); }
           openTabsRef.current.delete(key);
+        });
+
+        glContainer.addEventListener('focus', () => {
+          setActiveTab({ type: 'glyph', filePath: tabState.filePath, glyphId: tabState.glyphId });
         });
 
         return undefined;
@@ -96,8 +112,29 @@ export function useGoldenLayout() {
           const rootItem = layoutRef.current.rootItem;
           const hasContent = rootItem && rootItem.contentItems.length > 0;
           setIsEmpty(!hasContent);
+          if (!hasContent) {
+            setActiveTab(null);
+          }
         }
       });
+    });
+
+    layout.on('activeContentItemChanged', (item) => {
+      // Cast to access container property
+      const componentItem = item as { container?: ComponentContainer };
+      const container = componentItem.container;
+      if (container) {
+        const state = container.state;
+        const componentType = container.componentType as string;
+        
+        if (componentType === 'TableContentTab' && state) {
+          const tabState = state as unknown as TableTabState;
+          setActiveTab({ type: 'table', filePath: tabState.filePath, tableName: tabState.tableName });
+        } else if (componentType === 'GlyphEditorTab' && state) {
+          const tabState = state as unknown as GlyphEditorTabState;
+          setActiveTab({ type: 'glyph', filePath: tabState.filePath, glyphId: tabState.glyphId });
+        }
+      }
     });
 
     const initialConfig: LayoutConfig = {
@@ -173,5 +210,5 @@ export function useGoldenLayout() {
     }
   }, []);
 
-  return { containerRef: setContainer, addTab, addEditorTab, isEmpty };
+  return { containerRef: setContainer, addTab, addEditorTab, isEmpty, activeTab };
 }
