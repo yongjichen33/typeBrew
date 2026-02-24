@@ -130,7 +130,7 @@ export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLo
           </h3>
           <button
             onClick={() => {
-              const newGlyphId = totalGlyphs + 1;
+              const newGlyphId = totalGlyphs;
               const emptyOutlineData: GlyphOutlineData = {
                 glyph_id: newGlyphId,
                 glyph_name: undefined,
