@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import type { Glyph } from '@/lib/glyphParser';
 import { editorEventBus } from '@/lib/editorEventBus';
 import type { GlyphOutlineData } from '@/lib/editorTypes';
@@ -124,10 +124,39 @@ export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLo
   return (
     <ScrollArea className="h-full">
       <div className="p-6">
-        <div className="mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-medium text-muted-foreground">
             Showing {glyphs.length} of {totalGlyphs} glyphs
           </h3>
+          <button
+            onClick={() => {
+              const newGlyphId = totalGlyphs + 1;
+              const emptyOutlineData: GlyphOutlineData = {
+                glyph_id: newGlyphId,
+                glyph_name: undefined,
+                contours: [],
+                advance_width: unitsPerEm,
+                bounds: undefined,
+              };
+              editorEventBus.emit({
+                filePath,
+                tableName,
+                glyphId: newGlyphId,
+                glyphName: undefined,
+                outlineData: emptyOutlineData,
+                advanceWidth: unitsPerEm,
+                boundsXMin: 0,
+                boundsYMin: 0,
+                boundsXMax: unitsPerEm,
+                boundsYMax: unitsPerEm,
+                unitsPerEm,
+              });
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+          >
+            <Plus size={14} />
+            <span>New Glyph</span>
+          </button>
         </div>
         <div className="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-2">
           {glyphs.map((glyph) => (

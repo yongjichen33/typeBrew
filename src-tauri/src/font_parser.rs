@@ -22,6 +22,7 @@ pub struct FontMetadata {
 struct CachedOutlines {
     outlines: Vec<GlyphOutline>,
     units_per_em: u16,
+    num_glyphs: u32,
 }
 
 // Cache to store parsed font bytes and extracted outlines in memory
@@ -412,12 +413,18 @@ pub fn get_glyph_outlines_binary(
                 .ok()
                 .map(|head| head.units_per_em())
                 .unwrap_or(1000);
+            let num_glyphs = font
+                .maxp()
+                .ok()
+                .map(|maxp| maxp.num_glyphs() as u32)
+                .unwrap_or(outlines.len() as u32);
 
             cache.outlines.lock().unwrap().insert(
                 file_path.to_string(),
                 CachedOutlines {
                     outlines,
                     units_per_em,
+                    num_glyphs,
                 },
             );
         }
@@ -427,14 +434,14 @@ pub fn get_glyph_outlines_binary(
     let outline_cache = cache.outlines.lock().unwrap();
     let cached = outline_cache.get(file_path).unwrap();
 
-    let total = cached.outlines.len();
-    let start = (offset as usize).min(total);
-    let end = ((offset as usize) + (limit as usize)).min(total);
+    let total_outlines = cached.outlines.len();
+    let start = (offset as usize).min(total_outlines);
+    let end = ((offset as usize) + (limit as usize)).min(total_outlines);
     let page = &cached.outlines[start..end];
 
     Ok(encode_glyph_outlines_binary(
         page,
-        total as u32,
+        cached.num_glyphs, // Use actual num_glyphs from maxp
         cached.units_per_em,
     ))
 }
@@ -1329,21 +1336,27 @@ fn rebuild_glyf_with_patch(
     glyph_id: usize,
     new_glyph: &[u8],
     is_long: bool,
+    target_num_glyphs: usize,
 ) -> Result<(Vec<u8>, Vec<u8>), String> {
-    let n = offsets.len().saturating_sub(1);
+    let current_num = offsets.len().saturating_sub(1);
     let mut new_glyf: Vec<u8> = Vec::new();
-    let mut new_offsets: Vec<u32> = Vec::with_capacity(offsets.len());
+    let mut new_offsets: Vec<u32> = Vec::with_capacity(target_num_glyphs + 1);
 
-    for i in 0..n {
+    // Copy existing glyphs and add new one at the right position
+    for i in 0..target_num_glyphs {
         new_offsets.push(new_glyf.len() as u32);
+
         if i == glyph_id {
+            // Insert the new/modified glyph
             new_glyf.extend_from_slice(new_glyph);
-        } else {
+        } else if i < current_num {
+            // Copy existing glyph
             let start = offsets[i] as usize;
             let end = offsets[i + 1] as usize;
             if start < end && end <= glyf.len() {
                 new_glyf.extend_from_slice(&glyf[start..end]);
             }
+            // Empty glyph (start == end) - nothing to copy
         }
         // Pad to 4-byte boundary (required by OpenType spec)
         while new_glyf.len() % 4 != 0 {
@@ -1372,6 +1385,70 @@ fn rebuild_glyf_with_patch(
     };
 
     Ok((new_glyf, new_loca))
+}
+
+/// Extend hmtx table with new entries for added glyphs
+fn extend_hmtx(
+    hmtx_data: &[u8],
+    current_num_glyphs: usize,
+    target_num_glyphs: usize,
+    num_h_metrics: u16,
+    default_advance_width: u16,
+) -> Vec<u8> {
+    // hmtx format: num_h_metrics entries of (advance_width: u16, lsb: i16)
+    // followed by (num_glyphs - num_h_metrics) entries of just (lsb: i16)
+
+    let mut new_hmtx =
+        Vec::with_capacity(hmtx_data.len() + (target_num_glyphs - current_num_glyphs) * 2);
+    new_hmtx.extend_from_slice(hmtx_data);
+
+    let num_h_metrics = num_h_metrics as usize;
+
+    // Get the last advance width from the hmtx table
+    let _last_aw = if num_h_metrics > 0 && hmtx_data.len() >= num_h_metrics * 4 {
+        let offset = (num_h_metrics - 1) * 4;
+        u16::from_be_bytes([hmtx_data[offset], hmtx_data[offset + 1]])
+    } else {
+        default_advance_width
+    };
+
+    // Add new entries
+    for _ in current_num_glyphs..target_num_glyphs {
+        // For glyphs beyond num_h_metrics, only lsb is stored (2 bytes)
+        // They use the last advance_width from the metrics portion
+        new_hmtx.extend(0i16.to_be_bytes()); // lsb = 0
+    }
+
+    new_hmtx
+}
+
+/// Calculate xAvgCharWidth for OS/2 table
+fn calculate_x_avg_char_width(bytes: &[u8], num_glyphs: u16) -> i16 {
+    let font = match RawFontRef::new(bytes) {
+        Ok(f) => f,
+        Err(_) => return 0,
+    };
+
+    let glyph_metrics = font.glyph_metrics(
+        skrifa::instance::Size::unscaled(),
+        skrifa::instance::LocationRef::default(),
+    );
+
+    let mut total_width: i32 = 0;
+    let mut count: i32 = 0;
+
+    for gid in 0..num_glyphs {
+        if let Some(aw) = glyph_metrics.advance_width(GlyphId::from(gid as u32)) {
+            total_width += aw as i32;
+            count += 1;
+        }
+    }
+
+    if count > 0 {
+        (total_width / count) as i16
+    } else {
+        0
+    }
 }
 
 pub fn save_glyph_outline(
@@ -1417,10 +1494,19 @@ pub fn save_glyph_outline(
         .ok_or_else(|| "No glyf table in font".to_string())?;
 
     let offsets = parse_loca_offsets(loca_data.as_bytes(), num_glyphs + 1, is_long);
-    if args.glyph_id as usize >= num_glyphs {
+
+    // Determine if we're adding a new glyph or modifying an existing one
+    let is_new_glyph = args.glyph_id as usize >= num_glyphs;
+    let target_num_glyphs = if is_new_glyph {
+        (args.glyph_id + 1) as usize
+    } else {
+        num_glyphs
+    };
+
+    if target_num_glyphs > 65535 {
         return Err(format!(
-            "glyph_id {} out of range (font has {} glyphs)",
-            args.glyph_id, num_glyphs
+            "glyph_id {} exceeds maximum (65535)",
+            args.glyph_id
         ));
     }
 
@@ -1430,26 +1516,96 @@ pub fn save_glyph_outline(
         args.glyph_id as usize,
         &new_glyph_bytes,
         is_long,
+        target_num_glyphs,
     )?;
 
-    // Rebuild font with patched glyf/loca, copy all other tables
+    // Get hhea for number_of_h_metrics and default advance width
+    let hhea = font.hhea().map_err(|e| format!("hhea: {:?}", e))?;
+    let num_h_metrics = hhea.number_of_h_metrics() as usize;
+    let default_aw = hhea.advance_width_max().to_u16();
+
+    // Extend hmtx if adding new glyphs
+    let new_hmtx = if is_new_glyph {
+        let hmtx_data = font
+            .table_data(Tag::new(b"hmtx"))
+            .ok_or_else(|| "No hmtx table in font".to_string())?;
+        extend_hmtx(
+            hmtx_data.as_bytes(),
+            num_glyphs,
+            target_num_glyphs,
+            num_h_metrics as u16,
+            default_aw,
+        )
+    } else {
+        font.table_data(Tag::new(b"hmtx"))
+            .map(|d| d.as_bytes().to_vec())
+            .unwrap_or_default()
+    };
+
+    // Rebuild font with patched tables
+    use write_fonts::from_obj::ToOwnedTable;
+    use write_fonts::tables::maxp::Maxp;
     use write_fonts::types::Tag as WTag;
     use write_fonts::FontBuilder;
 
-    let new_font_bytes = FontBuilder::new()
-        .add_raw(WTag::new(b"glyf"), new_glyf)
-        .add_raw(WTag::new(b"loca"), new_loca)
-        .copy_missing_tables(font)
-        .build();
+    // Build intermediate font with updated tables
+    let intermediate_bytes = if is_new_glyph {
+        let mut maxp: Maxp = font
+            .maxp()
+            .map_err(|e| format!("maxp: {:?}", e))?
+            .to_owned_table();
+        maxp.num_glyphs = target_num_glyphs as u16;
 
-    fs::write(file_path, &new_font_bytes).map_err(|e| format!("Failed to write font: {}", e))?;
+        FontBuilder::new()
+            .add_raw(WTag::new(b"glyf"), new_glyf)
+            .add_raw(WTag::new(b"loca"), new_loca)
+            .add_raw(WTag::new(b"hmtx"), new_hmtx)
+            .add_table(&maxp)
+            .map_err(|e| format!("Failed to add maxp: {:?}", e))?
+            .copy_missing_tables(font)
+            .build()
+    } else {
+        FontBuilder::new()
+            .add_raw(WTag::new(b"glyf"), new_glyf)
+            .add_raw(WTag::new(b"loca"), new_loca)
+            .add_raw(WTag::new(b"hmtx"), new_hmtx)
+            .copy_missing_tables(font)
+            .build()
+    };
+
+    // Recalculate OS/2 xAvgCharWidth after font rebuild
+    let final_bytes = if is_new_glyph {
+        let new_font = RawFontRef::new(&intermediate_bytes)
+            .map_err(|e| format!("Failed to parse rebuilt font: {:?}", e))?;
+
+        let x_avg = calculate_x_avg_char_width(&intermediate_bytes, target_num_glyphs as u16);
+
+        // Update OS/2 table with new xAvgCharWidth
+        if let Ok(os2) = new_font.os2() {
+            use write_fonts::tables::os2::Os2;
+            let mut new_os2: Os2 = os2.to_owned_table();
+            new_os2.x_avg_char_width = x_avg;
+
+            FontBuilder::new()
+                .add_table(&new_os2)
+                .map_err(|e| format!("Failed to add OS/2: {:?}", e))?
+                .copy_missing_tables(new_font)
+                .build()
+        } else {
+            intermediate_bytes
+        }
+    } else {
+        intermediate_bytes
+    };
+
+    fs::write(file_path, &final_bytes).map_err(|e| format!("Failed to write font: {}", e))?;
 
     // Invalidate caches
     cache
         .fonts
         .lock()
         .unwrap()
-        .insert(file_path.to_string(), new_font_bytes);
+        .insert(file_path.to_string(), final_bytes);
     cache.outlines.lock().unwrap().remove(file_path);
 
     Ok(())

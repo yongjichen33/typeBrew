@@ -759,8 +759,8 @@ export function renderFrame(
       guidePaint.setStrokeWidth(1);
       guidePaint.setColor(rgba(180, 180, 180, 0.5));
       
-      const minY = Math.min(metrics.descender, 0);
-      const maxY = Math.max(metrics.ascender, metrics.xHeight ?? 0, metrics.capHeight ?? 0);
+      const minY = Math.min(metrics.descender, 1);
+      const maxY = Math.max(metrics.ascender, metrics.xHeight ?? 1, metrics.capHeight ?? 1);
       
       for (const m of matchX) {
         const [sx] = toScreen(m.x, 0, vt);

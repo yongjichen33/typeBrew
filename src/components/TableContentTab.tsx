@@ -5,7 +5,7 @@ import { TableContent } from '@/components/TableContent';
 import { parseGlyphOutlines, type Glyph } from '@/lib/glyphParser';
 
 const OUTLINE_TABLES = ['glyf', 'CFF ', 'CFF2'];
-const GLYPH_BATCH_SIZE = 200;
+const GLYPH_BATCH_SIZE = 400;
 
 interface GlyphState {
   glyphs: Glyph[];
