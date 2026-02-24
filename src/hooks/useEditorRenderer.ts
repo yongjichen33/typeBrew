@@ -235,6 +235,7 @@ export function renderFrame(
   showDirection: boolean,
   hoveredPointId: string | null = null,
   hoveredSegmentId: string | null = null,
+  dragPos: { x: number; y: number } | null = null,
 ): void {
   if (!ck || !skCanvas) return;
 
@@ -718,6 +719,84 @@ export function renderFrame(
     }
   }
 
+  // ---- 9b. Smart guides (alignment lines when dragging) ----
+  if (dragPos && selection.pointIds.size > 0) {
+    const ALIGN_TOLERANCE = 2;
+    const allPoints: Array<{ x: number; y: number; id?: string }> = [];
+    
+    for (const path of paths) {
+      for (const cmd of path.commands) {
+        if (cmd.kind === 'M' || cmd.kind === 'L') {
+          allPoints.push(cmd.point);
+        } else if (cmd.kind === 'Q') {
+          allPoints.push(cmd.ctrl);
+          allPoints.push(cmd.point);
+        } else if (cmd.kind === 'C') {
+          allPoints.push(cmd.ctrl1);
+          allPoints.push(cmd.ctrl2);
+          allPoints.push(cmd.point);
+        }
+      }
+    }
+    
+    const matchX: Array<{ x: number; pt: { x: number; y: number; id?: string } }> = [];
+    const matchY: Array<{ y: number; pt: { x: number; y: number; id?: string } }> = [];
+    
+    for (const pt of allPoints) {
+      if (pt.id && selection.pointIds.has(pt.id)) continue;
+      if (Math.abs(pt.x - dragPos.x) < ALIGN_TOLERANCE) {
+        matchX.push({ x: pt.x, pt });
+      }
+      if (Math.abs(pt.y - dragPos.y) < ALIGN_TOLERANCE) {
+        matchY.push({ y: pt.y, pt });
+      }
+    }
+    
+    if (matchX.length > 0 || matchY.length > 0) {
+      const guidePaint = new Paint();
+      guidePaint.setAntiAlias(true);
+      guidePaint.setStyle(ck.PaintStyle.Stroke);
+      guidePaint.setStrokeWidth(1);
+      guidePaint.setColor(rgba(180, 180, 180, 0.5));
+      
+      const minY = Math.min(metrics.descender, 0);
+      const maxY = Math.max(metrics.ascender, metrics.xHeight ?? 0, metrics.capHeight ?? 0);
+      
+      for (const m of matchX) {
+        const [sx] = toScreen(m.x, 0, vt);
+        const [, sy1] = toScreen(0, minY, vt);
+        const [, sy2] = toScreen(0, maxY, vt);
+        skCanvas.drawLine(sx, sy1, sx, sy2, guidePaint);
+      }
+      
+      for (const m of matchY) {
+        const [, sy] = toScreen(0, m.y, vt);
+        const [sx1] = toScreen(0, 0, vt);
+        const [sx2] = toScreen(metrics.advanceWidth, 0, vt);
+        skCanvas.drawLine(sx1, sy, sx2, sy, guidePaint);
+      }
+      
+      guidePaint.delete();
+      
+      // Highlight matching points
+      const matchedPoints = new Set<{ x: number; y: number; id?: string }>();
+      for (const m of matchX) matchedPoints.add(m.pt);
+      for (const m of matchY) matchedPoints.add(m.pt);
+      
+      const highlightPaint = new Paint();
+      highlightPaint.setAntiAlias(true);
+      highlightPaint.setStyle(ck.PaintStyle.Fill);
+      highlightPaint.setColor(rgba(255, 100, 100, 0.7));
+      
+      for (const pt of matchedPoints) {
+        const [sx, sy] = toScreen(pt.x, pt.y, vt);
+        skCanvas.drawCircle(sx, sy, 7, highlightPaint);
+      }
+      
+      highlightPaint.delete();
+    }
+  }
+
   // ---- 10. Draw-mode ghost point (cursor preview) ----
   if (toolMode === 'draw' && mousePos) {
     drawGhostPoint(ck, skCanvas, mousePos.x, mousePos.y, C.ghostPoint);
@@ -764,6 +843,7 @@ export function useEditorRenderer(
     canvasHeight: number;
     hoveredPointId: string | null;
     hoveredSegmentId: string | null;
+    dragPos: { x: number; y: number } | null;
   }>,
 ) {
   const pendingRef = useRef(false);
@@ -798,6 +878,7 @@ export function useEditorRenderer(
         s.showDirection ?? false,
         extra.hoveredPointId ?? null,
         extra.hoveredSegmentId ?? null,
+        extra.dragPos ?? null,
       );
       surfaceRef.current.flush();
     });

@@ -364,6 +364,7 @@ interface InteractionParams {
   onTransformFeedback?: (feedback: { isActive: boolean; deltaX: number; deltaY: number; scaleX: number; scaleY: number; rotation: number }) => void;
   setHoveredPointId: (id: string | null) => void;
   setHoveredSegmentId: (id: string | null) => void;
+  setDragPos: (pos: { x: number; y: number } | null) => void;
 }
 
 /** Returns pointer + wheel event handlers to attach to the canvas element. */
@@ -378,6 +379,7 @@ export function useEditorInteraction({
   onTransformFeedback,
   setHoveredPointId,
   setHoveredSegmentId,
+  setDragPos,
 }: InteractionParams) {
   const dragRef = useRef<{
     type: 'point' | 'canvas' | 'transform';
@@ -626,6 +628,7 @@ export function useEditorInteraction({
         deltas.set(id, { x: deltaX, y: deltaY });
       }
       dispatch({ type: 'MOVE_POINTS_LIVE', deltas });
+      setDragPos({ x: fp.x, y: fp.y });
       redraw();
     } else if (drag.type === 'canvas') {
       const rb: RubberBand = { x1: drag.rbStartX, y1: drag.rbStartY, x2: x, y2: y };
@@ -783,12 +786,14 @@ export function useEditorInteraction({
         onTransformFeedback?.({ isActive: true, deltaX: 0, deltaY: 0, scaleX, scaleY, rotation: 0 });
       }
 
+      setDragPos({ x: center.x, y: center.y });
       dispatch({ type: 'TRANSFORM_POINTS_LIVE', deltas });
       redraw();
     } else {
       onTransformFeedback?.({ isActive: false, deltaX: 0, deltaY: 0, scaleX: 1, scaleY: 1, rotation: 0 });
+      setDragPos(null);
     }
-  }, [stateRef, dispatch, getEventPos, setRubberBand, setMousePos, redraw, onTransformFeedback]);
+  }, [stateRef, dispatch, getEventPos, setRubberBand, setMousePos, redraw, onTransformFeedback, setDragPos]);
 
   const onPointerUp = useCallback((e: PointerEvent) => {
     const { x, y } = getEventPos(e);
@@ -804,6 +809,7 @@ export function useEditorInteraction({
       if (drag.snapshot && (drag.curFx !== drag.startFx || drag.curFy !== drag.startFy)) {
         dispatch({ type: 'COMMIT_MOVE', snapshot: drag.snapshot });
       }
+      setDragPos(null);
     } else if (drag.type === 'canvas') {
       const ids = pointsInRect(drag.rbStartX, drag.rbStartY, x, y, paths, vt);
       if (ids.size > 0) {
@@ -820,9 +826,10 @@ export function useEditorInteraction({
         dispatch({ type: 'COMMIT_TRANSFORM', snapshot: drag.snapshot });
       }
       onTransformFeedback?.({ isActive: false, deltaX: 0, deltaY: 0, scaleX: 1, scaleY: 1, rotation: 0 });
+      setDragPos(null);
       redraw();
     }
-  }, [stateRef, dispatch, getEventPos, setRubberBand, redraw, onTransformFeedback]);
+  }, [stateRef, dispatch, getEventPos, setRubberBand, redraw, onTransformFeedback, setDragPos]);
 
   const onWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
