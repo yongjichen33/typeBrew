@@ -520,6 +520,38 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return state;
     }
 
+    case 'ADD_POINT_ON_SEGMENT': {
+      const { pathId, insertIndex, point } = action;
+      const prev = clonePaths(state.paths);
+      
+      const newPaths = state.paths.map((path) => {
+        if (path.id !== pathId) return path;
+        
+        const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
+        // For closing segments, insertIndex === cmds.length, so insert before Z
+        const actualIndex = (isClosed && insertIndex === path.commands.length)
+          ? path.commands.length - 1
+          : insertIndex;
+        
+        const newCommands = [...path.commands];
+        newCommands.splice(actualIndex, 0, {
+          kind: 'L' as const,
+          point,
+        });
+        
+        return { ...path, commands: newCommands };
+      });
+      
+      return {
+        ...state,
+        paths: newPaths,
+        selection: { pointIds: new Set([point.id]), segmentIds: new Set() },
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        redoStack: [],
+        isDirty: true,
+      };
+    }
+
     case 'CONVERT_SEGMENT_TO_CURVE': {
       const { segmentId, curveType } = action;
       const [pathId, startPointId, endPointId] = segmentId.split(':');

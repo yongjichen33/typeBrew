@@ -4,7 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { SplitPane, Pane } from 'react-split-pane';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Search, ChevronDown, ChevronRight, ArrowUp, ArrowDown, FolderOpen } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { TableList } from '@/components/TableList';
 import type { FontMetadata } from '@/types/font';
 import { openFontDialog } from '@/hooks/useFileUpload';
@@ -147,12 +147,6 @@ export function FontViewer() {
                   icon={allExpanded ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                   title={allExpanded ? "Collapse all" : "Expand all"}
                   onClick={handleToggleExpand}
-                />
-                <ToolbarButton
-                  icon={<FolderOpen size={14} />}
-                  title="Focus on active tab"
-                  onClick={() => {}}
-                  active={activeTab !== null}
                 />
                 <ToolbarDivider />
                 <ToolbarButton
