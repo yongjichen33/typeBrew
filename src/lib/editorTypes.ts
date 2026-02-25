@@ -118,6 +118,7 @@ export type EditorAction =
   | { type: 'CLEAR_SELECTION' }
   | { type: 'SET_TOOL_MODE'; mode: ToolMode }
   | { type: 'SET_VIEW_TRANSFORM'; vt: ViewTransform }
+  | { type: 'CENTER_VIEW'; canvasWidth: number; canvasHeight: number; metrics: FontMetrics }
   | { type: 'UNDO' }
   | { type: 'REDO' }
   | { type: 'MARK_SAVED' }

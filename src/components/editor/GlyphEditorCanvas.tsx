@@ -180,12 +180,23 @@ export function GlyphEditorCanvas({
       if (!entry) return;
       const { width, height } = entry.contentRect;
       if (width > 0 && height > 0) {
-        setCanvasSize({ w: Math.floor(width), h: Math.floor(height) });
+        const newW = Math.floor(width);
+        const newH = Math.floor(height);
+        setCanvasSize({ w: newW, h: newH });
+        // Center the view when canvas resizes (only if metrics are available)
+        if (metricsRef.current) {
+          dispatch({
+            type: 'CENTER_VIEW',
+            canvasWidth: newW,
+            canvasHeight: newH,
+            metrics: metricsRef.current,
+          });
+        }
       }
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [dispatch]);
 
   // Redraw when the tab becomes visible again (GL shows the hidden container)
   useEffect(() => {
@@ -216,14 +227,14 @@ export function GlyphEditorCanvas({
       };
       
       if (cmd.kind === 'M' || cmd.kind === 'L') {
-        addLabel(cmd.point, 'rgb(70,70,70)');
+        addLabel(cmd.point, 'rgb(30,30,30)');
       } else if (cmd.kind === 'Q') {
-        addLabel(cmd.ctrl, 'rgb(100,149,237)');
-        addLabel(cmd.point, 'rgb(70,70,70)');
+        addLabel(cmd.ctrl, 'rgb(65,105,225)');
+        addLabel(cmd.point, 'rgb(30,30,30)');
       } else if (cmd.kind === 'C') {
-        addLabel(cmd.ctrl1, 'rgb(100,149,237)');
-        addLabel(cmd.ctrl2, 'rgb(100,149,237)');
-        addLabel(cmd.point, 'rgb(70,70,70)');
+        addLabel(cmd.ctrl1, 'rgb(65,105,225)');
+        addLabel(cmd.ctrl2, 'rgb(65,105,225)');
+        addLabel(cmd.point, 'rgb(30,30,30)');
       }
       return labels;
     })
@@ -241,10 +252,10 @@ export function GlyphEditorCanvas({
     };
 
     addH(0, 'Baseline', 'rgb(150,150,150)');
-    addH(metrics.ascender, 'Ascender', 'rgb(100,130,200)');
-    addH(metrics.descender, 'Descender', 'rgb(200,100,100)');
-    if (metrics.xHeight) addH(metrics.xHeight, 'x-height', 'rgb(100,200,150)');
-    if (metrics.capHeight) addH(metrics.capHeight, 'Cap height', 'rgb(200,150,100)');
+    addH(metrics.ascender, 'Ascender', 'rgb(120,120,120)');
+    addH(metrics.descender, 'Descender', 'rgb(120,120,120)');
+    if (metrics.xHeight) addH(metrics.xHeight, 'x-height', 'rgb(120,120,120)');
+    if (metrics.capHeight) addH(metrics.capHeight, 'Cap height', 'rgb(120,120,120)');
 
 
     return labels;
@@ -287,8 +298,8 @@ export function GlyphEditorCanvas({
           {coordLabels.map(({ id, label, sx, sy, color }) => (
             <span
               key={id}
-              className="absolute text-[10px] font-mono whitespace-nowrap"
-              style={{ left: sx + 8, top: sy - 6, color }}
+              className="absolute text-xs font-mono whitespace-nowrap px-1 py-0.5 rounded bg-white/80 shadow-sm"
+              style={{ left: sx + 10, top: sy - 8, color }}
             >
               {label}
             </span>

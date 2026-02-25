@@ -822,7 +822,11 @@ export function useEditorInteraction({
       setRubberBand(null);
       redraw();
     } else if (drag.type === 'transform') {
-      if (drag.snapshot) {
+      const deltaX = drag.curFx - drag.startFx;
+      const deltaY = drag.curFy - drag.startFy;
+      const threshold = 0; // 10 units in font space
+      
+      if (drag.snapshot && (Math.abs(deltaX) > threshold || Math.abs(deltaY) > threshold)) {
         dispatch({ type: 'COMMIT_TRANSFORM', snapshot: drag.snapshot });
       }
       onTransformFeedback?.({ isActive: false, deltaX: 0, deltaY: 0, scaleX: 1, scaleY: 1, rotation: 0 });

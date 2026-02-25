@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2, Plus, ArrowUp } from 'lucide-react';
 import type { Glyph } from '@/lib/glyphParser';
 import { editorEventBus } from '@/lib/editorEventBus';
 import type { GlyphOutlineData } from '@/lib/editorTypes';
@@ -61,7 +61,7 @@ function GlyphCell({
   return (
     <div
       onClick={handleClick}
-      className="flex flex-col items-center p-2 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+      className="flex flex-col items-center p-2 border rounded-lg cursor-pointer transition-all duration-150 hover:bg-primary/10 hover:border-primary/50 hover:shadow-md hover:scale-[1.02]"
     >
       <svg viewBox={viewBox} className="w-full h-12 mb-1">
         <path d={glyph.svg_path} fill="currentColor" className="text-foreground" />
@@ -82,8 +82,11 @@ function GlyphCell({
 
 export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLoadMore, isLoadingMore, filePath, tableName }: GlyphGridProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollViewportRef = useRef<HTMLDivElement | null>(null);
   const hasMore = initialGlyphs.length < totalGlyphs;
   const [glyphs, setGlyphs] = useState(initialGlyphs);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
     setGlyphs(initialGlyphs);
@@ -121,62 +124,97 @@ export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLo
     return () => observer.disconnect();
   }, [hasMore, onLoadMore]);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Find the viewport element within the container
+    const viewport = container.querySelector('[data-radix-scroll-area-viewport]') as HTMLDivElement | null;
+    if (!viewport) return;
+
+    scrollViewportRef.current = viewport;
+
+    const handleScroll = () => {
+      setShowScrollTop(viewport.scrollTop > 300);
+    };
+
+    viewport.addEventListener('scroll', handleScroll);
+    return () => viewport.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    if (scrollViewportRef.current) {
+      scrollViewportRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   return (
-    <ScrollArea className="h-full">
-      <div className="p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-muted-foreground">
-            Showing {glyphs.length} of {totalGlyphs} glyphs
-          </h3>
-          <button
-            onClick={() => {
-              const newGlyphId = totalGlyphs;
-              const emptyOutlineData: GlyphOutlineData = {
-                glyph_id: newGlyphId,
-                glyph_name: undefined,
-                contours: [],
-                advance_width: unitsPerEm,
-                bounds: undefined,
-              };
-              editorEventBus.emit({
-                filePath,
-                tableName,
-                glyphId: newGlyphId,
-                glyphName: undefined,
-                outlineData: emptyOutlineData,
-                advanceWidth: unitsPerEm,
-                boundsXMin: 0,
-                boundsYMin: 0,
-                boundsXMax: unitsPerEm,
-                boundsYMax: unitsPerEm,
-                unitsPerEm,
-              });
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
-          >
-            <Plus size={14} />
-            <span>New Glyph</span>
-          </button>
-        </div>
-        <div className="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-2">
-          {glyphs.map((glyph) => (
-            <GlyphCell
-              key={glyph.glyph_id}
-              glyph={glyph}
-              unitsPerEm={unitsPerEm}
-              filePath={filePath}
-              tableName={tableName}
-            />
-          ))}
-        </div>
-        {hasMore && (
-          <div ref={sentinelRef} className="flex justify-center py-6">
-            {isLoadingMore && (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            )}
+    <div ref={containerRef} className="relative h-full">
+      <ScrollArea className="h-full">
+        <div className="p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Showing {glyphs.length} of {totalGlyphs} glyphs
+            </h3>
+            <button
+              onClick={() => {
+                const newGlyphId = totalGlyphs;
+                const emptyOutlineData: GlyphOutlineData = {
+                  glyph_id: newGlyphId,
+                  glyph_name: undefined,
+                  contours: [],
+                  advance_width: unitsPerEm,
+                  bounds: undefined,
+                };
+                editorEventBus.emit({
+                  filePath,
+                  tableName,
+                  glyphId: newGlyphId,
+                  glyphName: undefined,
+                  outlineData: emptyOutlineData,
+                  advanceWidth: unitsPerEm,
+                  boundsXMin: 0,
+                  boundsYMin: 0,
+                  boundsXMax: unitsPerEm,
+                  boundsYMax: unitsPerEm,
+                  unitsPerEm,
+                });
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+            >
+              <Plus size={14} />
+              <span>New Glyph</span>
+            </button>
           </div>
-        )}
-      </div>
-    </ScrollArea>
+          <div className="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-2">
+            {glyphs.map((glyph) => (
+              <GlyphCell
+                key={glyph.glyph_id}
+                glyph={glyph}
+                unitsPerEm={unitsPerEm}
+                filePath={filePath}
+                tableName={tableName}
+              />
+            ))}
+          </div>
+          {hasMore && (
+            <div ref={sentinelRef} className="flex justify-center py-6">
+              {isLoadingMore && (
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              )}
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className="absolute bottom-4 right-4 w-10 h-10 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center z-50"
+          aria-label="Scroll to top"
+        >
+          <ArrowUp size={20} />
+        </button>
+      )}
+    </div>
   );
 }

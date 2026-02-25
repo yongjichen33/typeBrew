@@ -2,9 +2,6 @@ import {
   PenTool,
   MousePointer2,
   Scissors,
-  Scale,
-  RotateCcw,
-  FlipHorizontal,
   Hand,
   Undo2,
   Redo2,
@@ -111,25 +108,19 @@ export function EditorToolbar({
 
       <ToolDivider />
 
-      {/* Transform tools */}
+      {/* View toggles */}
       <ToolGroup>
         <ToolButton
-          icon={<Scale size={15} />}
-          label="Scale"
-          active={toolMode === 'scale'}
-          onClick={() => onSetMode('scale')}
+          icon={<Navigation size={15} />}
+          label="Show direction"
+          active={showDirection}
+          onClick={() => onSetShowDirection(!showDirection)}
         />
         <ToolButton
-          icon={<RotateCcw size={15} />}
-          label="Rotate (R)"
-          active={toolMode === 'rotate'}
-          onClick={() => onSetMode('rotate')}
-        />
-        <ToolButton
-          icon={<FlipHorizontal size={15} />}
-          label="Skew"
-          active={toolMode === 'skew'}
-          onClick={() => onSetMode('skew')}
+          icon={<Hash size={15} />}
+          label="Show coordinates"
+          active={showCoordinates}
+          onClick={() => onSetShowCoordinates(!showCoordinates)}
         />
       </ToolGroup>
 
@@ -164,24 +155,6 @@ export function EditorToolbar({
       </ToolGroup>
 
       <div className="flex-1" />
-
-      {/* View toggles */}
-      <ToolGroup>
-        <ToolButton
-          icon={<Navigation size={15} />}
-          label="Show direction"
-          active={showDirection}
-          onClick={() => onSetShowDirection(!showDirection)}
-        />
-        <ToolButton
-          icon={<Hash size={15} />}
-          label="Show coordinates"
-          active={showCoordinates}
-          onClick={() => onSetShowCoordinates(!showCoordinates)}
-        />
-      </ToolGroup>
-
-      <ToolDivider />
 
       {/* Save */}
       <button

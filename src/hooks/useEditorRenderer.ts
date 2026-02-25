@@ -12,11 +12,10 @@ const C = {
   fill:            rgba(30, 30, 30, 0.12),
   outline:         rgba(30, 30, 30, 0.85),
   baseline:        rgba(150, 150, 150),
-  ascender:        rgba(100, 130, 200, 0.8),
-  descender:       rgba(200, 100, 100, 0.8),
-  xHeight:         rgba(100, 200, 150, 0.8),
-  capHeight:       rgba(200, 150, 100, 0.8),
-  advance:         rgba(100, 180, 100, 0.8),
+  metricLine:      rgba(120, 120, 120, 0.6),
+  rulerBg:         rgba(248, 248, 248),
+  rulerTick:       rgba(150, 150, 150),
+  rulerText:       rgba(80, 80, 80),
   bbox:            rgba(180, 180, 180),
   handle:          rgba(160, 160, 160),
   onCurveFill:     rgba(255, 255, 255),
@@ -37,6 +36,8 @@ const C = {
   transformHandle: rgba(255, 255, 255),
   transformHandleStroke: rgba(0, 112, 243),
 };
+
+const RULER_WIDTH = 28;
 
 // ---------- coordinate transform ----------
 function toScreen(
@@ -272,36 +273,16 @@ export function renderFrame(
   const maxY = Math.max(metrics.ascender, metrics.xHeight ?? 0, metrics.capHeight ?? 0);
 
   drawHLine(0, C.baseline, 0, metrics.advanceWidth);
-  drawHLine(metrics.ascender, C.ascender, 0, metrics.advanceWidth);
-  drawHLine(metrics.descender, C.descender, 0, metrics.advanceWidth);
-  if (metrics.xHeight) drawHLine(metrics.xHeight, C.xHeight, 0, metrics.advanceWidth);
-  if (metrics.capHeight) drawHLine(metrics.capHeight, C.capHeight, 0, metrics.advanceWidth);
-  drawVLine(0, C.baseline, minY, maxY);
-  drawVLine(metrics.advanceWidth, C.advance, minY, maxY);
+  drawHLine(metrics.ascender, C.metricLine, 0, metrics.advanceWidth);
+  drawHLine(metrics.descender, C.metricLine, 0, metrics.advanceWidth);
+  if (metrics.xHeight) drawHLine(metrics.xHeight, C.metricLine, 0, metrics.advanceWidth);
+  if (metrics.capHeight) drawHLine(metrics.capHeight, C.metricLine, 0, metrics.advanceWidth);
+  drawVLine(0, C.metricLine, minY, maxY);
+  drawVLine(metrics.advanceWidth, C.metricLine, minY, maxY);
   metricPaint.delete();
 
-  // ---- 2. Bounding box ----
-  if (metrics.xMin !== metrics.xMax && metrics.yMin !== metrics.yMax) {
-    const [x1, y1] = toScreen(metrics.xMin, metrics.yMax, vt);
-    const [x2, y2] = toScreen(metrics.xMax, metrics.yMin, vt);
-    const bboxPaint = new Paint();
-    bboxPaint.setAntiAlias(true);
-    bboxPaint.setStyle(ck.PaintStyle.Stroke);
-    bboxPaint.setStrokeWidth(0.5);
-    bboxPaint.setColor(C.bbox);
-    skCanvas.drawRect(ck.LTRBRect(x1, y1, x2, y2), bboxPaint);
-    bboxPaint.delete();
-  }
-
-  if (paths.length === 0) {
-    // Still draw draw-mode UI even with no path data
-    if (toolMode === 'draw' && mousePos) {
-      drawGhostPoint(ck, skCanvas, mousePos.x, mousePos.y, C.ghostPoint);
-    }
-    return;
-  }
-
-  // ---- 3. Glyph fill ----
+  // ---- 2. Glyph fill and stroke (skip if no paths) ----
+  if (paths.length > 0) {
   const skPath = new ck.Path();
   for (const path of paths) {
     for (const cmd of path.commands) {
@@ -719,8 +700,8 @@ export function renderFrame(
     }
   }
 
-  // ---- 9b. Smart guides (alignment lines when dragging) ----
-  if (dragPos && selection.pointIds.size > 0) {
+  // ---- 9b. Smart guides (alignment lines) ----
+  if (selection.pointIds.size > 0) {
     const ALIGN_TOLERANCE = 2;
     const allPoints: Array<{ x: number; y: number; id?: string }> = [];
     
@@ -739,16 +720,34 @@ export function renderFrame(
       }
     }
     
+    // Get positions of selected points (use dragPos if dragging, otherwise use original positions)
+    const selectedPositions: Array<{ x: number; y: number }> = [];
+    if (dragPos && selection.pointIds.size === 1) {
+      selectedPositions.push(dragPos);
+    } else {
+      for (const pt of allPoints) {
+        if (pt.id && selection.pointIds.has(pt.id)) {
+          selectedPositions.push({ x: pt.x, y: pt.y });
+        }
+      }
+    }
+    
     const matchX: Array<{ x: number; pt: { x: number; y: number; id?: string } }> = [];
     const matchY: Array<{ y: number; pt: { x: number; y: number; id?: string } }> = [];
     
-    for (const pt of allPoints) {
-      if (pt.id && selection.pointIds.has(pt.id)) continue;
-      if (Math.abs(pt.x - dragPos.x) < ALIGN_TOLERANCE) {
-        matchX.push({ x: pt.x, pt });
-      }
-      if (Math.abs(pt.y - dragPos.y) < ALIGN_TOLERANCE) {
-        matchY.push({ y: pt.y, pt });
+    for (const selPos of selectedPositions) {
+      for (const pt of allPoints) {
+        if (pt.id && selection.pointIds.has(pt.id)) continue;
+        if (Math.abs(pt.x - selPos.x) < ALIGN_TOLERANCE) {
+          if (!matchX.some(m => Math.abs(m.x - pt.x) < 0.01)) {
+            matchX.push({ x: pt.x, pt });
+          }
+        }
+        if (Math.abs(pt.y - selPos.y) < ALIGN_TOLERANCE) {
+          if (!matchY.some(m => Math.abs(m.y - pt.y) < 0.01)) {
+            matchY.push({ y: pt.y, pt });
+          }
+        }
       }
     }
     
@@ -756,24 +755,17 @@ export function renderFrame(
       const guidePaint = new Paint();
       guidePaint.setAntiAlias(true);
       guidePaint.setStyle(ck.PaintStyle.Stroke);
-      guidePaint.setStrokeWidth(1);
-      guidePaint.setColor(rgba(180, 180, 180, 0.5));
-      
-      const minY = Math.min(metrics.descender, 1);
-      const maxY = Math.max(metrics.ascender, metrics.xHeight ?? 1, metrics.capHeight ?? 1);
+      guidePaint.setStrokeWidth(1.5);
+      guidePaint.setColor(rgba(0, 200, 255, 0.9));
       
       for (const m of matchX) {
         const [sx] = toScreen(m.x, 0, vt);
-        const [, sy1] = toScreen(0, minY, vt);
-        const [, sy2] = toScreen(0, maxY, vt);
-        skCanvas.drawLine(sx, sy1, sx, sy2, guidePaint);
+        skCanvas.drawLine(sx, 0, sx, canvasHeight, guidePaint);
       }
       
       for (const m of matchY) {
         const [, sy] = toScreen(0, m.y, vt);
-        const [sx1] = toScreen(0, 0, vt);
-        const [sx2] = toScreen(metrics.advanceWidth, 0, vt);
-        skCanvas.drawLine(sx1, sy, sx2, sy, guidePaint);
+        skCanvas.drawLine(0, sy, canvasWidth, sy, guidePaint);
       }
       
       guidePaint.delete();
@@ -786,21 +778,114 @@ export function renderFrame(
       const highlightPaint = new Paint();
       highlightPaint.setAntiAlias(true);
       highlightPaint.setStyle(ck.PaintStyle.Fill);
-      highlightPaint.setColor(rgba(255, 100, 100, 0.7));
+      highlightPaint.setColor(rgba(0, 200, 255, 0.6));
       
       for (const pt of matchedPoints) {
         const [sx, sy] = toScreen(pt.x, pt.y, vt);
-        skCanvas.drawCircle(sx, sy, 7, highlightPaint);
+        skCanvas.drawCircle(sx, sy, 8, highlightPaint);
       }
       
       highlightPaint.delete();
     }
   }
+  } // end if (paths.length > 0)
 
   // ---- 10. Draw-mode ghost point (cursor preview) ----
   if (toolMode === 'draw' && mousePos) {
     drawGhostPoint(ck, skCanvas, mousePos.x, mousePos.y, C.ghostPoint);
   }
+
+  // ---- 11. Rulers (drawn last to appear on top) ----
+  const rulerBgPaint = new Paint();
+  rulerBgPaint.setAntiAlias(true);
+  rulerBgPaint.setStyle(ck.PaintStyle.Fill);
+  rulerBgPaint.setColor(C.rulerBg);
+
+  // Horizontal ruler background (top)
+  skCanvas.drawRect(ck.LTRBRect(0, 0, canvasWidth, RULER_WIDTH), rulerBgPaint);
+  // Vertical ruler background (left)
+  skCanvas.drawRect(ck.LTRBRect(0, 0, RULER_WIDTH, canvasHeight), rulerBgPaint);
+
+  const rulerTickPaint = new Paint();
+  rulerTickPaint.setAntiAlias(true);
+  rulerTickPaint.setStyle(ck.PaintStyle.Stroke);
+  rulerTickPaint.setStrokeWidth(1.5);
+  rulerTickPaint.setColor(C.rulerTick);
+
+  const textFont = new ck.Font(null, 8);
+  const textPaint = new Paint();
+  textPaint.setAntiAlias(true);
+  textPaint.setStyle(ck.PaintStyle.Fill);
+  textPaint.setColor(C.rulerText);
+
+  // Determine nice tick interval based on scale
+  const minTickSpacing = 40;
+  const rawInterval = minTickSpacing / vt.scale;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawInterval)));
+  const normalized = rawInterval / magnitude;
+  let tickInterval: number;
+  if (normalized < 2) tickInterval = magnitude;
+  else if (normalized < 5) tickInterval = 2 * magnitude;
+  else tickInterval = 5 * magnitude;
+
+  // Horizontal ruler (X axis)
+  const minFontX = (RULER_WIDTH - vt.originX) / vt.scale;
+  const maxFontX = (canvasWidth - vt.originX) / vt.scale;
+  const startX = Math.floor(minFontX / tickInterval) * tickInterval;
+  const endX = Math.ceil(maxFontX / tickInterval) * tickInterval;
+  for (let fontX = startX; fontX <= endX; fontX += tickInterval) {
+    const [sx] = toScreen(fontX, 0, vt);
+    if (sx < RULER_WIDTH || sx > canvasWidth) continue;
+    
+    skCanvas.drawLine(sx, RULER_WIDTH - 10, sx, RULER_WIDTH, rulerTickPaint);
+    
+    const label = Math.round(fontX).toString();
+    const textBlob = ck.TextBlob.MakeFromText(label, textFont);
+    if (textBlob) {
+      skCanvas.drawTextBlob(textBlob, sx + 2, RULER_WIDTH - 12, textPaint);
+      textBlob.delete();
+    }
+
+    const halfInterval = tickInterval / 2;
+    const [minorSx] = toScreen(fontX + halfInterval, 0, vt);
+    if (minorSx > RULER_WIDTH && minorSx < canvasWidth) {
+      skCanvas.drawLine(minorSx, RULER_WIDTH - 5, minorSx, RULER_WIDTH, rulerTickPaint);
+    }
+  }
+
+  // Vertical ruler (Y axis)
+  const minFontY = (vt.originY - canvasHeight) / vt.scale;
+  const maxFontY = (vt.originY - RULER_WIDTH) / vt.scale;
+  const startY = Math.floor(minFontY / tickInterval) * tickInterval;
+  const endY = Math.ceil(maxFontY / tickInterval) * tickInterval;
+  for (let fontY = startY; fontY <= endY; fontY += tickInterval) {
+    const [, sy] = toScreen(0, fontY, vt);
+    if (sy < RULER_WIDTH || sy > canvasHeight) continue;
+    
+    skCanvas.drawLine(RULER_WIDTH - 10, sy, RULER_WIDTH, sy, rulerTickPaint);
+    
+    const label = Math.round(fontY).toString();
+    const textBlob = ck.TextBlob.MakeFromText(label, textFont);
+    if (textBlob) {
+      skCanvas.drawTextBlob(textBlob, 2, sy + 3, textPaint);
+      textBlob.delete();
+    }
+
+    const halfInterval = tickInterval / 2;
+    const [, minorSy] = toScreen(0, fontY + halfInterval, vt);
+    if (minorSy > RULER_WIDTH && minorSy < canvasHeight) {
+      skCanvas.drawLine(RULER_WIDTH - 5, minorSy, RULER_WIDTH, minorSy, rulerTickPaint);
+    }
+  }
+
+  // Ruler border lines
+  skCanvas.drawLine(0, RULER_WIDTH, canvasWidth, RULER_WIDTH, rulerTickPaint);
+  skCanvas.drawLine(RULER_WIDTH, 0, RULER_WIDTH, canvasHeight, rulerTickPaint);
+
+  rulerBgPaint.delete();
+  rulerTickPaint.delete();
+  textPaint.delete();
+  textFont.delete();
 }
 
 function drawGhostPoint(

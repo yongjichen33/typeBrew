@@ -8,6 +8,7 @@ import type {
   PathCommand,
   ClipboardData,
   Selection,
+  FontMetrics,
 } from '@/lib/editorTypes';
 import { clonePaths } from '@/lib/svgPathParser';
 
@@ -84,7 +85,7 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
       } else if (cmd.kind === 'L' && lastOnCurve) {
         const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
         const shouldCopySegment = selection.segmentIds.has(segmentId) ||
-          selection.pointIds.has(cmd.point.id);
+          (selection.pointIds.has(lastOnCurve.id) && selection.pointIds.has(cmd.point.id));
         
         if (shouldCopySegment) {
           clipboard.segments.push({
@@ -100,8 +101,7 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
       } else if (cmd.kind === 'Q' && lastOnCurve) {
         const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
         const shouldCopySegment = selection.segmentIds.has(segmentId) ||
-          selection.pointIds.has(cmd.point.id) ||
-          selection.pointIds.has(cmd.ctrl.id);
+          (selection.pointIds.has(lastOnCurve.id) && selection.pointIds.has(cmd.point.id));
         
         if (shouldCopySegment) {
           clipboard.segments.push({
@@ -118,9 +118,7 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
       } else if (cmd.kind === 'C' && lastOnCurve) {
         const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
         const shouldCopySegment = selection.segmentIds.has(segmentId) ||
-          selection.pointIds.has(cmd.point.id) ||
-          selection.pointIds.has(cmd.ctrl1.id) ||
-          selection.pointIds.has(cmd.ctrl2.id);
+          (selection.pointIds.has(lastOnCurve.id) && selection.pointIds.has(cmd.point.id));
         
         if (shouldCopySegment) {
           clipboard.segments.push({
@@ -142,7 +140,7 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
     if (isClosed && lastOnCurve && firstOnCurve && lastOnCurve.id !== firstOnCurve.id) {
       const segmentId = `${path.id}:${lastOnCurve.id}:${firstOnCurve.id}`;
       const shouldCopySegment = selection.segmentIds.has(segmentId) ||
-        selection.pointIds.has(firstOnCurve.id);
+        (selection.pointIds.has(lastOnCurve.id) && selection.pointIds.has(firstOnCurve.id));
       
       if (shouldCopySegment) {
         clipboard.segments.push({
@@ -372,6 +370,34 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
 
     case 'SET_VIEW_TRANSFORM': {
       return { ...state, viewTransform: action.vt };
+    }
+
+    case 'CENTER_VIEW': {
+      const { canvasWidth, canvasHeight } = action;
+      const metrics: FontMetrics = action.metrics;
+      const glyphH = (metrics.yMax - metrics.yMin) || metrics.unitsPerEm;
+      const glyphW = (metrics.xMax - metrics.xMin) || metrics.advanceWidth || metrics.unitsPerEm;
+      
+      if (glyphW === 0 || glyphH === 0) {
+        return { ...state, viewTransform: { scale: 1, originX: canvasWidth / 2, originY: canvasHeight / 2 } };
+      }
+      
+      const padding = 0.15;
+      const scale = Math.min(
+        (canvasWidth * (1 - 2 * padding)) / glyphW,
+        (canvasHeight * (1 - 2 * padding)) / glyphH,
+      );
+      const centerFontX = (metrics.xMin + metrics.xMax) / 2;
+      const centerFontY = (metrics.yMin + metrics.yMax) / 2;
+      
+      return {
+        ...state,
+        viewTransform: {
+          scale,
+          originX: canvasWidth / 2 - centerFontX * scale,
+          originY: canvasHeight / 2 + centerFontY * scale,
+        },
+      };
     }
 
     case 'UNDO': {
