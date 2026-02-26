@@ -241,6 +241,7 @@ export function renderFrame(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   imageCache: Map<string, any> = new Map(),
   inactiveDrawingPaths: EditablePath[] = [],
+  focusedLayerId: string = '',
 ): void {
   if (!ck || !skCanvas) return;
 
@@ -862,6 +863,82 @@ export function renderFrame(
   }
   } // end if (paths.length > 0)
 
+  // ---- 9c. Image transform box (when focused layer is image) ----
+  if (focusedLayerId) {
+    const focusedLayer = layers.find(l => l.id === focusedLayerId);
+    if (focusedLayer?.type === 'image' && focusedLayer.visible) {
+      const il = focusedLayer as ImageLayer;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const img = (imageCache as Map<string, any>).get(il.id);
+      if (img) {
+        const [cx, cy] = toScreen(il.offsetX, il.offsetY, vt);
+        const halfW = img.width() * il.scaleX * vt.scale / 2;
+        const halfH = img.height() * il.scaleY * vt.scale / 2;
+        const angleRad = il.rotation * Math.PI / 180;
+        const cos = Math.cos(angleRad);
+        const sin = Math.sin(angleRad);
+        const rot = (lx: number, ly: number): [number, number] => [
+          cx + lx * cos - ly * sin,
+          cy + lx * sin + ly * cos,
+        ];
+
+        // Rotated bounding box
+        const [tlX, tlY] = rot(-halfW, -halfH);
+        const [trX, trY] = rot(halfW, -halfH);
+        const [brX, brY] = rot(halfW, halfH);
+        const [blX, blY] = rot(-halfW, halfH);
+        const imgBoxPath = new ck.Path();
+        imgBoxPath.moveTo(tlX, tlY);
+        imgBoxPath.lineTo(trX, trY);
+        imgBoxPath.lineTo(brX, brY);
+        imgBoxPath.lineTo(blX, blY);
+        imgBoxPath.close();
+        const imgBoxPaint = new Paint();
+        imgBoxPaint.setAntiAlias(true);
+        imgBoxPaint.setStyle(ck.PaintStyle.Stroke);
+        imgBoxPaint.setStrokeWidth(1.5);
+        imgBoxPaint.setColor(C.transformBox);
+        skCanvas.drawPath(imgBoxPath, imgBoxPaint);
+        imgBoxPaint.delete();
+        imgBoxPath.delete();
+
+        // 8 resize handles (squares)
+        const HANDLE_HALF = 4;
+        const imgHFill = new Paint();
+        imgHFill.setAntiAlias(true);
+        imgHFill.setStyle(ck.PaintStyle.Fill);
+        imgHFill.setColor(C.transformHandle);
+        const imgHStroke = new Paint();
+        imgHStroke.setAntiAlias(true);
+        imgHStroke.setStyle(ck.PaintStyle.Stroke);
+        imgHStroke.setStrokeWidth(1.5);
+        imgHStroke.setColor(C.transformHandleStroke);
+
+        const handlePositions: [number, number][] = [
+          [-halfW, -halfH], [halfW, -halfH], [-halfW, halfH], [halfW, halfH],
+          [0, -halfH], [0, halfH], [-halfW, 0], [halfW, 0],
+        ];
+        for (const [lx, ly] of handlePositions) {
+          const [hx, hy] = rot(lx, ly);
+          const r = ck.LTRBRect(hx - HANDLE_HALF, hy - HANDLE_HALF, hx + HANDLE_HALF, hy + HANDLE_HALF);
+          skCanvas.drawRect(r, imgHFill);
+          skCanvas.drawRect(r, imgHStroke);
+        }
+
+        // Rotation handle above top-center
+        const ROTATION_OFFSET = 24;
+        const [tmX, tmY] = rot(0, -halfH);
+        const [rotHX, rotHY] = rot(0, -(halfH + ROTATION_OFFSET));
+        skCanvas.drawLine(tmX, tmY, rotHX, rotHY, imgHStroke);
+        skCanvas.drawCircle(rotHX, rotHY, 5, imgHFill);
+        skCanvas.drawCircle(rotHX, rotHY, 5, imgHStroke);
+
+        imgHFill.delete();
+        imgHStroke.delete();
+      }
+    }
+  }
+
   // ---- 10. Draw-mode ghost point (cursor preview) ----
   if (toolMode === 'draw' && mousePos) {
     drawGhostPoint(ck, skCanvas, mousePos.x, mousePos.y, C.ghostPoint);
@@ -992,6 +1069,7 @@ export function useEditorRenderer(
     isDrawingPath: boolean;
     layers: Layer[];
     activeLayerId: string;
+    focusedLayerId: string;
   }>,
   metricsRef: React.MutableRefObject<FontMetrics | null>,
   extraRef: React.MutableRefObject<{
@@ -1046,6 +1124,7 @@ export function useEditorRenderer(
         s.layers ?? [],
         imageCacheRef.current,
         inactiveDrawingPaths,
+        s.focusedLayerId ?? '',
       );
       surfaceRef.current.flush();
     });

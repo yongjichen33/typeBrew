@@ -36,6 +36,7 @@ interface GlyphEditorCanvasProps {
     isDrawingPath: boolean;
     layers: Layer[];
     activeLayerId: string;
+    focusedLayerId: string;
   }>;
   onTransformFeedback?: (feedback: TransformFeedback) => void;
 }
@@ -244,7 +245,7 @@ export function GlyphEditorCanvas({
   const getCanvasRect = () => canvasRef.current?.getBoundingClientRect() ?? null;
 
   const { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave, getCursor } =
-    useEditorInteraction({ stateRef, dispatch, setRubberBand, setMousePos, setPendingOffCurve, redraw, getCanvasRect, onTransformFeedback, setHoveredPointId, setHoveredSegmentId, setDragPos });
+    useEditorInteraction({ stateRef, dispatch, setRubberBand, setMousePos, setPendingOffCurve, redraw, getCanvasRect, onTransformFeedback, setHoveredPointId, setHoveredSegmentId, setDragPos, imageCacheRef });
 
   const coordLabels = showCoordinates ? paths.flatMap((path) =>
     path.commands.flatMap((cmd) => {

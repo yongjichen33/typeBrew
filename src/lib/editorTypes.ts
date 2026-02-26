@@ -127,6 +127,7 @@ export interface EditorState {
   isDrawingPath: boolean;
   layers: Layer[];
   activeLayerId: string;
+  focusedLayerId: string;
 }
 
 // ---- Actions ----
@@ -170,7 +171,8 @@ export type EditorAction =
   | { type: 'SET_LAYER_VISIBLE'; layerId: string; visible: boolean }
   | { type: 'UPDATE_IMAGE_LAYER'; layerId: string; updates: Partial<Omit<ImageLayer, 'id' | 'type'>> }
   | { type: 'RENAME_LAYER'; layerId: string; name: string }
-  | { type: 'SET_ACTIVE_LAYER'; layerId: string };
+  | { type: 'SET_ACTIVE_LAYER'; layerId: string }
+  | { type: 'SET_FOCUSED_LAYER'; layerId: string };
 
 // ---- Context value ----
 

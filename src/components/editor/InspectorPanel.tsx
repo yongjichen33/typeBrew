@@ -13,6 +13,7 @@ interface InspectorPanelProps {
   transformFeedback: TransformFeedback;
   layers: Layer[];
   activeLayerId: string;
+  focusedLayerId: string;
 }
 
 interface Segment {
@@ -263,9 +264,10 @@ export function InspectorPanel({
   dispatch,
   transformFeedback,
   layers,
-  activeLayerId,
+  focusedLayerId,
 }: InspectorPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [renamingLayerId, setRenamingLayerId] = useState<string | null>(null);
 
   const handleAddImageLayer = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -295,7 +297,7 @@ export function InspectorPanel({
     });
   };
 
-  const activeImageLayer = layers.find(l => l.id === activeLayerId && l.type === 'image') as ImageLayer | undefined;
+  const activeImageLayer = layers.find(l => l.id === focusedLayerId && l.type === 'image') as ImageLayer | undefined;
   const selectedPoints = getSelectedPoints(paths, selection);
   const selectedPathIds = getSelectedPathIds(paths, selection);
   const selectedPath = selectedPathIds.length === 1 
@@ -492,10 +494,11 @@ export function InspectorPanel({
               <div
                 className={[
                   'flex items-center gap-1 px-1.5 py-1 rounded cursor-pointer text-xs',
-                  layer.id === activeLayerId ? 'bg-primary/10 text-primary' : 'hover:bg-muted',
+                  layer.id === focusedLayerId ? 'bg-primary/10 text-primary' : 'hover:bg-muted',
                 ].join(' ')}
                 onClick={() => {
                   if (layer.type === 'drawing') dispatch({ type: 'SET_ACTIVE_LAYER', layerId: layer.id });
+                  else dispatch({ type: 'SET_FOCUSED_LAYER', layerId: layer.id });
                 }}
               >
                 <button
@@ -508,7 +511,28 @@ export function InspectorPanel({
                 <span className="flex-shrink-0 text-muted-foreground">
                   {layer.type === 'drawing' ? <PenLine size={12} /> : <ImageIcon size={12} />}
                 </span>
-                <span className="flex-1 truncate">{layer.name}</span>
+                {renamingLayerId === layer.id ? (
+                  <input
+                    type="text"
+                    defaultValue={layer.name}
+                    autoFocus
+                    className="flex-1 px-0.5 py-0 text-xs bg-background border-b border-primary outline-none min-w-0"
+                    onBlur={(e) => { dispatch({ type: 'RENAME_LAYER', layerId: layer.id, name: e.target.value }); setRenamingLayerId(null); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { dispatch({ type: 'RENAME_LAYER', layerId: layer.id, name: e.currentTarget.value }); setRenamingLayerId(null); }
+                      if (e.key === 'Escape') setRenamingLayerId(null);
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <span
+                    className="flex-1 truncate"
+                    onDoubleClick={() => { if (layer.id !== 'outline') setRenamingLayerId(layer.id); }}
+                  >
+                    {layer.name}
+                  </span>
+                )}
                 {layer.id !== 'outline' && (
                   <button
                     className="flex-shrink-0 text-muted-foreground hover:text-destructive"
@@ -520,18 +544,9 @@ export function InspectorPanel({
                 )}
               </div>
 
-              {/* Image layer settings (shown when active) */}
-              {layer.id === activeLayerId && layer.type === 'image' && activeImageLayer && (
+              {/* Image layer settings (shown when focused) */}
+              {layer.id === focusedLayerId && layer.type === 'image' && activeImageLayer && (
                 <div className="pl-2 mt-1 space-y-0.5 border-l-2 border-primary/20 ml-2">
-                  <div className="flex items-center gap-1 py-0.5">
-                    <span className="text-[10px] text-muted-foreground flex-1">Name</span>
-                    <input
-                      type="text"
-                      value={activeImageLayer.name}
-                      onChange={(e) => dispatch({ type: 'RENAME_LAYER', layerId: layer.id, name: e.target.value })}
-                      className="w-24 px-1 py-0.5 text-[10px] font-mono bg-background border rounded"
-                    />
-                  </div>
                   <InputField
                     label="Opacity"
                     value={Math.round(activeImageLayer.opacity * 100)}
@@ -542,30 +557,30 @@ export function InspectorPanel({
                   />
                   <InputField
                     label="Scale X"
-                    value={activeImageLayer.scaleX}
+                    value={parseFloat(activeImageLayer.scaleX.toFixed(3))}
                     onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { scaleX: v } })}
                     step={0.1}
                   />
                   <InputField
                     label="Scale Y"
-                    value={activeImageLayer.scaleY}
+                    value={parseFloat(activeImageLayer.scaleY.toFixed(3))}
                     onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { scaleY: v } })}
                     step={0.1}
                   />
                   <InputField
                     label="Rotation"
-                    value={activeImageLayer.rotation}
+                    value={parseFloat(activeImageLayer.rotation.toFixed(1))}
                     onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { rotation: v } })}
                     unit="°"
                   />
                   <InputField
                     label="Offset X"
-                    value={activeImageLayer.offsetX}
+                    value={Math.round(activeImageLayer.offsetX)}
                     onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { offsetX: v } })}
                   />
                   <InputField
                     label="Offset Y"
-                    value={activeImageLayer.offsetY}
+                    value={Math.round(activeImageLayer.offsetY)}
                     onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { offsetY: v } })}
                   />
                 </div>

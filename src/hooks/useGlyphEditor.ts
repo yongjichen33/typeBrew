@@ -985,7 +985,6 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case 'ADD_DRAWING_LAYER': {
-      // Save active layer's working paths back into the layers array
       const updatedLayers = state.layers.map(l =>
         l.id === state.activeLayerId ? { ...l, paths: state.paths } : l,
       );
@@ -993,6 +992,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         layers: [...updatedLayers, action.layer],
         activeLayerId: action.layer.id,
+        focusedLayerId: action.layer.id,
         paths: [],
         selection: { pointIds: new Set(), segmentIds: new Set() },
         undoStack: [], redoStack: [],
@@ -1001,13 +1001,12 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case 'ADD_IMAGE_LAYER':
-      return { ...state, layers: [...state.layers, action.layer] };
+      return { ...state, layers: [...state.layers, action.layer], focusedLayerId: action.layer.id };
 
     case 'SET_ACTIVE_LAYER': {
-      if (action.layerId === state.activeLayerId) return state;
+      if (action.layerId === state.activeLayerId) return { ...state, focusedLayerId: action.layerId };
       const target = state.layers.find(l => l.id === action.layerId);
       if (!target || target.type !== 'drawing') return state;
-      // Save current working paths back, load target layer's paths
       const updatedLayers = state.layers.map(l =>
         l.id === state.activeLayerId ? { ...l, paths: state.paths } : l,
       );
@@ -1015,6 +1014,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         layers: updatedLayers,
         activeLayerId: action.layerId,
+        focusedLayerId: action.layerId,
         paths: (target as DrawingLayer).paths,
         selection: { pointIds: new Set(), segmentIds: new Set() },
         undoStack: [], redoStack: [],
@@ -1024,16 +1024,20 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       };
     }
 
+    case 'SET_FOCUSED_LAYER':
+      return { ...state, focusedLayerId: action.layerId };
+
     case 'REMOVE_LAYER': {
-      if (action.layerId === 'outline') return state; // default layer is permanent
+      if (action.layerId === 'outline') return state;
       const newLayers = state.layers.filter(l => l.id !== action.layerId);
+      const newFocused = state.focusedLayerId === action.layerId ? 'outline' : state.focusedLayerId;
       if (state.activeLayerId === action.layerId) {
-        // Switching to outline when removing the active layer
         const outlineLayer = state.layers.find(l => l.id === 'outline') as DrawingLayer;
         return {
           ...state,
           layers: newLayers,
           activeLayerId: 'outline',
+          focusedLayerId: 'outline',
           paths: outlineLayer?.paths ?? [],
           selection: { pointIds: new Set(), segmentIds: new Set() },
           undoStack: [], redoStack: [],
@@ -1042,7 +1046,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
           isDrawingPath: false,
         };
       }
-      return { ...state, layers: newLayers };
+      return { ...state, layers: newLayers, focusedLayerId: newFocused };
     }
 
     case 'SET_LAYER_VISIBLE':
@@ -1088,8 +1092,9 @@ export function makeInitialState(vt: ViewTransform): EditorState {
     showCoordinates: false,
     activePathId: null,
     isDrawingPath: false,
-    layers: [{ id: 'outline', type: 'drawing', name: 'Outline', visible: true, paths: [] }],
+    layers: [{ id: 'outline', type: 'drawing', name: 'Default', visible: true, paths: [] }],
     activeLayerId: 'outline',
+    focusedLayerId: 'outline',
   };
 }
 

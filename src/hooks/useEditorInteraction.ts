@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import type { EditablePath, ViewTransform, Selection, RubberBand, Layer } from '@/lib/editorTypes';
+import type { EditablePath, ViewTransform, Selection, RubberBand, Layer, ImageLayer } from '@/lib/editorTypes';
 import { collectAllPoints, clonePaths } from '@/lib/svgPathParser';
 
 const HIT_RADIUS_PX = 8;
@@ -248,6 +248,45 @@ function hitTestTransformHandle(
   return null;
 }
 
+/** Hit-test against an image layer's transform handles. Returns handle type or null. */
+function hitTestImageHandle(
+  sx: number, sy: number,
+  il: ImageLayer,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  img: any,
+  vt: ViewTransform,
+): TransformHandle {
+  const cx = vt.originX + il.offsetX * vt.scale;
+  const cy = vt.originY - il.offsetY * vt.scale;
+  const halfW = img.width() * il.scaleX * vt.scale / 2;
+  const halfH = img.height() * il.scaleY * vt.scale / 2;
+  const angleRad = il.rotation * Math.PI / 180;
+  const cos = Math.cos(angleRad);
+  const sin = Math.sin(angleRad);
+  // Transform screen point into image-local (unrotated) space
+  const dx = sx - cx;
+  const dy = sy - cy;
+  const localX = dx * cos + dy * sin;
+  const localY = -dx * sin + dy * cos;
+
+  const HANDLE_R = 8;
+  const ROTATION_OFFSET = 24;
+
+  if (Math.sqrt(localX ** 2 + (localY + halfH + ROTATION_OFFSET) ** 2) < HANDLE_R) return 'rotate';
+
+  const handles: Array<[number, number, TransformHandle]> = [
+    [-halfW, -halfH, 'tl'], [halfW, -halfH, 'tr'],
+    [-halfW, halfH, 'bl'], [halfW, halfH, 'br'],
+    [0, -halfH, 'tm'], [0, halfH, 'bm'],
+    [-halfW, 0, 'lm'], [halfW, 0, 'rm'],
+  ];
+  for (const [hx, hy, handle] of handles) {
+    if (Math.sqrt((localX - hx) ** 2 + (localY - hy) ** 2) < HANDLE_R) return handle;
+  }
+  if (localX >= -halfW && localX <= halfW && localY >= -halfH && localY <= halfH) return 'move';
+  return null;
+}
+
 /** Find the closest segment (line or curve) within hit radius. Returns segment id or null. */
 function hitTestSegment(
   sx: number, sy: number,
@@ -356,6 +395,7 @@ interface InteractionParams {
     isDrawingPath: boolean;
     layers: Layer[];
     activeLayerId: string;
+    focusedLayerId: string;
   }>;
   dispatch: (action: unknown) => void;
   setRubberBand: (rb: RubberBand | null) => void;
@@ -367,6 +407,8 @@ interface InteractionParams {
   setHoveredPointId: (id: string | null) => void;
   setHoveredSegmentId: (id: string | null) => void;
   setDragPos: (pos: { x: number; y: number } | null) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  imageCacheRef: React.MutableRefObject<Map<string, any>>;
 }
 
 /** Returns pointer + wheel event handlers to attach to the canvas element. */
@@ -382,9 +424,10 @@ export function useEditorInteraction({
   setHoveredPointId,
   setHoveredSegmentId,
   setDragPos,
+  imageCacheRef,
 }: InteractionParams) {
   const dragRef = useRef<{
-    type: 'point' | 'canvas' | 'transform';
+    type: 'point' | 'canvas' | 'transform' | 'image-move' | 'image-rotate' | 'image-scale';
     startFx: number; startFy: number;
     curFx: number; curFy: number;
     rbStartX: number; rbStartY: number;
@@ -394,6 +437,13 @@ export function useEditorInteraction({
     transformCenter?: { x: number; y: number };
     startScreenX?: number;
     startScreenY?: number;
+    // Image drag fields
+    imageLayerId?: string;
+    imageHandleType?: TransformHandle;
+    imageInitial?: { offsetX: number; offsetY: number; scaleX: number; scaleY: number; rotation: number };
+    imageHalfW?: number;
+    imageHalfH?: number;
+    startAngle?: number;
   } | null>(null);
 
   const panRef = useRef<{
@@ -405,6 +455,7 @@ export function useEditorInteraction({
   const hoveredHandleRef = useRef<TransformHandle>(null);
 
   const getCursor = useCallback((): string => {
+    if (dragRef.current?.type === 'image-move') return 'grabbing';
     if (dragRef.current?.type === 'transform' && dragRef.current.transformHandle === 'move') {
       return 'grabbing';
     }
@@ -451,8 +502,52 @@ export function useEditorInteraction({
 
     // Node tool: select and drag points and segments
     if (toolMode === 'node') {
+      // Check image transform handle first (if focused layer is an image)
+      const { focusedLayerId, layers: stateLayers } = stateRef.current;
+      const focusedLayer = (stateLayers ?? []).find(l => l.id === focusedLayerId);
+      if (focusedLayer?.type === 'image') {
+        const img = imageCacheRef.current.get(focusedLayer.id);
+        if (img) {
+          const il = focusedLayer as ImageLayer;
+          const hitHandle = hitTestImageHandle(x, y, il, img, vt);
+          if (hitHandle) {
+            const fp = toFontSpace(x, y, vt);
+            const imageInitial = { offsetX: il.offsetX, offsetY: il.offsetY, scaleX: il.scaleX, scaleY: il.scaleY, rotation: il.rotation };
+            if (hitHandle === 'move') {
+              dragRef.current = {
+                type: 'image-move',
+                startFx: fp.x, startFy: fp.y, curFx: fp.x, curFy: fp.y,
+                rbStartX: 0, rbStartY: 0, snapshot: null,
+                imageLayerId: focusedLayer.id, imageHandleType: hitHandle, imageInitial,
+              };
+            } else if (hitHandle === 'rotate') {
+              const screenCx = vt.originX + il.offsetX * vt.scale;
+              const screenCy = vt.originY - il.offsetY * vt.scale;
+              dragRef.current = {
+                type: 'image-rotate',
+                startFx: fp.x, startFy: fp.y, curFx: fp.x, curFy: fp.y,
+                rbStartX: screenCx, rbStartY: screenCy, snapshot: null,
+                imageLayerId: focusedLayer.id, imageHandleType: hitHandle, imageInitial,
+                startAngle: Math.atan2(y - screenCy, x - screenCx),
+              };
+            } else {
+              dragRef.current = {
+                type: 'image-scale',
+                startFx: fp.x, startFy: fp.y, curFx: fp.x, curFy: fp.y,
+                rbStartX: x, rbStartY: y, snapshot: null,
+                imageLayerId: focusedLayer.id, imageHandleType: hitHandle, imageInitial,
+                imageHalfW: img.width() * il.scaleX * vt.scale / 2,
+                imageHalfH: img.height() * il.scaleY * vt.scale / 2,
+              };
+            }
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+            return;
+          }
+        }
+      }
+
       const totalSelected = selection.pointIds.size + selection.segmentIds.size;
-      
+
       // Check for transform handle hit (only if more than one element selected)
       if (totalSelected > 1) {
         const bbox = computeSelectionBBox(paths, selection);
@@ -585,28 +680,39 @@ export function useEditorInteraction({
     if (!dragRef.current) {
       if (toolMode === 'node') {
         const { paths } = stateRef.current;
-        const totalSelected = selection.pointIds.size + selection.segmentIds.size;
-        if (totalSelected > 1) {
-          const bbox = computeSelectionBBox(paths, selection);
-          if (bbox) {
-            const hoveredHandle = hitTestTransformHandle(x, y, bbox, vt);
-            if (hoveredHandleRef.current !== hoveredHandle) {
-              hoveredHandleRef.current = hoveredHandle;
-              redraw();
+        const focusedLayer2 = (stateRef.current.layers ?? []).find(l => l.id === stateRef.current.focusedLayerId);
+        if (focusedLayer2?.type === 'image') {
+          // Image layer focused: hover image handles
+          const img2 = imageCacheRef.current.get(focusedLayer2.id);
+          const hitHandle = img2 ? hitTestImageHandle(x, y, focusedLayer2 as ImageLayer, img2, vt) : null;
+          if (hoveredHandleRef.current !== hitHandle) {
+            hoveredHandleRef.current = hitHandle;
+            redraw();
+          }
+          setHoveredPointId(null);
+          setHoveredSegmentId(null);
+        } else {
+          const totalSelected = selection.pointIds.size + selection.segmentIds.size;
+          if (totalSelected > 1) {
+            const bbox = computeSelectionBBox(paths, selection);
+            if (bbox) {
+              const hoveredHandle = hitTestTransformHandle(x, y, bbox, vt);
+              if (hoveredHandleRef.current !== hoveredHandle) {
+                hoveredHandleRef.current = hoveredHandle;
+                redraw();
+              }
+            } else {
+              hoveredHandleRef.current = null;
             }
           } else {
             hoveredHandleRef.current = null;
           }
-        } else {
-          hoveredHandleRef.current = null;
+          // Hover detection for points and segments
+          const hitPointId = hitTest(x, y, paths, vt);
+          const hitSegmentId = hitPointId ? null : hitTestSegment(x, y, paths, vt);
+          setHoveredPointId(hitPointId);
+          setHoveredSegmentId(hitSegmentId);
         }
-        
-        // Hover detection for points and segments
-        const hitPointId = hitTest(x, y, paths, vt);
-        const hitSegmentId = hitPointId ? null : hitTestSegment(x, y, paths, vt);
-        
-        setHoveredPointId(hitPointId);
-        setHoveredSegmentId(hitSegmentId);
       } else {
         hoveredHandleRef.current = null;
         setHoveredPointId(null);
@@ -791,11 +897,50 @@ export function useEditorInteraction({
       setDragPos({ x: center.x, y: center.y });
       dispatch({ type: 'TRANSFORM_POINTS_LIVE', deltas });
       redraw();
+    } else if (drag.type === 'image-move' && drag.imageLayerId && drag.imageInitial) {
+      const fp = toFontSpace(x, y, vt);
+      dispatch({
+        type: 'UPDATE_IMAGE_LAYER',
+        layerId: drag.imageLayerId,
+        updates: {
+          offsetX: drag.imageInitial.offsetX + (fp.x - drag.startFx),
+          offsetY: drag.imageInitial.offsetY + (fp.y - drag.startFy),
+        },
+      });
+      redraw();
+    } else if (drag.type === 'image-rotate' && drag.imageLayerId && drag.imageInitial) {
+      const screenCx = drag.rbStartX;
+      const screenCy = drag.rbStartY;
+      const currentAngle = Math.atan2(y - screenCy, x - screenCx);
+      const deltaAngle = currentAngle - (drag.startAngle ?? 0);
+      dispatch({
+        type: 'UPDATE_IMAGE_LAYER',
+        layerId: drag.imageLayerId,
+        updates: { rotation: drag.imageInitial.rotation + deltaAngle * 180 / Math.PI },
+      });
+      redraw();
+    } else if (drag.type === 'image-scale' && drag.imageLayerId && drag.imageInitial && drag.imageHalfW !== undefined && drag.imageHalfH !== undefined) {
+      const handle = drag.imageHandleType;
+      const sdx = x - drag.rbStartX;
+      const sdy = y - drag.rbStartY;
+      const init = drag.imageInitial;
+      let newScaleX = init.scaleX;
+      let newScaleY = init.scaleY;
+      if (handle === 'lm' || handle === 'tl' || handle === 'bl') newScaleX = drag.imageHalfW > 0 ? init.scaleX * (1 - sdx / drag.imageHalfW) : init.scaleX;
+      if (handle === 'rm' || handle === 'tr' || handle === 'br') newScaleX = drag.imageHalfW > 0 ? init.scaleX * (1 + sdx / drag.imageHalfW) : init.scaleX;
+      if (handle === 'tm' || handle === 'tl' || handle === 'tr') newScaleY = drag.imageHalfH > 0 ? init.scaleY * (1 - sdy / drag.imageHalfH) : init.scaleY;
+      if (handle === 'bm' || handle === 'bl' || handle === 'br') newScaleY = drag.imageHalfH > 0 ? init.scaleY * (1 + sdy / drag.imageHalfH) : init.scaleY;
+      dispatch({
+        type: 'UPDATE_IMAGE_LAYER',
+        layerId: drag.imageLayerId,
+        updates: { scaleX: Math.max(0.01, newScaleX), scaleY: Math.max(0.01, newScaleY) },
+      });
+      redraw();
     } else {
       onTransformFeedback?.({ isActive: false, deltaX: 0, deltaY: 0, scaleX: 1, scaleY: 1, rotation: 0 });
       setDragPos(null);
     }
-  }, [stateRef, dispatch, getEventPos, setRubberBand, setMousePos, redraw, onTransformFeedback, setDragPos]);
+  }, [stateRef, dispatch, getEventPos, setRubberBand, setMousePos, redraw, onTransformFeedback, setDragPos, imageCacheRef]);
 
   const onPointerUp = useCallback((e: PointerEvent) => {
     const { x, y } = getEventPos(e);
@@ -827,12 +972,15 @@ export function useEditorInteraction({
       const deltaX = drag.curFx - drag.startFx;
       const deltaY = drag.curFy - drag.startFy;
       const threshold = 0; // 10 units in font space
-      
+
       if (drag.snapshot && (Math.abs(deltaX) > threshold || Math.abs(deltaY) > threshold)) {
         dispatch({ type: 'COMMIT_TRANSFORM', snapshot: drag.snapshot });
       }
       onTransformFeedback?.({ isActive: false, deltaX: 0, deltaY: 0, scaleX: 1, scaleY: 1, rotation: 0 });
       setDragPos(null);
+      redraw();
+    } else if (drag.type === 'image-move' || drag.type === 'image-rotate' || drag.type === 'image-scale') {
+      // Image transforms are committed live; nothing special needed on release
       redraw();
     }
   }, [stateRef, dispatch, getEventPos, setRubberBand, redraw, onTransformFeedback, setDragPos]);
