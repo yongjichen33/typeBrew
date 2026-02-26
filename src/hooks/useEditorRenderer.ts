@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import type { EditablePath, FontMetrics, ViewTransform, Selection, RubberBand } from '@/lib/editorTypes';
+import type { EditablePath, FontMetrics, ViewTransform, Selection, RubberBand, Layer, DrawingLayer, ImageLayer } from '@/lib/editorTypes';
 
 // ---------- colour helpers ----------
 // CanvasKit Color4f: [R, G, B, A] each 0.0–1.0
@@ -237,6 +237,10 @@ export function renderFrame(
   hoveredPointId: string | null = null,
   hoveredSegmentId: string | null = null,
   dragPos: { x: number; y: number } | null = null,
+  layers: Layer[] = [],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  imageCache: Map<string, any> = new Map(),
+  inactiveDrawingPaths: EditablePath[] = [],
 ): void {
   if (!ck || !skCanvas) return;
 
@@ -280,6 +284,74 @@ export function renderFrame(
   drawVLine(0, C.metricLine, minY, maxY);
   drawVLine(metrics.advanceWidth, C.metricLine, minY, maxY);
   metricPaint.delete();
+
+  // ---- 1b. Image layers (bottom-to-top order) ----
+  for (const layer of layers) {
+    if (layer.type !== 'image' || !layer.visible) continue;
+    const img = (imageCache as Map<string, any>).get(layer.id);
+    if (!img) continue;
+    const il = layer as ImageLayer;
+    const [screenCx, screenCy] = toScreen(il.offsetX, il.offsetY, vt);
+    const displayW = img.width() * il.scaleX * vt.scale;
+    const displayH = img.height() * il.scaleY * vt.scale;
+    const imgPaint = new Paint();
+    imgPaint.setAlphaf(il.opacity);
+    imgPaint.setAntiAlias(true);
+    skCanvas.save();
+    skCanvas.concat(ck.Matrix.multiply(
+      ck.Matrix.translated(screenCx, screenCy),
+      ck.Matrix.rotated(il.rotation * Math.PI / 180),
+    ));
+    skCanvas.drawImageRect(
+      img,
+      ck.LTRBRect(0, 0, img.width(), img.height()),
+      ck.LTRBRect(-displayW / 2, -displayH / 2, displayW / 2, displayH / 2),
+      imgPaint,
+    );
+    imgPaint.delete();
+    skCanvas.restore();
+  }
+
+  // ---- 1c. Inactive drawing layers (faded, no handles) ----
+  if (inactiveDrawingPaths.length > 0) {
+    const inactiveSk = new ck.Path();
+    for (const path of inactiveDrawingPaths) {
+      for (const cmd of path.commands) {
+        if (cmd.kind === 'M') {
+          const [sx, sy] = toScreen(cmd.point.x, cmd.point.y, vt);
+          inactiveSk.moveTo(sx, sy);
+        } else if (cmd.kind === 'L') {
+          const [sx, sy] = toScreen(cmd.point.x, cmd.point.y, vt);
+          inactiveSk.lineTo(sx, sy);
+        } else if (cmd.kind === 'Q') {
+          const [cx, cy] = toScreen(cmd.ctrl.x, cmd.ctrl.y, vt);
+          const [x, y] = toScreen(cmd.point.x, cmd.point.y, vt);
+          inactiveSk.quadTo(cx, cy, x, y);
+        } else if (cmd.kind === 'C') {
+          const [c1x, c1y] = toScreen(cmd.ctrl1.x, cmd.ctrl1.y, vt);
+          const [c2x, c2y] = toScreen(cmd.ctrl2.x, cmd.ctrl2.y, vt);
+          const [x, y] = toScreen(cmd.point.x, cmd.point.y, vt);
+          inactiveSk.cubicTo(c1x, c1y, c2x, c2y, x, y);
+        } else if (cmd.kind === 'Z') {
+          inactiveSk.close();
+        }
+      }
+    }
+    const inactiveFill = new Paint();
+    inactiveFill.setAntiAlias(true);
+    inactiveFill.setStyle(ck.PaintStyle.Fill);
+    inactiveFill.setColor(rgba(30, 30, 30, 0.05));
+    skCanvas.drawPath(inactiveSk, inactiveFill);
+    inactiveFill.delete();
+    const inactiveStroke = new Paint();
+    inactiveStroke.setAntiAlias(true);
+    inactiveStroke.setStyle(ck.PaintStyle.Stroke);
+    inactiveStroke.setStrokeWidth(1);
+    inactiveStroke.setColor(rgba(30, 30, 30, 0.35));
+    skCanvas.drawPath(inactiveSk, inactiveStroke);
+    inactiveStroke.delete();
+    inactiveSk.delete();
+  }
 
   // ---- 2. Glyph fill and stroke (skip if no paths) ----
   if (paths.length > 0) {
@@ -918,6 +990,8 @@ export function useEditorRenderer(
     showCoordinates: boolean;
     activePathId: string | null;
     isDrawingPath: boolean;
+    layers: Layer[];
+    activeLayerId: string;
   }>,
   metricsRef: React.MutableRefObject<FontMetrics | null>,
   extraRef: React.MutableRefObject<{
@@ -930,6 +1004,8 @@ export function useEditorRenderer(
     hoveredSegmentId: string | null;
     dragPos: { x: number; y: number } | null;
   }>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  imageCacheRef: React.MutableRefObject<Map<string, any>>,
 ) {
   const pendingRef = useRef(false);
   const surfaceIdRef = useRef(0);
@@ -952,6 +1028,9 @@ export function useEditorRenderer(
       const s = stateRef.current;
       const extra = extraRef.current;
       const skCanvas = surfaceRef.current.getCanvas();
+      const inactiveDrawingPaths = (s.layers ?? [])
+        .filter((l): l is DrawingLayer => l.type === 'drawing' && l.visible && l.id !== s.activeLayerId)
+        .flatMap(l => l.paths);
       renderFrame(
         ck, skCanvas,
         s.paths, metricsRef.current,
@@ -964,10 +1043,13 @@ export function useEditorRenderer(
         extra.hoveredPointId ?? null,
         extra.hoveredSegmentId ?? null,
         extra.dragPos ?? null,
+        s.layers ?? [],
+        imageCacheRef.current,
+        inactiveDrawingPaths,
       );
       surfaceRef.current.flush();
     });
-  }, [ck, surfaceRef, surfaceValidRef, stateRef, metricsRef, extraRef]);
+  }, [ck, surfaceRef, surfaceValidRef, stateRef, metricsRef, extraRef, imageCacheRef]);
 
   const registerSurface = useCallback(() => {
     surfaceIdRef.current++;

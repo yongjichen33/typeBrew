@@ -30,6 +30,36 @@ export interface EditablePath {
   commands: PathCommand[];
 }
 
+// ---- Layer types ----
+
+/** A drawing layer containing editable bezier paths. */
+export interface DrawingLayer {
+  id: string;
+  type: 'drawing';
+  name: string;
+  visible: boolean;
+  /** Stored paths when this layer is NOT the active layer.
+   *  When active, state.paths holds the working copy instead. */
+  paths: EditablePath[];
+}
+
+/** A reference image layer rendered behind the drawing layers. */
+export interface ImageLayer {
+  id: string;
+  type: 'image';
+  name: string;
+  visible: boolean;
+  imageDataUrl: string;  // base64 data URL
+  opacity: number;       // 0–1
+  scaleX: number;        // 1 = 1 image px per font unit at vt.scale=1
+  scaleY: number;
+  rotation: number;      // degrees
+  offsetX: number;       // font-space center X
+  offsetY: number;       // font-space center Y
+}
+
+export type Layer = DrawingLayer | ImageLayer;
+
 /** Font-level typographic metrics (all in font-space Y-up units). */
 export interface FontMetrics {
   unitsPerEm: number;
@@ -95,6 +125,8 @@ export interface EditorState {
   showCoordinates: boolean;
   activePathId: string | null;
   isDrawingPath: boolean;
+  layers: Layer[];
+  activeLayerId: string;
 }
 
 // ---- Actions ----
@@ -131,7 +163,14 @@ export type EditorAction =
   | { type: 'TOGGLE_PATH_CLOSED'; pathId: string }
   | { type: 'CONVERT_SEGMENT_TYPE'; pointId: string; segmentType: SegmentType }
   | { type: 'CONVERT_SEGMENT_TO_CURVE'; segmentId: string; curveType: 'quadratic' | 'cubic' }
-  | { type: 'ADD_POINT_ON_SEGMENT'; pathId: string; insertIndex: number; point: EditablePoint };
+  | { type: 'ADD_POINT_ON_SEGMENT'; pathId: string; insertIndex: number; point: EditablePoint }
+  | { type: 'ADD_DRAWING_LAYER'; layer: DrawingLayer }
+  | { type: 'ADD_IMAGE_LAYER'; layer: ImageLayer }
+  | { type: 'REMOVE_LAYER'; layerId: string }
+  | { type: 'SET_LAYER_VISIBLE'; layerId: string; visible: boolean }
+  | { type: 'UPDATE_IMAGE_LAYER'; layerId: string; updates: Partial<Omit<ImageLayer, 'id' | 'type'>> }
+  | { type: 'RENAME_LAYER'; layerId: string; name: string }
+  | { type: 'SET_ACTIVE_LAYER'; layerId: string };
 
 // ---- Context value ----
 

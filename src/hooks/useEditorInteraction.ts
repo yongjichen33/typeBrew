@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import type { EditablePath, ViewTransform, Selection, RubberBand } from '@/lib/editorTypes';
+import type { EditablePath, ViewTransform, Selection, RubberBand, Layer } from '@/lib/editorTypes';
 import { collectAllPoints, clonePaths } from '@/lib/svgPathParser';
 
 const HIT_RADIUS_PX = 8;
@@ -354,6 +354,8 @@ interface InteractionParams {
     showCoordinates: boolean;
     activePathId: string | null;
     isDrawingPath: boolean;
+    layers: Layer[];
+    activeLayerId: string;
   }>;
   dispatch: (action: unknown) => void;
   setRubberBand: (rb: RubberBand | null) => void;

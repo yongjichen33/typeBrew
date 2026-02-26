@@ -7,6 +7,8 @@ import type {
   Selection,
   ViewTransform,
   RubberBand,
+  Layer,
+  ImageLayer,
 } from '@/lib/editorTypes';
 import type { TransformFeedback } from './GlyphEditorTab';
 
@@ -20,6 +22,8 @@ interface GlyphEditorCanvasProps {
   metrics: FontMetrics;
   showDirection: boolean;
   showCoordinates: boolean;
+  layers: Layer[];
+  activeLayerId: string;
   dispatch: (action: unknown) => void;
   stateRef: React.MutableRefObject<{
     paths: EditablePath[];
@@ -30,6 +34,8 @@ interface GlyphEditorCanvasProps {
     showCoordinates: boolean;
     activePathId: string | null;
     isDrawingPath: boolean;
+    layers: Layer[];
+    activeLayerId: string;
   }>;
   onTransformFeedback?: (feedback: TransformFeedback) => void;
 }
@@ -43,6 +49,7 @@ export function GlyphEditorCanvas({
   metrics,
   showDirection,
   showCoordinates,
+  layers,
   dispatch,
   stateRef,
   onTransformFeedback,
@@ -57,6 +64,9 @@ export function GlyphEditorCanvas({
 
   const metricsRef = useRef<FontMetrics>(metrics);
   useEffect(() => { metricsRef.current = metrics; }, [metrics]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const imageCacheRef = useRef<Map<string, any>>(new Map());
 
   const [rubberBand, setRubberBandState] = useState<RubberBand | null>(null);
   const [mousePos, setMousePosState] = useState<{ x: number; y: number } | null>(null);
@@ -128,7 +138,28 @@ export function GlyphEditorCanvas({
     setDragPosState(pos);
   };
 
-  const { redraw, registerSurface } = useEditorRenderer(ck, surfaceRef, surfaceValidRef, stateRef, metricsRef, extraRef);
+  const { redraw, registerSurface } = useEditorRenderer(ck, surfaceRef, surfaceValidRef, stateRef, metricsRef, extraRef, imageCacheRef);
+
+  // Decode image layers into CanvasKit SkImage objects (must be after redraw is defined)
+  useEffect(() => {
+    if (!ck) return;
+    const imageLayers = layers.filter((l): l is ImageLayer => l.type === 'image');
+    const activeIds = new Set(imageLayers.map(l => l.id));
+    for (const [id, img] of imageCacheRef.current) {
+      if (!activeIds.has(id)) { img.delete(); imageCacheRef.current.delete(id); }
+    }
+    for (const layer of imageLayers) {
+      if (imageCacheRef.current.has(layer.id)) continue;
+      fetch(layer.imageDataUrl)
+        .then(r => r.arrayBuffer())
+        .then(ab => {
+          const skImg = ck.MakeImageFromEncoded(new Uint8Array(ab));
+          if (skImg) { imageCacheRef.current.set(layer.id, skImg); redraw(); }
+        })
+        .catch(() => { /* ignore decode errors */ });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ck, layers]);
 
   // Create/destroy CanvasKit surface when ck or canvas size changes
   useEffect(() => {
@@ -170,7 +201,7 @@ export function GlyphEditorCanvas({
   // Trigger redraw on relevant state changes
   useEffect(() => {
     redraw();
-  }, [redraw, paths, selection, toolMode, viewTransform, rubberBand, mousePos, pendingOffCurve, showDirection, showCoordinates, dragPos]);
+  }, [redraw, paths, selection, toolMode, viewTransform, rubberBand, mousePos, pendingOffCurve, showDirection, showCoordinates, dragPos, layers]);
 
   // Observe container size and update canvas dimensions
   useEffect(() => {

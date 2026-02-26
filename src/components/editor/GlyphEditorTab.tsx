@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
@@ -68,8 +68,11 @@ export function GlyphEditorTab({ tabState }: Props) {
     showCoordinates: state.showCoordinates,
     activePathId: state.activePathId,
     isDrawingPath: state.isDrawingPath,
+    layers: state.layers,
+    activeLayerId: state.activeLayerId,
   });
-  useEffect(() => {
+  // useLayoutEffect fires before paint so RAF callbacks always read fresh state
+  useLayoutEffect(() => {
     stateRef.current = {
       paths: state.paths,
       selection: state.selection,
@@ -79,6 +82,8 @@ export function GlyphEditorTab({ tabState }: Props) {
       showCoordinates: state.showCoordinates,
       activePathId: state.activePathId,
       isDrawingPath: state.isDrawingPath,
+      layers: state.layers,
+      activeLayerId: state.activeLayerId,
     };
   }, [state]);
 
@@ -295,6 +300,8 @@ export function GlyphEditorTab({ tabState }: Props) {
               metrics={metrics}
               showDirection={state.showDirection}
               showCoordinates={state.showCoordinates}
+              layers={state.layers}
+              activeLayerId={state.activeLayerId}
               dispatch={dispatch as (action: unknown) => void}
               stateRef={stateRef}
               onTransformFeedback={setTransformFeedback}
@@ -304,6 +311,8 @@ export function GlyphEditorTab({ tabState }: Props) {
               paths={state.paths}
               dispatch={dispatch as (action: unknown) => void}
               transformFeedback={transformFeedback}
+              layers={state.layers}
+              activeLayerId={state.activeLayerId}
             />
           </>
         )}

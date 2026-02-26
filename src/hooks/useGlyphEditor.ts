@@ -9,6 +9,7 @@ import type {
   ClipboardData,
   Selection,
   FontMetrics,
+  DrawingLayer,
 } from '@/lib/editorTypes';
 import { clonePaths } from '@/lib/svgPathParser';
 
@@ -983,6 +984,91 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       };
     }
 
+    case 'ADD_DRAWING_LAYER': {
+      // Save active layer's working paths back into the layers array
+      const updatedLayers = state.layers.map(l =>
+        l.id === state.activeLayerId ? { ...l, paths: state.paths } : l,
+      );
+      return {
+        ...state,
+        layers: [...updatedLayers, action.layer],
+        activeLayerId: action.layer.id,
+        paths: [],
+        selection: { pointIds: new Set(), segmentIds: new Set() },
+        undoStack: [], redoStack: [],
+        isDirty: false,
+      };
+    }
+
+    case 'ADD_IMAGE_LAYER':
+      return { ...state, layers: [...state.layers, action.layer] };
+
+    case 'SET_ACTIVE_LAYER': {
+      if (action.layerId === state.activeLayerId) return state;
+      const target = state.layers.find(l => l.id === action.layerId);
+      if (!target || target.type !== 'drawing') return state;
+      // Save current working paths back, load target layer's paths
+      const updatedLayers = state.layers.map(l =>
+        l.id === state.activeLayerId ? { ...l, paths: state.paths } : l,
+      );
+      return {
+        ...state,
+        layers: updatedLayers,
+        activeLayerId: action.layerId,
+        paths: (target as DrawingLayer).paths,
+        selection: { pointIds: new Set(), segmentIds: new Set() },
+        undoStack: [], redoStack: [],
+        isDirty: false,
+        activePathId: null,
+        isDrawingPath: false,
+      };
+    }
+
+    case 'REMOVE_LAYER': {
+      if (action.layerId === 'outline') return state; // default layer is permanent
+      const newLayers = state.layers.filter(l => l.id !== action.layerId);
+      if (state.activeLayerId === action.layerId) {
+        // Switching to outline when removing the active layer
+        const outlineLayer = state.layers.find(l => l.id === 'outline') as DrawingLayer;
+        return {
+          ...state,
+          layers: newLayers,
+          activeLayerId: 'outline',
+          paths: outlineLayer?.paths ?? [],
+          selection: { pointIds: new Set(), segmentIds: new Set() },
+          undoStack: [], redoStack: [],
+          isDirty: false,
+          activePathId: null,
+          isDrawingPath: false,
+        };
+      }
+      return { ...state, layers: newLayers };
+    }
+
+    case 'SET_LAYER_VISIBLE':
+      return {
+        ...state,
+        layers: state.layers.map(l =>
+          l.id === action.layerId ? { ...l, visible: action.visible } : l,
+        ),
+      };
+
+    case 'UPDATE_IMAGE_LAYER':
+      return {
+        ...state,
+        layers: state.layers.map(l =>
+          l.id === action.layerId ? { ...l, ...action.updates } : l,
+        ),
+      };
+
+    case 'RENAME_LAYER':
+      return {
+        ...state,
+        layers: state.layers.map(l =>
+          l.id === action.layerId ? { ...l, name: action.name } : l,
+        ),
+      };
+
     default:
       return state;
   }
@@ -1002,6 +1088,8 @@ export function makeInitialState(vt: ViewTransform): EditorState {
     showCoordinates: false,
     activePathId: null,
     isDrawingPath: false,
+    layers: [{ id: 'outline', type: 'drawing', name: 'Outline', visible: true, paths: [] }],
+    activeLayerId: 'outline',
   };
 }
 

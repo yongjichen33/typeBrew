@@ -1,6 +1,6 @@
-import { RefreshCw, X, Circle, Copy, Plus, ArrowUp, ArrowDown, Spline } from 'lucide-react';
+import { RefreshCw, X, Circle, Copy, Plus, ArrowUp, ArrowDown, Spline, Eye, EyeOff, ImageIcon, PenLine, Trash2 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type { EditablePath, EditablePoint, Selection, SegmentType, EditorAction } from '@/lib/editorTypes';
+import type { EditablePath, EditablePoint, Selection, SegmentType, EditorAction, Layer, ImageLayer } from '@/lib/editorTypes';
 import { computeClipboardData } from '@/hooks/useGlyphEditor';
 import { setClipboard } from '@/lib/glyphClipboard';
 import { computeSelectionBBox } from '@/hooks/useEditorInteraction';
@@ -11,6 +11,8 @@ interface InspectorPanelProps {
   paths: EditablePath[];
   dispatch: (action: EditorAction) => void;
   transformFeedback: TransformFeedback;
+  layers: Layer[];
+  activeLayerId: string;
 }
 
 interface Segment {
@@ -260,7 +262,40 @@ export function InspectorPanel({
   paths,
   dispatch,
   transformFeedback,
+  layers,
+  activeLayerId,
 }: InspectorPanelProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAddImageLayer = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      const id = `img-${Date.now()}`;
+      dispatch({
+        type: 'ADD_IMAGE_LAYER',
+        layer: {
+          id, type: 'image', name: file.name, visible: true,
+          imageDataUrl: dataUrl, opacity: 0.5,
+          scaleX: 1, scaleY: 1, rotation: 0, offsetX: 0, offsetY: 0,
+        },
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleAddDrawingLayer = () => {
+    const id = `layer-${Date.now()}`;
+    dispatch({
+      type: 'ADD_DRAWING_LAYER',
+      layer: { id, type: 'drawing', name: `Layer ${layers.length}`, visible: true, paths: [] },
+    });
+  };
+
+  const activeImageLayer = layers.find(l => l.id === activeLayerId && l.type === 'image') as ImageLayer | undefined;
   const selectedPoints = getSelectedPoints(paths, selection);
   const selectedPathIds = getSelectedPathIds(paths, selection);
   const selectedPath = selectedPathIds.length === 1 
@@ -439,6 +474,122 @@ export function InspectorPanel({
   return (
     <div className="w-56 border-l bg-muted/20 p-3 overflow-y-auto shrink-0">
       <h3 className="text-sm font-medium mb-3">Inspector</h3>
+
+      {/* Hidden file input for image upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleAddImageLayer}
+      />
+
+      {/* Layers */}
+      <Section title="Layers">
+        <div className="space-y-0.5 mb-2">
+          {layers.map((layer) => (
+            <div key={layer.id}>
+              <div
+                className={[
+                  'flex items-center gap-1 px-1.5 py-1 rounded cursor-pointer text-xs',
+                  layer.id === activeLayerId ? 'bg-primary/10 text-primary' : 'hover:bg-muted',
+                ].join(' ')}
+                onClick={() => {
+                  if (layer.type === 'drawing') dispatch({ type: 'SET_ACTIVE_LAYER', layerId: layer.id });
+                }}
+              >
+                <button
+                  className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_LAYER_VISIBLE', layerId: layer.id, visible: !layer.visible }); }}
+                  title={layer.visible ? 'Hide layer' : 'Show layer'}
+                >
+                  {layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}
+                </button>
+                <span className="flex-shrink-0 text-muted-foreground">
+                  {layer.type === 'drawing' ? <PenLine size={12} /> : <ImageIcon size={12} />}
+                </span>
+                <span className="flex-1 truncate">{layer.name}</span>
+                {layer.id !== 'outline' && (
+                  <button
+                    className="flex-shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); dispatch({ type: 'REMOVE_LAYER', layerId: layer.id }); }}
+                    title="Remove layer"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Image layer settings (shown when active) */}
+              {layer.id === activeLayerId && layer.type === 'image' && activeImageLayer && (
+                <div className="pl-2 mt-1 space-y-0.5 border-l-2 border-primary/20 ml-2">
+                  <div className="flex items-center gap-1 py-0.5">
+                    <span className="text-[10px] text-muted-foreground flex-1">Name</span>
+                    <input
+                      type="text"
+                      value={activeImageLayer.name}
+                      onChange={(e) => dispatch({ type: 'RENAME_LAYER', layerId: layer.id, name: e.target.value })}
+                      className="w-24 px-1 py-0.5 text-[10px] font-mono bg-background border rounded"
+                    />
+                  </div>
+                  <InputField
+                    label="Opacity"
+                    value={Math.round(activeImageLayer.opacity * 100)}
+                    onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { opacity: Math.max(0, Math.min(1, v / 100)) } })}
+                    unit="%"
+                    min={0}
+                    max={100}
+                  />
+                  <InputField
+                    label="Scale X"
+                    value={activeImageLayer.scaleX}
+                    onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { scaleX: v } })}
+                    step={0.1}
+                  />
+                  <InputField
+                    label="Scale Y"
+                    value={activeImageLayer.scaleY}
+                    onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { scaleY: v } })}
+                    step={0.1}
+                  />
+                  <InputField
+                    label="Rotation"
+                    value={activeImageLayer.rotation}
+                    onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { rotation: v } })}
+                    unit="°"
+                  />
+                  <InputField
+                    label="Offset X"
+                    value={activeImageLayer.offsetX}
+                    onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { offsetX: v } })}
+                  />
+                  <InputField
+                    label="Offset Y"
+                    value={activeImageLayer.offsetY}
+                    onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { offsetY: v } })}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-1">
+          <button
+            onClick={handleAddDrawingLayer}
+            className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 text-[10px] rounded bg-muted hover:bg-muted/80"
+            title="Add drawing layer"
+          >
+            <PenLine size={10} /> Drawing
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 text-[10px] rounded bg-muted hover:bg-muted/80"
+            title="Add image layer"
+          >
+            <ImageIcon size={10} /> Image
+          </button>
+        </div>
+      </Section>
 
       {/* Transform Controls */}
       {showTransformBox && (
