@@ -128,6 +128,8 @@ export interface EditorState {
   layers: Layer[];
   activeLayerId: string;
   focusedLayerId: string;
+  /** True after a multi-point drag completes; reset when selection changes. */
+  showTransformBox: boolean;
 }
 
 // ---- Actions ----

@@ -201,7 +201,8 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
 
     case 'COMMIT_MOVE': {
       const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), action.snapshot];
-      return { ...state, undoStack, redoStack: [] };
+      const showTransformBox = state.selection.pointIds.size > 1;
+      return { ...state, undoStack, redoStack: [], showTransformBox };
     }
 
     case 'TRANSFORM_POINTS_LIVE': {
@@ -210,7 +211,8 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
 
     case 'COMMIT_TRANSFORM': {
       const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), action.snapshot];
-      return { ...state, undoStack, redoStack: [] };
+      const showTransformBox = state.selection.pointIds.size > 1;
+      return { ...state, undoStack, redoStack: [], showTransformBox };
     }
 
     case 'APPLY_TRANSFORM': {
@@ -324,7 +326,8 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       }));
       
       const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), prev];
-      return { ...state, paths: newPaths, undoStack, redoStack: [], isDirty: true };
+      const showTransformBox = action.selection.pointIds.size > 1;
+      return { ...state, paths: newPaths, undoStack, redoStack: [], isDirty: true, showTransformBox };
     }
 
     case 'ADD_POINT': {
@@ -338,12 +341,13 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case 'SET_SELECTION': {
-      return { 
-        ...state, 
-        selection: { 
-          pointIds: action.pointIds, 
-          segmentIds: action.segmentIds ?? new Set() 
-        } 
+      return {
+        ...state,
+        selection: {
+          pointIds: action.pointIds,
+          segmentIds: action.segmentIds ?? new Set()
+        },
+        showTransformBox: false,
       };
     }
 
@@ -351,18 +355,18 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       const ids = new Set(state.selection.pointIds);
       if (ids.has(action.pointId)) ids.delete(action.pointId);
       else ids.add(action.pointId);
-      return { ...state, selection: { ...state.selection, pointIds: ids } };
+      return { ...state, selection: { ...state.selection, pointIds: ids }, showTransformBox: false };
     }
 
     case 'TOGGLE_SEGMENT_SELECTION': {
       const ids = new Set(state.selection.segmentIds);
       if (ids.has(action.segmentId)) ids.delete(action.segmentId);
       else ids.add(action.segmentId);
-      return { ...state, selection: { ...state.selection, segmentIds: ids } };
+      return { ...state, selection: { ...state.selection, segmentIds: ids }, showTransformBox: false };
     }
 
     case 'CLEAR_SELECTION': {
-      return { ...state, selection: { pointIds: new Set(), segmentIds: new Set() } };
+      return { ...state, selection: { pointIds: new Set(), segmentIds: new Set() }, showTransformBox: false };
     }
 
     case 'SET_TOOL_MODE': {
@@ -1095,6 +1099,7 @@ export function makeInitialState(vt: ViewTransform): EditorState {
     layers: [{ id: 'outline', type: 'drawing', name: 'Default', visible: true, paths: [] }],
     activeLayerId: 'outline',
     focusedLayerId: 'outline',
+    showTransformBox: false,
   };
 }
 

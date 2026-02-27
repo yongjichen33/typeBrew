@@ -386,8 +386,7 @@ export function InspectorPanel({
   const lastSelectionKeyRef = useRef<string>('');
   const wasTransformActiveRef = useRef(false);
   const prevTransformValuesRef = useRef(transformValues);
-  const isApplyingTransformRef = useRef(false);
-  
+
   useEffect(() => {
     const selectionKey = `${Array.from(selection.pointIds).join(',')}:${Array.from(selection.segmentIds).join(',')}`;
     if (showTransformBox && selectionKey !== lastSelectionKeyRef.current) {
@@ -399,10 +398,8 @@ export function InspectorPanel({
         scaleY: 100,
         rotation: 0,
       };
-      isApplyingTransformRef.current = true;
       setTransformValues(newValues);
       prevTransformValuesRef.current = newValues;
-      setTimeout(() => { isApplyingTransformRef.current = false; }, 0);
     }
   }, [showTransformBox, selectionBBox, selection.pointIds, selection.segmentIds]);
 
@@ -420,24 +417,22 @@ export function InspectorPanel({
   }, [transformFeedback.isActive, selectionBBox, transformValues]);
 
   const applyTransform = useCallback((newValues: typeof transformValues) => {
-    if (!selectionBBox || isApplyingTransformRef.current) return;
-    
+    if (!selectionBBox) return;
+
     const centerX = (selectionBBox.minX + selectionBBox.maxX) / 2;
     const centerY = (selectionBBox.minY + selectionBBox.maxY) / 2;
-    
+
     const prev = prevTransformValuesRef.current;
-    const deltaX = newValues.x - (showTransformBox ? Math.round(centerX) : prev.x);
-    const deltaY = newValues.y - (showTransformBox ? Math.round(centerY) : prev.y);
+    const deltaX = newValues.x - Math.round(centerX);
+    const deltaY = newValues.y - Math.round(centerY);
     const deltaScaleX = newValues.scaleX / prev.scaleX;
     const deltaScaleY = newValues.scaleY / prev.scaleY;
     const deltaRotation = newValues.rotation - prev.rotation;
-    
+
     if (deltaX === 0 && deltaY === 0 && deltaScaleX === 1 && deltaScaleY === 1 && deltaRotation === 0) {
       return;
     }
-    
-    isApplyingTransformRef.current = true;
-    
+
     dispatch({
       type: 'APPLY_TRANSFORM',
       transform: {
@@ -451,29 +446,9 @@ export function InspectorPanel({
       },
       selection,
     });
-    
-    prevTransformValuesRef.current = newValues;
-    
-    setTimeout(() => {
-      isApplyingTransformRef.current = false;
-    }, 0);
-  }, [selectionBBox, showTransformBox, dispatch, selection]);
 
-  useEffect(() => {
-    if (transformFeedback.isActive || isApplyingTransformRef.current) return;
-    
-    const prev = prevTransformValuesRef.current;
-    const hasChanges = 
-      transformValues.x !== prev.x ||
-      transformValues.y !== prev.y ||
-      transformValues.scaleX !== prev.scaleX ||
-      transformValues.scaleY !== prev.scaleY ||
-      transformValues.rotation !== prev.rotation;
-    
-    if (hasChanges && showTransformBox) {
-      applyTransform(transformValues);
-    }
-  }, [transformValues, transformFeedback.isActive, showTransformBox, applyTransform]);
+    prevTransformValuesRef.current = newValues;
+  }, [selectionBBox, dispatch, selection]);
 
   return (
     <div className="w-56 border-l bg-muted/20 p-3 overflow-y-auto shrink-0">
@@ -614,31 +589,51 @@ export function InspectorPanel({
           <InputField
             label="X"
             value={transformFeedback.isActive ? transformValues.x + Math.round(transformFeedback.deltaX) : transformValues.x}
-            onChange={(v) => setTransformValues(prev => ({ ...prev, x: v }))}
+            onChange={(v) => {
+              const newValues = { ...transformValues, x: v };
+              setTransformValues(newValues);
+              applyTransform(newValues);
+            }}
           />
           <InputField
             label="Y"
             value={transformFeedback.isActive ? transformValues.y + Math.round(transformFeedback.deltaY) : transformValues.y}
-            onChange={(v) => setTransformValues(prev => ({ ...prev, y: v }))}
+            onChange={(v) => {
+              const newValues = { ...transformValues, y: v };
+              setTransformValues(newValues);
+              applyTransform(newValues);
+            }}
           />
           <InputField
             label="Scale X"
             value={transformFeedback.isActive ? Math.round(transformFeedback.scaleX * 100) : transformValues.scaleX}
-            onChange={(v) => setTransformValues(prev => ({ ...prev, scaleX: v }))}
+            onChange={(v) => {
+              const newValues = { ...transformValues, scaleX: v };
+              setTransformValues(newValues);
+              applyTransform(newValues);
+            }}
             unit="%"
             step={1}
           />
           <InputField
             label="Scale Y"
             value={transformFeedback.isActive ? Math.round(transformFeedback.scaleY * 100) : transformValues.scaleY}
-            onChange={(v) => setTransformValues(prev => ({ ...prev, scaleY: v }))}
+            onChange={(v) => {
+              const newValues = { ...transformValues, scaleY: v };
+              setTransformValues(newValues);
+              applyTransform(newValues);
+            }}
             unit="%"
             step={1}
           />
           <InputField
             label="Rotation"
             value={transformFeedback.isActive ? Math.round(transformFeedback.rotation * 10) / 10 : transformValues.rotation}
-            onChange={(v) => setTransformValues(prev => ({ ...prev, rotation: v }))}
+            onChange={(v) => {
+              const newValues = { ...transformValues, rotation: v };
+              setTransformValues(newValues);
+              applyTransform(newValues);
+            }}
             unit="°"
             step={1}
           />

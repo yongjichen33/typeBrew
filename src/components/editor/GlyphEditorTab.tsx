@@ -71,6 +71,7 @@ export function GlyphEditorTab({ tabState }: Props) {
     layers: state.layers,
     activeLayerId: state.activeLayerId,
     focusedLayerId: state.focusedLayerId,
+    showTransformBox: state.showTransformBox,
   });
   // useLayoutEffect fires before paint so RAF callbacks always read fresh state
   useLayoutEffect(() => {
@@ -86,6 +87,7 @@ export function GlyphEditorTab({ tabState }: Props) {
       layers: state.layers,
       activeLayerId: state.activeLayerId,
       focusedLayerId: state.focusedLayerId,
+      showTransformBox: state.showTransformBox,
     };
   }, [state]);
 
@@ -304,6 +306,7 @@ export function GlyphEditorTab({ tabState }: Props) {
               showCoordinates={state.showCoordinates}
               layers={state.layers}
               activeLayerId={state.activeLayerId}
+              showTransformBox={state.showTransformBox}
               dispatch={dispatch as (action: unknown) => void}
               stateRef={stateRef}
               onTransformFeedback={setTransformFeedback}

@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import type { EditablePath, ViewTransform, Selection, RubberBand, Layer, ImageLayer } from '@/lib/editorTypes';
 import { collectAllPoints, clonePaths } from '@/lib/svgPathParser';
+import { getPoint } from '@/hooks/useGlyphEditor';
 
 const HIT_RADIUS_PX = 8;
 
@@ -207,6 +208,56 @@ export function computeSelectionBBox(
   return { minX, minY, maxX, maxY };
 }
 
+const GLYPH_TRANSFORM_PAD = 8;
+const GLYPH_HANDLE_HIT = 6;
+const GLYPH_ROTATE_OFFSET = 24;
+const GLYPH_ROTATE_HIT_R = 8;
+
+/** Hit-test the glyph selection bounding box handles. Returns handle type or null. */
+function hitTestGlyphTransformHandle(
+  x: number, y: number,
+  bbox: SelectionBBox,
+  vt: ViewTransform,
+): TransformHandle {
+  const sx1r = vt.originX + bbox.minX * vt.scale;
+  const sy1r = vt.originY - bbox.maxY * vt.scale; // font maxY = screen top
+  const sx2r = vt.originX + bbox.maxX * vt.scale;
+  const sy2r = vt.originY - bbox.minY * vt.scale;
+  const sx1 = sx1r - GLYPH_TRANSFORM_PAD, sy1 = sy1r - GLYPH_TRANSFORM_PAD;
+  const sx2 = sx2r + GLYPH_TRANSFORM_PAD, sy2 = sy2r + GLYPH_TRANSFORM_PAD;
+  const midX = (sx1 + sx2) / 2, midY = (sy1 + sy2) / 2;
+  const rotY = sy1 - GLYPH_ROTATE_OFFSET;
+
+  if (Math.hypot(x - midX, y - rotY) <= GLYPH_ROTATE_HIT_R) return 'rotate';
+
+  const candidates: Array<[number, number, Exclude<TransformHandle, null>]> = [
+    [sx1, sy1, 'tl'], [sx2, sy1, 'tr'], [sx1, sy2, 'bl'], [sx2, sy2, 'br'],
+    [midX, sy1, 'tm'], [midX, sy2, 'bm'], [sx1, midY, 'lm'], [sx2, midY, 'rm'],
+  ];
+  for (const [hx, hy, h] of candidates) {
+    if (Math.abs(x - hx) <= GLYPH_HANDLE_HIT && Math.abs(y - hy) <= GLYPH_HANDLE_HIT) return h;
+  }
+  if (x >= sx1 && x <= sx2 && y >= sy1 && y <= sy2) return 'move';
+  return null;
+}
+
+/** Returns the fixed font-space origin point for a given scale handle. */
+function getGlyphScaleOrigin(handle: TransformHandle, bbox: SelectionBBox): { x: number; y: number } {
+  const cx = (bbox.minX + bbox.maxX) / 2;
+  const cy = (bbox.minY + bbox.maxY) / 2;
+  switch (handle) {
+    case 'tl': return { x: bbox.maxX, y: bbox.minY }; // opposite = BR font-space
+    case 'tr': return { x: bbox.minX, y: bbox.minY }; // opposite = BL
+    case 'bl': return { x: bbox.maxX, y: bbox.maxY }; // opposite = TR
+    case 'br': return { x: bbox.minX, y: bbox.maxY }; // opposite = TL
+    case 'tm': return { x: cx,        y: bbox.minY }; // opposite = BM center
+    case 'bm': return { x: cx,        y: bbox.maxY }; // opposite = TM center
+    case 'lm': return { x: bbox.maxX, y: cy        }; // opposite = RM center
+    case 'rm': return { x: bbox.minX, y: cy        }; // opposite = LM center
+    default:   return { x: cx, y: cy };
+  }
+}
+
 /** Hit-test against an image layer's transform handles. Returns handle type or null. */
 function hitTestImageHandle(
   sx: number, sy: number,
@@ -355,6 +406,7 @@ interface InteractionParams {
     layers: Layer[];
     activeLayerId: string;
     focusedLayerId: string;
+    showTransformBox: boolean;
   }>;
   dispatch: (action: unknown) => void;
   setRubberBand: (rb: RubberBand | null) => void;
@@ -386,7 +438,7 @@ export function useEditorInteraction({
   imageCacheRef,
 }: InteractionParams) {
   const dragRef = useRef<{
-    type: 'point' | 'canvas' | 'image-move' | 'image-rotate' | 'image-scale';
+    type: 'point' | 'canvas' | 'image-move' | 'image-rotate' | 'image-scale' | 'glyph-transform';
     startFx: number; startFy: number;
     curFx: number; curFy: number;
     rbStartX: number; rbStartY: number;
@@ -398,6 +450,14 @@ export function useEditorInteraction({
     imageHalfW?: number;
     imageHalfH?: number;
     startAngle?: number;
+    // Glyph transform fields
+    glyphHandle?: TransformHandle;
+    bboxAtStart?: SelectionBBox;
+    centerFx?: number;
+    centerFy?: number;
+    startAngleDeg?: number;
+    scaleOriginFx?: number;
+    scaleOriginFy?: number;
   } | null>(null);
 
   const panRef = useRef<{
@@ -410,6 +470,7 @@ export function useEditorInteraction({
 
   const getCursor = useCallback((): string => {
     if (dragRef.current?.type === 'image-move') return 'grabbing';
+    if (dragRef.current?.type === 'glyph-transform' && dragRef.current.glyphHandle === 'move') return 'grabbing';
     const handle = hoveredHandleRef.current;
     if (!handle) return 'default';
     if (handle === 'move') return 'grab';
@@ -453,7 +514,36 @@ export function useEditorInteraction({
 
     // Node tool: select and drag points and segments
     if (toolMode === 'node') {
-      // Check image transform handle first (if focused layer is an image)
+      // Check glyph transform box handles first (when showTransformBox is active)
+      const { showTransformBox } = stateRef.current;
+      if (showTransformBox && selection.pointIds.size > 1) {
+        const glyphBbox = computeSelectionBBox(paths, selection);
+        if (glyphBbox) {
+          const handle = hitTestGlyphTransformHandle(x, y, glyphBbox, vt);
+          if (handle !== null) {
+            const fp = toFontSpace(x, y, vt);
+            const cx = (glyphBbox.minX + glyphBbox.maxX) / 2;
+            const cy = (glyphBbox.minY + glyphBbox.maxY) / 2;
+            const scaleOrigin = getGlyphScaleOrigin(handle, glyphBbox);
+            const startAngleDeg = Math.atan2(fp.y - cy, fp.x - cx) * 180 / Math.PI;
+            dragRef.current = {
+              type: 'glyph-transform',
+              startFx: fp.x, startFy: fp.y, curFx: fp.x, curFy: fp.y,
+              rbStartX: x, rbStartY: y,
+              snapshot: clonePaths(paths),
+              glyphHandle: handle,
+              bboxAtStart: glyphBbox,
+              centerFx: cx, centerFy: cy,
+              startAngleDeg,
+              scaleOriginFx: scaleOrigin.x, scaleOriginFy: scaleOrigin.y,
+            };
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+            return;
+          }
+        }
+      }
+
+      // Check image transform handle (if focused layer is an image)
       const { focusedLayerId, layers: stateLayers } = stateRef.current;
       const focusedLayer = (stateLayers ?? []).find(l => l.id === focusedLayerId);
       if (focusedLayer?.type === 'image') {
@@ -601,6 +691,25 @@ export function useEditorInteraction({
     if (!dragRef.current) {
       if (toolMode === 'node') {
         const { paths } = stateRef.current;
+
+        // Glyph transform box hover (check before image and point hover)
+        const { showTransformBox: stb, selection: sel } = stateRef.current;
+        if (stb && sel.pointIds.size > 1) {
+          const glyphBbox2 = computeSelectionBBox(paths, sel);
+          if (glyphBbox2) {
+            const handle = hitTestGlyphTransformHandle(x, y, glyphBbox2, vt);
+            if (hoveredHandleRef.current !== handle) {
+              hoveredHandleRef.current = handle;
+              redraw();
+            }
+            if (handle !== null) {
+              setHoveredPointId(null);
+              setHoveredSegmentId(null);
+              return;
+            }
+          }
+        }
+
         const focusedLayer2 = (stateRef.current.layers ?? []).find(l => l.id === stateRef.current.focusedLayerId);
         if (focusedLayer2?.type === 'image') {
           // Image layer focused: hover image handles
@@ -696,6 +805,71 @@ export function useEditorInteraction({
         updates: { scaleX: Math.max(0.01, newScaleX), scaleY: Math.max(0.01, newScaleY) },
       });
       redraw();
+    } else if (drag.type === 'glyph-transform' && drag.snapshot && drag.glyphHandle !== undefined) {
+      const handle = drag.glyphHandle;
+      const { selection: sel, paths: curPaths } = stateRef.current;
+
+      if (handle === 'move') {
+        const fp = toFontSpace(x, y, vt);
+        const deltaX = fp.x - drag.curFx;
+        const deltaY = fp.y - drag.curFy;
+        drag.curFx = fp.x;
+        drag.curFy = fp.y;
+        const deltas = new Map<string, { x: number; y: number }>();
+        for (const id of sel.pointIds) {
+          deltas.set(id, { x: deltaX, y: deltaY });
+        }
+        dispatch({ type: 'MOVE_POINTS_LIVE', deltas });
+        redraw();
+      } else if (handle === 'rotate') {
+        const cx = drag.centerFx!;
+        const cy = drag.centerFy!;
+        const fp = toFontSpace(x, y, vt);
+        const currentAngleDeg = Math.atan2(fp.y - cy, fp.x - cx) * 180 / Math.PI;
+        const rotDeg = currentAngleDeg - drag.startAngleDeg!;
+        const rad = rotDeg * Math.PI / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        const deltas = new Map<string, { x: number; y: number }>();
+        for (const id of sel.pointIds) {
+          const snap = getPoint(drag.snapshot, id);
+          if (!snap) continue;
+          const cur = getPoint(curPaths, id);
+          if (!cur) continue;
+          const dx = snap.x - cx;
+          const dy = snap.y - cy;
+          const targetX = cx + dx * cos - dy * sin;
+          const targetY = cy + dx * sin + dy * cos;
+          deltas.set(id, { x: targetX - cur.x, y: targetY - cur.y });
+        }
+        dispatch({ type: 'TRANSFORM_POINTS_LIVE', deltas });
+        redraw();
+      } else {
+        // Scale handles: compute scale from font-space displacement
+        const fp = toFontSpace(x, y, vt);
+        const originFx = drag.scaleOriginFx!;
+        const originFy = drag.scaleOriginFy!;
+        const startDxF = drag.startFx - originFx;
+        const startDyF = drag.startFy - originFy;
+        const curDxF = fp.x - originFx;
+        const curDyF = fp.y - originFy;
+        const isHoriz = handle === 'lm' || handle === 'rm';
+        const isVert = handle === 'tm' || handle === 'bm';
+        const scaleX = isVert ? 1 : (Math.abs(startDxF) > 0.001 ? curDxF / startDxF : 1);
+        const scaleY = isHoriz ? 1 : (Math.abs(startDyF) > 0.001 ? curDyF / startDyF : 1);
+        const deltas = new Map<string, { x: number; y: number }>();
+        for (const id of sel.pointIds) {
+          const snap = getPoint(drag.snapshot, id);
+          if (!snap) continue;
+          const cur = getPoint(curPaths, id);
+          if (!cur) continue;
+          const targetX = originFx + (snap.x - originFx) * scaleX;
+          const targetY = originFy + (snap.y - originFy) * scaleY;
+          deltas.set(id, { x: targetX - cur.x, y: targetY - cur.y });
+        }
+        dispatch({ type: 'TRANSFORM_POINTS_LIVE', deltas });
+        redraw();
+      }
     } else {
       onTransformFeedback?.({ isActive: false, deltaX: 0, deltaY: 0, scaleX: 1, scaleY: 1, rotation: 0 });
       setDragPos(null);
@@ -730,6 +904,18 @@ export function useEditorInteraction({
       redraw();
     } else if (drag.type === 'image-move' || drag.type === 'image-rotate' || drag.type === 'image-scale') {
       // Image transforms are committed live; nothing special needed on release
+      redraw();
+    } else if (drag.type === 'glyph-transform') {
+      if (drag.glyphHandle === 'move') {
+        if (drag.snapshot && (drag.curFx !== drag.startFx || drag.curFy !== drag.startFy)) {
+          dispatch({ type: 'COMMIT_MOVE', snapshot: drag.snapshot });
+        }
+      } else {
+        if (drag.snapshot) {
+          dispatch({ type: 'COMMIT_TRANSFORM', snapshot: drag.snapshot });
+        }
+      }
+      setDragPos(null);
       redraw();
     }
   }, [stateRef, dispatch, getEventPos, setRubberBand, redraw, onTransformFeedback, setDragPos]);

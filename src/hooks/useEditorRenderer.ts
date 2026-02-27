@@ -165,6 +165,7 @@ export function renderFrame(
   imageCache: Map<string, any> = new Map(),
   inactiveDrawingPaths: EditablePath[] = [],
   focusedLayerId: string = '',
+  showTransformBox: boolean = false,
 ): void {
   if (!ck || !skCanvas) return;
 
@@ -708,6 +709,99 @@ export function renderFrame(
   }
   } // end if (paths.length > 0)
 
+  // ---- 9. Selection bounding box (shown after multi-point drag completes) ----
+  if (showTransformBox && selection.pointIds.size > 1) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const path of paths) {
+      for (const cmd of path.commands) {
+        const pts =
+          cmd.kind === 'M' || cmd.kind === 'L' ? [cmd.point]
+          : cmd.kind === 'Q' ? [cmd.ctrl, cmd.point]
+          : cmd.kind === 'C' ? [cmd.ctrl1, cmd.ctrl2, cmd.point]
+          : [];
+        for (const pt of pts) {
+          if (selection.pointIds.has(pt.id)) {
+            if (pt.x < minX) minX = pt.x;
+            if (pt.y < minY) minY = pt.y;
+            if (pt.x > maxX) maxX = pt.x;
+            if (pt.y > maxY) maxY = pt.y;
+          }
+        }
+      }
+    }
+    if (isFinite(minX)) {
+      const pad = 8;
+      const [sx1r, sy1r] = toScreen(minX, maxY, vt); // top-left before pad
+      const [sx2r, sy2r] = toScreen(maxX, minY, vt); // bottom-right before pad
+      const sx1 = sx1r - pad, sy1 = sy1r - pad;
+      const sx2 = sx2r + pad, sy2 = sy2r + pad;
+      const midX = (sx1 + sx2) / 2;
+      const midY = (sy1 + sy2) / 2;
+
+      // Box outline
+      const boxPath = new ck.Path();
+      boxPath.moveTo(sx1, sy1);
+      boxPath.lineTo(sx2, sy1);
+      boxPath.lineTo(sx2, sy2);
+      boxPath.lineTo(sx1, sy2);
+      boxPath.close();
+      const boxPaint = new Paint();
+      boxPaint.setAntiAlias(true);
+      boxPaint.setStyle(ck.PaintStyle.Stroke);
+      boxPaint.setColor(C.transformBox);
+      boxPaint.setStrokeWidth(1.5);
+      skCanvas.drawPath(boxPath, boxPaint);
+      boxPaint.delete();
+      boxPath.delete();
+
+      // 8 resize handles (squares)
+      const HANDLE_HALF = 4;
+      const hFill = new Paint();
+      hFill.setAntiAlias(true);
+      hFill.setStyle(ck.PaintStyle.Fill);
+      hFill.setColor(C.transformHandle);
+      const hStroke = new Paint();
+      hStroke.setAntiAlias(true);
+      hStroke.setStyle(ck.PaintStyle.Stroke);
+      hStroke.setStrokeWidth(1.5);
+      hStroke.setColor(C.transformHandleStroke);
+      const handlePositions: [number, number][] = [
+        [sx1, sy1], [sx2, sy1], [sx1, sy2], [sx2, sy2],
+        [midX, sy1], [midX, sy2], [sx1, midY], [sx2, midY],
+      ];
+      for (const [hx, hy] of handlePositions) {
+        const r = ck.LTRBRect(hx - HANDLE_HALF, hy - HANDLE_HALF, hx + HANDLE_HALF, hy + HANDLE_HALF);
+        skCanvas.drawRect(r, hFill);
+        skCanvas.drawRect(r, hStroke);
+      }
+      hFill.delete();
+      hStroke.delete();
+
+      // Rotation handle: stem line + circle
+      const ROTATE_Y = sy1 - 24;
+      const linePaint = new Paint();
+      linePaint.setAntiAlias(true);
+      linePaint.setStyle(ck.PaintStyle.Stroke);
+      linePaint.setStrokeWidth(1);
+      linePaint.setColor(C.transformBox);
+      skCanvas.drawLine(midX, sy1, midX, ROTATE_Y, linePaint);
+      linePaint.delete();
+      const rFill = new Paint();
+      rFill.setAntiAlias(true);
+      rFill.setStyle(ck.PaintStyle.Fill);
+      rFill.setColor(C.transformHandle);
+      const rStroke = new Paint();
+      rStroke.setAntiAlias(true);
+      rStroke.setStyle(ck.PaintStyle.Stroke);
+      rStroke.setStrokeWidth(1.5);
+      rStroke.setColor(C.transformHandleStroke);
+      skCanvas.drawCircle(midX, ROTATE_Y, 5, rFill);
+      skCanvas.drawCircle(midX, ROTATE_Y, 5, rStroke);
+      rFill.delete();
+      rStroke.delete();
+    }
+  }
+
   // ---- 9c. Image transform box (when focused layer is image) ----
   if (focusedLayerId) {
     const focusedLayer = layers.find(l => l.id === focusedLayerId);
@@ -915,6 +1009,7 @@ export function useEditorRenderer(
     layers: Layer[];
     activeLayerId: string;
     focusedLayerId: string;
+    showTransformBox: boolean;
   }>,
   metricsRef: React.MutableRefObject<FontMetrics | null>,
   extraRef: React.MutableRefObject<{
@@ -970,6 +1065,7 @@ export function useEditorRenderer(
         imageCacheRef.current,
         inactiveDrawingPaths,
         s.focusedLayerId ?? '',
+        s.showTransformBox ?? false,
       );
       surfaceRef.current.flush();
     });
