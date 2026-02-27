@@ -347,7 +347,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
           pointIds: action.pointIds,
           segmentIds: action.segmentIds ?? new Set()
         },
-        showTransformBox: false,
+        showTransformBox: action.pointIds.size > 1,
       };
     }
 
