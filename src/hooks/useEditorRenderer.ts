@@ -166,6 +166,7 @@ export function renderFrame(
   inactiveDrawingPaths: EditablePath[] = [],
   focusedLayerId: string = '',
   showTransformBox: boolean = false,
+  connectPreview: { fromX: number; fromY: number; toX: number; toY: number } | null = null,
 ): void {
   if (!ck || !skCanvas) return;
 
@@ -709,6 +710,19 @@ export function renderFrame(
   }
   } // end if (paths.length > 0)
 
+  // ---- 8b. Connect preview line (drawn during 'connect' drag in pen mode) ----
+  if (connectPreview) {
+    const [fromSx, fromSy] = toScreen(connectPreview.fromX, connectPreview.fromY, vt);
+    const [toSx, toSy] = toScreen(connectPreview.toX, connectPreview.toY, vt);
+    const previewPaint = new Paint();
+    previewPaint.setAntiAlias(true);
+    previewPaint.setStyle(ck.PaintStyle.Stroke);
+    previewPaint.setStrokeWidth(1.5);
+    previewPaint.setColor(rgba(0, 112, 243, 0.6));
+    skCanvas.drawLine(fromSx, fromSy, toSx, toSy, previewPaint);
+    previewPaint.delete();
+  }
+
   // ---- 9. Selection bounding box (shown after multi-point drag completes) ----
   if (showTransformBox && selection.pointIds.size > 1) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -1021,6 +1035,7 @@ export function useEditorRenderer(
     hoveredPointId: string | null;
     hoveredSegmentId: string | null;
     dragPos: { x: number; y: number } | null;
+    connectPreview: { fromX: number; fromY: number; toX: number; toY: number } | null;
   }>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   imageCacheRef: React.MutableRefObject<Map<string, any>>,
@@ -1066,6 +1081,7 @@ export function useEditorRenderer(
         inactiveDrawingPaths,
         s.focusedLayerId ?? '',
         s.showTransformBox ?? false,
+        extra.connectPreview ?? null,
       );
       surfaceRef.current.flush();
     });

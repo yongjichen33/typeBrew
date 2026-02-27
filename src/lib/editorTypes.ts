@@ -174,7 +174,31 @@ export type EditorAction =
   | { type: 'UPDATE_IMAGE_LAYER'; layerId: string; updates: Partial<Omit<ImageLayer, 'id' | 'type'>> }
   | { type: 'RENAME_LAYER'; layerId: string; name: string }
   | { type: 'SET_ACTIVE_LAYER'; layerId: string }
-  | { type: 'SET_FOCUSED_LAYER'; layerId: string };
+  | { type: 'SET_FOCUSED_LAYER'; layerId: string }
+  | {
+      type: 'CONNECT_WITH_LINE';
+      fromX: number; fromY: number;
+      toX: number; toY: number;
+      /** If set, extend this existing open path with L(toX,toY) instead of creating a new M+L sub-path. */
+      extendSourcePathId?: string;
+      /** If set, insert a new point on a segment before creating the connecting path. */
+      insertInSegment?: {
+        pathId: string;
+        insertIndex: number;
+        newPointId: string;
+        newPointX: number;
+        newPointY: number;
+      };
+    }
+  | {
+      /** Connect two open path endpoints without creating any new point objects.
+       *  - If target is the first point of sourcePathId → close that path.
+       *  - If target is first/last point of a different open path → merge the two paths.
+       */
+      type: 'CONNECT_PATH_ENDPOINTS';
+      sourcePathId: string;
+      targetPointId: string;
+    };
 
 // ---- Context value ----
 

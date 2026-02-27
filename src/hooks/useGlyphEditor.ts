@@ -70,6 +70,47 @@ function getPoint(paths: EditablePath[], id: string): EditablePoint | null {
   return null;
 }
 
+/** Returns the on-curve endpoint of a path command, or null for Z. */
+function cmdEndpoint(cmd: PathCommand): EditablePoint | null {
+  if (cmd.kind === 'M' || cmd.kind === 'L') return cmd.point;
+  if (cmd.kind === 'Q') return cmd.point;
+  if (cmd.kind === 'C') return cmd.point;
+  return null;
+}
+
+/**
+ * Builds commands to append when merging sourcePath with targetPath (source last → target last).
+ * Traverses targetPath in reverse, reusing existing point objects (no new points created).
+ * The bridge L to targetPath's last point is included as the first command.
+ */
+function buildReversedAppendCmds(targetPath: EditablePath): PathCommand[] {
+  const cmds = targetPath.commands.filter(c => c.kind !== 'Z');
+  if (cmds.length === 0) return [];
+
+  const result: PathCommand[] = [];
+
+  // Bridge: L to the last point of target path (existing object)
+  const lastPoint = cmdEndpoint(cmds[cmds.length - 1]);
+  if (!lastPoint) return [];
+  result.push({ kind: 'L' as const, point: lastPoint });
+
+  // Traverse reversed (from last-1 down to first point)
+  for (let i = cmds.length - 1; i >= 1; i--) {
+    const cmd = cmds[i];
+    const prevPoint = cmdEndpoint(cmds[i - 1]);
+    if (!prevPoint) continue;
+    if (cmd.kind === 'L') {
+      result.push({ kind: 'L' as const, point: prevPoint });
+    } else if (cmd.kind === 'Q') {
+      result.push({ kind: 'Q' as const, ctrl: cmd.ctrl, point: prevPoint });
+    } else if (cmd.kind === 'C') {
+      result.push({ kind: 'C' as const, ctrl1: cmd.ctrl2, ctrl2: cmd.ctrl1, point: prevPoint });
+    }
+  }
+
+  return result;
+}
+
 export function computeClipboardData(paths: EditablePath[], selection: Selection): ClipboardData {
   const clipboard: ClipboardData = { points: [], segments: [] };
   const pointsInSegments = new Set<string>();
@@ -986,6 +1027,160 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         redoStack: [],
         isDirty: true,
         showTransformBox: newPointIds.size > 1,
+      };
+    }
+
+    case 'CONNECT_WITH_LINE': {
+      const { fromX, fromY, toX, toY, insertInSegment, extendSourcePathId } = action;
+      const prev = clonePaths(state.paths);
+
+      // Optionally insert a new point into an existing segment first
+      let basePaths = state.paths;
+      if (insertInSegment) {
+        const { pathId, insertIndex, newPointId, newPointX, newPointY } = insertInSegment;
+        basePaths = basePaths.map(path => {
+          if (path.id !== pathId) return path;
+          const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
+          const actualIndex = (isClosed && insertIndex === path.commands.length)
+            ? path.commands.length - 1
+            : insertIndex;
+          const newCmds = [...path.commands];
+          newCmds.splice(actualIndex, 0, {
+            kind: 'L' as const,
+            point: { id: newPointId, x: newPointX, y: newPointY, type: 'on-curve' as const },
+          });
+          return { ...path, commands: newCmds };
+        });
+      }
+
+      // If source is the last endpoint of an open path, extend that path instead of creating M+L
+      if (extendSourcePathId) {
+        const newEndId = `pt-connect-${Date.now()}`;
+        const newPaths = basePaths.map(path => {
+          if (path.id !== extendSourcePathId) return path;
+          return {
+            ...path,
+            commands: [
+              ...path.commands,
+              { kind: 'L' as const, point: { id: newEndId, x: toX, y: toY, type: 'on-curve' as const } },
+            ],
+          };
+        });
+        return {
+          ...state,
+          paths: newPaths,
+          selection: { pointIds: new Set([newEndId]), segmentIds: new Set() },
+          undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+          redoStack: [],
+          isDirty: true,
+          showTransformBox: false,
+        };
+      }
+
+      // Create the straight connecting path
+      const newPathId = `path-connect-${Date.now()}`;
+      const fromId = `pt-cf-${Date.now()}`;
+      const toId = `pt-ct-${Date.now() + 1}`;
+      const newPath = {
+        id: newPathId,
+        commands: [
+          { kind: 'M' as const, point: { id: fromId, x: fromX, y: fromY, type: 'on-curve' as const } },
+          { kind: 'L' as const, point: { id: toId,   x: toX,   y: toY,   type: 'on-curve' as const } },
+        ],
+      };
+
+      return {
+        ...state,
+        paths: [...basePaths, newPath],
+        selection: { pointIds: new Set([fromId, toId]), segmentIds: new Set() },
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        redoStack: [],
+        isDirty: true,
+        showTransformBox: false,
+      };
+    }
+
+    case 'CONNECT_PATH_ENDPOINTS': {
+      const { sourcePathId, targetPointId } = action;
+      const prev = clonePaths(state.paths);
+
+      const sourcePath = state.paths.find(p => p.id === sourcePathId);
+      if (!sourcePath) return state;
+      if (sourcePath.commands[sourcePath.commands.length - 1]?.kind === 'Z') return state;
+
+      // Find which open path contains the target as first or last endpoint
+      let targetPathId: string | null = null;
+      let targetIsFirst = false;
+      let targetIsLast = false;
+
+      for (const path of state.paths) {
+        if (path.commands.length === 0) continue;
+        const lastCmd = path.commands[path.commands.length - 1];
+        if (lastCmd?.kind === 'Z') continue; // skip closed paths
+
+        const firstCmd = path.commands[0];
+        if (firstCmd?.kind === 'M' && firstCmd.point.id === targetPointId) {
+          targetPathId = path.id;
+          targetIsFirst = true;
+          break;
+        }
+        const lastPt = cmdEndpoint(lastCmd);
+        if (lastPt?.id === targetPointId) {
+          targetPathId = path.id;
+          targetIsLast = true;
+          break;
+        }
+      }
+
+      if (!targetPathId) return state; // target is not a path endpoint — fall back to no-op
+
+      // Case 1: Close the source path (source last → source first)
+      if (targetPathId === sourcePathId && targetIsFirst) {
+        const newPaths = state.paths.map(path => {
+          if (path.id !== sourcePathId) return path;
+          return { ...path, commands: [...path.commands, { kind: 'Z' as const }] };
+        });
+        return {
+          ...state, paths: newPaths,
+          undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+          redoStack: [], isDirty: true, showTransformBox: false,
+        };
+      }
+
+      if (targetPathId === sourcePathId) return state; // same path but not a close — ignore
+
+      // Case 2/3: Merge source path with a different open path
+      const targetPath = state.paths.find(p => p.id === targetPathId)!;
+
+      let bridgeAndAppend: PathCommand[];
+      if (targetIsFirst) {
+        // source last → target first → bridge L to target's first point, then append rest
+        const targetFirstPt = (targetPath.commands[0] as Extract<PathCommand, { kind: 'M' }>).point;
+        bridgeAndAppend = [
+          { kind: 'L' as const, point: targetFirstPt },
+          ...targetPath.commands.slice(1),
+        ];
+      } else if (targetIsLast) {
+        // source last → target last → bridge + reversed traversal
+        bridgeAndAppend = buildReversedAppendCmds(targetPath);
+      } else {
+        return state;
+      }
+
+      const mergedPath: EditablePath = {
+        ...sourcePath,
+        commands: [...sourcePath.commands, ...bridgeAndAppend],
+      };
+
+      const newPaths = state.paths
+        .filter(p => p.id !== targetPathId)
+        .map(p => p.id === sourcePathId ? mergedPath : p);
+
+      return {
+        ...state, paths: newPaths,
+        selection: { pointIds: new Set(), segmentIds: new Set() },
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        redoStack: [], isDirty: true, showTransformBox: false,
       };
     }
 

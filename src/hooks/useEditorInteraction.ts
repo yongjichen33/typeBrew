@@ -258,6 +258,50 @@ function getGlyphScaleOrigin(handle: TransformHandle, bbox: SelectionBBox): { x:
   }
 }
 
+/** Returns the path ID if sourcePointId is the last on-curve endpoint of an open path, else null. */
+function getExtendablePathId(paths: EditablePath[], sourcePointId: string): string | null {
+  for (const path of paths) {
+    const cmds = path.commands;
+    if (cmds.length === 0) continue;
+    const lastCmd = cmds[cmds.length - 1];
+    if (lastCmd.kind === 'Z') continue; // closed path — can't extend
+    let lastPtId: string | null = null;
+    if (lastCmd.kind === 'L' || lastCmd.kind === 'M') lastPtId = lastCmd.point.id;
+    else if (lastCmd.kind === 'Q') lastPtId = lastCmd.point.id;
+    else if (lastCmd.kind === 'C') lastPtId = lastCmd.point.id;
+    if (lastPtId === sourcePointId) return path.id;
+  }
+  return null;
+}
+
+/** Find the insert index and kind for a segment, given its segment ID. Only L and closing-Z segments are "straight". */
+function findSegmentInsertIndex(
+  paths: EditablePath[],
+  segmentId: string,
+): { pathId: string; insertIndex: number; isStraight: boolean } | null {
+  const parts = segmentId.split(':');
+  if (parts.length < 3) return null;
+  const pathId = parts[0];
+  const endId = parts[2];
+
+  const path = paths.find(p => p.id === pathId);
+  if (!path) return null;
+
+  // Closing segment: endId === first M point id — treated as straight
+  const firstCmd = path.commands[0];
+  if (firstCmd?.kind === 'M' && firstCmd.point.id === endId) {
+    return { pathId, insertIndex: path.commands.length, isStraight: true };
+  }
+
+  for (let i = 0; i < path.commands.length; i++) {
+    const cmd = path.commands[i];
+    if ((cmd.kind === 'L' || cmd.kind === 'Q' || cmd.kind === 'C') && cmd.point.id === endId) {
+      return { pathId, insertIndex: i, isStraight: cmd.kind === 'L' };
+    }
+  }
+  return null;
+}
+
 /** Hit-test against an image layer's transform handles. Returns handle type or null. */
 function hitTestImageHandle(
   sx: number, sy: number,
@@ -418,6 +462,7 @@ interface InteractionParams {
   setHoveredPointId: (id: string | null) => void;
   setHoveredSegmentId: (id: string | null) => void;
   setDragPos: (pos: { x: number; y: number } | null) => void;
+  setConnectPreview: (preview: { fromX: number; fromY: number; toX: number; toY: number } | null) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   imageCacheRef: React.MutableRefObject<Map<string, any>>;
 }
@@ -435,10 +480,11 @@ export function useEditorInteraction({
   setHoveredPointId,
   setHoveredSegmentId,
   setDragPos,
+  setConnectPreview,
   imageCacheRef,
 }: InteractionParams) {
   const dragRef = useRef<{
-    type: 'point' | 'canvas' | 'image-move' | 'image-rotate' | 'image-scale' | 'glyph-transform';
+    type: 'point' | 'canvas' | 'image-move' | 'image-rotate' | 'image-scale' | 'glyph-transform' | 'connect';
     startFx: number; startFy: number;
     curFx: number; curFy: number;
     rbStartX: number; rbStartY: number;
@@ -458,6 +504,10 @@ export function useEditorInteraction({
     startAngleDeg?: number;
     scaleOriginFx?: number;
     scaleOriginFy?: number;
+    // Connect fields
+    connectSourcePointId?: string;
+    connectSourceX?: number;
+    connectSourceY?: number;
   } | null>(null);
 
   const panRef = useRef<{
@@ -587,13 +637,11 @@ export function useEditorInteraction({
         }
       }
 
-      // Check for point hit
+      // Check for point hit → move (select + drag)
       const hitPointId = hitTest(x, y, paths, vt);
-      
+
       if (hitPointId) {
         const fp = toFontSpace(x, y, vt);
-        // Always start a drag (captures pointer) but actual movement is gated
-        // by a distance threshold in onPointerMove to prevent jitter shifts.
         dragRef.current = { type: 'point', startFx: fp.x, startFy: fp.y, curFx: fp.x, curFy: fp.y, rbStartX: x, rbStartY: y, snapshot: clonePaths(paths) };
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
         if (e.shiftKey || e.ctrlKey || e.metaKey) {
@@ -624,6 +672,24 @@ export function useEditorInteraction({
 
     // Pen tool: draw bezier curves
     if (toolMode === 'pen') {
+      // If clicking on an existing point, start a connect drag instead of placing a new point
+      const penHitPointId = hitTest(x, y, paths, vt);
+      if (penHitPointId) {
+        const fp = toFontSpace(x, y, vt);
+        const sourcePoint = getPoint(paths, penHitPointId);
+        dragRef.current = {
+          type: 'connect',
+          startFx: fp.x, startFy: fp.y, curFx: fp.x, curFy: fp.y,
+          rbStartX: x, rbStartY: y,
+          snapshot: null,
+          connectSourcePointId: penHitPointId,
+          connectSourceX: sourcePoint?.x ?? fp.x,
+          connectSourceY: sourcePoint?.y ?? fp.y,
+        };
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        return;
+      }
+
       const fp = toFontSpace(x, y, vt);
       const { activePathId, isDrawingPath } = stateRef.current;
 
@@ -762,6 +828,18 @@ export function useEditorInteraction({
       // is a smooth incremental move, not a jump from the original click position.
       drag.curFx = fp.x;
       drag.curFy = fp.y;
+    } else if (drag.type === 'connect') {
+      // Track cursor position and update preview line — no point movement
+      const fp = toFontSpace(x, y, vt);
+      drag.curFx = fp.x;
+      drag.curFy = fp.y;
+      setConnectPreview({
+        fromX: drag.connectSourceX ?? fp.x,
+        fromY: drag.connectSourceY ?? fp.y,
+        toX: fp.x,
+        toY: fp.y,
+      });
+      redraw();
     } else if (drag.type === 'canvas') {
       const rb: RubberBand = { x1: drag.rbStartX, y1: drag.rbStartY, x2: x, y2: y };
       setRubberBand(rb);
@@ -874,7 +952,7 @@ export function useEditorInteraction({
       onTransformFeedback?.({ isActive: false, deltaX: 0, deltaY: 0, scaleX: 1, scaleY: 1, rotation: 0 });
       setDragPos(null);
     }
-  }, [stateRef, dispatch, getEventPos, setRubberBand, setMousePos, redraw, onTransformFeedback, setDragPos, imageCacheRef]);
+  }, [stateRef, dispatch, getEventPos, setRubberBand, setMousePos, redraw, onTransformFeedback, setDragPos, setConnectPreview, imageCacheRef]);
 
   const onPointerUp = useCallback((e: PointerEvent) => {
     const { x, y } = getEventPos(e);
@@ -917,8 +995,80 @@ export function useEditorInteraction({
       }
       setDragPos(null);
       redraw();
+    } else if (drag.type === 'connect') {
+      setConnectPreview(null);
+      const sourceId = drag.connectSourcePointId;
+      if (!sourceId) { redraw(); return; }
+
+      // Only act when there was meaningful drag movement
+      const screenDx = x - drag.rbStartX;
+      const screenDy = y - drag.rbStartY;
+      const DRAG_THRESHOLD_PX = 4;
+      if (Math.sqrt(screenDx * screenDx + screenDy * screenDy) < DRAG_THRESHOLD_PX) {
+        redraw();
+        return;
+      }
+
+      const sourcePoint = getPoint(paths, sourceId);
+      if (!sourcePoint) { redraw(); return; }
+
+      const fp = toFontSpace(x, y, vt);
+      const extendSourcePathId = getExtendablePathId(paths, sourceId) ?? undefined;
+
+      // Case 1: Release on a different existing point
+      const releasePointId = hitTest(x, y, paths, vt);
+      if (releasePointId && releasePointId !== sourceId) {
+        if (extendSourcePathId) {
+          // Source is the last point of an open path → connect endpoints without creating new points
+          dispatch({ type: 'CONNECT_PATH_ENDPOINTS', sourcePathId: extendSourcePathId, targetPointId: releasePointId });
+        } else {
+          const targetPoint = getPoint(paths, releasePointId);
+          if (targetPoint) {
+            dispatch({
+              type: 'CONNECT_WITH_LINE',
+              fromX: sourcePoint.x, fromY: sourcePoint.y,
+              toX: targetPoint.x, toY: targetPoint.y,
+            });
+          }
+        }
+        redraw();
+        return;
+      }
+
+      // Case 2: Release on a straight segment
+      const releaseSegId = hitTestSegment(x, y, paths, vt);
+      if (releaseSegId) {
+        const segInfo = findSegmentInsertIndex(paths, releaseSegId);
+        if (segInfo && segInfo.isStraight) {
+          const newPointId = `pt-insert-${Date.now()}`;
+          dispatch({
+            type: 'CONNECT_WITH_LINE',
+            fromX: sourcePoint.x, fromY: sourcePoint.y,
+            toX: fp.x, toY: fp.y,
+            extendSourcePathId,
+            insertInSegment: {
+              pathId: segInfo.pathId,
+              insertIndex: segInfo.insertIndex,
+              newPointId,
+              newPointX: fp.x,
+              newPointY: fp.y,
+            },
+          });
+          redraw();
+          return;
+        }
+      }
+
+      // Case 3: Release in empty space — create new point and connect
+      dispatch({
+        type: 'CONNECT_WITH_LINE',
+        fromX: sourcePoint.x, fromY: sourcePoint.y,
+        toX: fp.x, toY: fp.y,
+        extendSourcePathId,
+      });
+      redraw();
     }
-  }, [stateRef, dispatch, getEventPos, setRubberBand, redraw, onTransformFeedback, setDragPos]);
+  }, [stateRef, dispatch, getEventPos, setRubberBand, redraw, onTransformFeedback, setDragPos, setConnectPreview]);
 
   const onWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
