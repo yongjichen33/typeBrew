@@ -399,8 +399,10 @@ export function InspectorPanel({
         scaleY: 100,
         rotation: 0,
       };
+      isApplyingTransformRef.current = true;
       setTransformValues(newValues);
       prevTransformValuesRef.current = newValues;
+      setTimeout(() => { isApplyingTransformRef.current = false; }, 0);
     }
   }, [showTransformBox, selectionBBox, selection.pointIds, selection.segmentIds]);
 

@@ -207,47 +207,6 @@ export function computeSelectionBBox(
   return { minX, minY, maxX, maxY };
 }
 
-function hitTestTransformHandle(
-  sx: number, sy: number,
-  bbox: SelectionBBox,
-  vt: ViewTransform,
-): TransformHandle {
-  const p1 = toScreen(bbox.minX, bbox.maxY, vt);
-  const p2 = toScreen(bbox.maxX, bbox.minY, vt);
-  
-  const padding = 8;
-  const left = p1.x - padding;
-  const top = p1.y - padding;
-  const right = p2.x + padding;
-  const bottom = p2.y + padding;
-  const midX = (left + right) / 2;
-  const midY = (top + bottom) / 2;
-  
-  const HANDLE_R = 8;
-  const ROTATION_R = 10;
-  const ROTATION_OFFSET = 20;
-  const rotationY = top - ROTATION_OFFSET;
-
-  const dist = (x1: number, y1: number, x2: number, y2: number) => 
-    Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-
-  if (dist(sx, sy, midX, rotationY) < ROTATION_R) return 'rotate';
-  if (dist(sx, sy, left, top) < HANDLE_R) return 'tl';
-  if (dist(sx, sy, right, top) < HANDLE_R) return 'tr';
-  if (dist(sx, sy, left, bottom) < HANDLE_R) return 'bl';
-  if (dist(sx, sy, right, bottom) < HANDLE_R) return 'br';
-  if (dist(sx, sy, midX, top) < HANDLE_R) return 'tm';
-  if (dist(sx, sy, midX, bottom) < HANDLE_R) return 'bm';
-  if (dist(sx, sy, left, midY) < HANDLE_R) return 'lm';
-  if (dist(sx, sy, right, midY) < HANDLE_R) return 'rm';
-
-  if (sx >= left && sx <= right && sy >= top && sy <= bottom) {
-    return 'move';
-  }
-
-  return null;
-}
-
 /** Hit-test against an image layer's transform handles. Returns handle type or null. */
 function hitTestImageHandle(
   sx: number, sy: number,
@@ -427,16 +386,11 @@ export function useEditorInteraction({
   imageCacheRef,
 }: InteractionParams) {
   const dragRef = useRef<{
-    type: 'point' | 'canvas' | 'transform' | 'image-move' | 'image-rotate' | 'image-scale';
+    type: 'point' | 'canvas' | 'image-move' | 'image-rotate' | 'image-scale';
     startFx: number; startFy: number;
     curFx: number; curFy: number;
     rbStartX: number; rbStartY: number;
     snapshot: EditablePath[] | null;
-    transformHandle?: TransformHandle;
-    transformBBox?: SelectionBBox;
-    transformCenter?: { x: number; y: number };
-    startScreenX?: number;
-    startScreenY?: number;
     // Image drag fields
     imageLayerId?: string;
     imageHandleType?: TransformHandle;
@@ -456,9 +410,6 @@ export function useEditorInteraction({
 
   const getCursor = useCallback((): string => {
     if (dragRef.current?.type === 'image-move') return 'grabbing';
-    if (dragRef.current?.type === 'transform' && dragRef.current.transformHandle === 'move') {
-      return 'grabbing';
-    }
     const handle = hoveredHandleRef.current;
     if (!handle) return 'default';
     if (handle === 'move') return 'grab';
@@ -546,46 +497,16 @@ export function useEditorInteraction({
         }
       }
 
-      const totalSelected = selection.pointIds.size + selection.segmentIds.size;
-
-      // Check for transform handle hit (only if more than one element selected)
-      if (totalSelected > 1) {
-        const bbox = computeSelectionBBox(paths, selection);
-        if (bbox) {
-          const hitHandle = hitTestTransformHandle(x, y, bbox, vt);
-          if (hitHandle) {
-            const fp = toFontSpace(x, y, vt);
-            const center = { x: (bbox.minX + bbox.maxX) / 2, y: (bbox.minY + bbox.maxY) / 2 };
-            dragRef.current = {
-              type: 'transform',
-              startFx: fp.x,
-              startFy: fp.y,
-              curFx: fp.x,
-              curFy: fp.y,
-              rbStartX: 0,
-              rbStartY: 0,
-              snapshot: clonePaths(paths),
-              transformHandle: hitHandle,
-              transformBBox: bbox,
-              transformCenter: center,
-              startScreenX: x,
-              startScreenY: y,
-            };
-            (e.target as HTMLElement).setPointerCapture(e.pointerId);
-            return;
-          }
-        }
-      }
-
       // Check for point hit
       const hitPointId = hitTest(x, y, paths, vt);
       
       if (hitPointId) {
-        // Point was hit - select/deselect point
         const fp = toFontSpace(x, y, vt);
-        dragRef.current = { type: 'point', startFx: fp.x, startFy: fp.y, curFx: fp.x, curFy: fp.y, rbStartX: 0, rbStartY: 0, snapshot: clonePaths(paths) };
+        // Always start a drag (captures pointer) but actual movement is gated
+        // by a distance threshold in onPointerMove to prevent jitter shifts.
+        dragRef.current = { type: 'point', startFx: fp.x, startFy: fp.y, curFx: fp.x, curFy: fp.y, rbStartX: x, rbStartY: y, snapshot: clonePaths(paths) };
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        if (e.shiftKey) {
+        if (e.shiftKey || e.ctrlKey || e.metaKey) {
           dispatch({ type: 'TOGGLE_SELECTION', pointId: hitPointId });
         } else if (!selection.pointIds.has(hitPointId)) {
           dispatch({ type: 'SET_SELECTION', pointIds: new Set([hitPointId]) });
@@ -597,7 +518,7 @@ export function useEditorInteraction({
         if (hitSegmentId) {
           // Segment was hit - select/deselect segment
           (e.target as HTMLElement).setPointerCapture(e.pointerId);
-          if (e.shiftKey) {
+          if (e.shiftKey || e.ctrlKey || e.metaKey) {
             dispatch({ type: 'TOGGLE_SEGMENT_SELECTION', segmentId: hitSegmentId });
           } else if (!selection.segmentIds.has(hitSegmentId)) {
             dispatch({ type: 'SET_SELECTION', pointIds: new Set(), segmentIds: new Set([hitSegmentId]) });
@@ -606,7 +527,7 @@ export function useEditorInteraction({
           // Nothing hit - start rubber band or clear selection
           dragRef.current = { type: 'canvas', startFx: 0, startFy: 0, curFx: 0, curFy: 0, rbStartX: x, rbStartY: y, snapshot: null };
           (e.target as HTMLElement).setPointerCapture(e.pointerId);
-          if (!e.shiftKey) dispatch({ type: 'CLEAR_SELECTION' });
+          if (!e.shiftKey && !e.ctrlKey && !e.metaKey) dispatch({ type: 'CLEAR_SELECTION' });
         }
       }
     }
@@ -692,21 +613,7 @@ export function useEditorInteraction({
           setHoveredPointId(null);
           setHoveredSegmentId(null);
         } else {
-          const totalSelected = selection.pointIds.size + selection.segmentIds.size;
-          if (totalSelected > 1) {
-            const bbox = computeSelectionBBox(paths, selection);
-            if (bbox) {
-              const hoveredHandle = hitTestTransformHandle(x, y, bbox, vt);
-              if (hoveredHandleRef.current !== hoveredHandle) {
-                hoveredHandleRef.current = hoveredHandle;
-                redraw();
-              }
-            } else {
-              hoveredHandleRef.current = null;
-            }
-          } else {
-            hoveredHandleRef.current = null;
-          }
+          hoveredHandleRef.current = null;
           // Hover detection for points and segments
           const hitPointId = hitTest(x, y, paths, vt);
           const hitSegmentId = hitPointId ? null : hitTestSegment(x, y, paths, vt);
@@ -724,178 +631,31 @@ export function useEditorInteraction({
 
     const drag = dragRef.current;
 
-    if (drag.type === 'point' && selection.pointIds.size > 0) {
+    if (drag.type === 'point') {
       const fp = toFontSpace(x, y, vt);
-      const deltaX = fp.x - drag.curFx;
-      const deltaY = fp.y - drag.curFy;
+      // Gate movement behind a minimum drag distance to prevent jitter from
+      // accidentally shifting points during Ctrl+Click or any quick click.
+      const DRAG_THRESHOLD_PX = 4;
+      const screenDx = x - drag.rbStartX;
+      const screenDy = y - drag.rbStartY;
+      if (Math.sqrt(screenDx * screenDx + screenDy * screenDy) >= DRAG_THRESHOLD_PX && selection.pointIds.size > 0) {
+        const deltaX = fp.x - drag.curFx;
+        const deltaY = fp.y - drag.curFy;
+        const deltas = new Map<string, { x: number; y: number }>();
+        for (const id of selection.pointIds) {
+          deltas.set(id, { x: deltaX, y: deltaY });
+        }
+        dispatch({ type: 'MOVE_POINTS_LIVE', deltas });
+        setDragPos({ x: fp.x, y: fp.y });
+        redraw();
+      }
+      // Always advance curFx/curFy so the first delta after threshold crossing
+      // is a smooth incremental move, not a jump from the original click position.
       drag.curFx = fp.x;
       drag.curFy = fp.y;
-
-      const deltas = new Map<string, { x: number; y: number }>();
-      for (const id of selection.pointIds) {
-        deltas.set(id, { x: deltaX, y: deltaY });
-      }
-      dispatch({ type: 'MOVE_POINTS_LIVE', deltas });
-      setDragPos({ x: fp.x, y: fp.y });
-      redraw();
     } else if (drag.type === 'canvas') {
       const rb: RubberBand = { x1: drag.rbStartX, y1: drag.rbStartY, x2: x, y2: y };
       setRubberBand(rb);
-      redraw();
-    } else if (drag.type === 'transform' && drag.transformBBox && drag.transformCenter && drag.snapshot) {
-      const fp = toFontSpace(x, y, vt);
-      const bbox = drag.transformBBox;
-      const center = drag.transformCenter;
-      const handle = drag.transformHandle;
-
-      const deltas = new Map<string, { x: number; y: number }>();
-      
-      const collectPointsFromPaths = (paths: EditablePath[]) => {
-        const pts: Array<{ id: string; x: number; y: number }> = [];
-        for (const path of paths) {
-          let lastOnCurve: { id: string; x: number; y: number } | null = null;
-          let firstOnCurve: { id: string; x: number; y: number } | null = null;
-          const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
-          
-          for (const cmd of path.commands) {
-            if (cmd.kind === 'M') {
-              if (selection.pointIds.has(cmd.point.id)) pts.push(cmd.point);
-              lastOnCurve = cmd.point;
-              firstOnCurve = cmd.point;
-            } else if (cmd.kind === 'L' && lastOnCurve) {
-              const segId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
-              if (selection.segmentIds.has(segId)) {
-                pts.push(lastOnCurve);
-                pts.push(cmd.point);
-              } else if (selection.pointIds.has(cmd.point.id)) {
-                pts.push(cmd.point);
-              }
-              lastOnCurve = cmd.point;
-            } else if (cmd.kind === 'Q' && lastOnCurve) {
-              const segId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
-              if (selection.segmentIds.has(segId)) {
-                pts.push(lastOnCurve);
-                pts.push(cmd.ctrl);
-                pts.push(cmd.point);
-              } else {
-                if (selection.pointIds.has(cmd.ctrl.id)) pts.push(cmd.ctrl);
-                if (selection.pointIds.has(cmd.point.id)) pts.push(cmd.point);
-              }
-              lastOnCurve = cmd.point;
-            } else if (cmd.kind === 'C' && lastOnCurve) {
-              const segId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
-              if (selection.segmentIds.has(segId)) {
-                pts.push(lastOnCurve);
-                pts.push(cmd.ctrl1);
-                pts.push(cmd.ctrl2);
-                pts.push(cmd.point);
-              } else {
-                if (selection.pointIds.has(cmd.ctrl1.id)) pts.push(cmd.ctrl1);
-                if (selection.pointIds.has(cmd.ctrl2.id)) pts.push(cmd.ctrl2);
-                if (selection.pointIds.has(cmd.point.id)) pts.push(cmd.point);
-              }
-              lastOnCurve = cmd.point;
-            }
-          }
-          
-          // Handle closing segment in closed path
-          if (isClosed && lastOnCurve && firstOnCurve && lastOnCurve.id !== firstOnCurve.id) {
-            const segId = `${path.id}:${lastOnCurve.id}:${firstOnCurve.id}`;
-            if (selection.segmentIds.has(segId)) {
-              pts.push(lastOnCurve);
-              pts.push(firstOnCurve);
-            }
-          }
-        }
-        return pts;
-      };
-
-      const originalPoints = collectPointsFromPaths(drag.snapshot);
-      const currentPoints = collectPointsFromPaths(stateRef.current.paths);
-      
-      const getCurrentPos = (id: string) => currentPoints.find(p => p.id === id);
-
-      if (handle === 'rotate') {
-        const startAngle = Math.atan2(drag.startFy - center.y, drag.startFx - center.x);
-        const currentAngle = Math.atan2(fp.y - center.y, fp.x - center.x);
-        const angleDelta = currentAngle - startAngle;
-        const rotation = angleDelta * 180 / Math.PI;
-        const cos = Math.cos(angleDelta);
-        const sin = Math.sin(angleDelta);
-
-        for (const origPt of originalPoints) {
-          const dx = origPt.x - center.x;
-          const dy = origPt.y - center.y;
-          const targetX = center.x + dx * cos - dy * sin;
-          const targetY = center.y + dx * sin + dy * cos;
-          
-          const currentPt = getCurrentPos(origPt.id);
-          if (currentPt) {
-            deltas.set(origPt.id, { x: targetX - currentPt.x, y: targetY - currentPt.y });
-          }
-        }
-        
-        onTransformFeedback?.({ isActive: true, deltaX: 0, deltaY: 0, scaleX: 1, scaleY: 1, rotation });
-      } else if (handle === 'move') {
-        const deltaX = fp.x - drag.startFx;
-        const deltaY = fp.y - drag.startFy;
-
-        for (const origPt of originalPoints) {
-          const targetX = origPt.x + deltaX;
-          const targetY = origPt.y + deltaY;
-          
-          const currentPt = getCurrentPos(origPt.id);
-          if (currentPt) {
-            deltas.set(origPt.id, { x: targetX - currentPt.x, y: targetY - currentPt.y });
-          }
-        }
-        
-        onTransformFeedback?.({ isActive: true, deltaX, deltaY, scaleX: 1, scaleY: 1, rotation: 0 });
-      } else {
-        let scaleX = 1, scaleY = 1;
-        const bboxW = bbox.maxX - bbox.minX;
-        const bboxH = bbox.maxY - bbox.minY;
-        
-        const screenBboxW = bboxW * vt.scale;
-        const screenBboxH = bboxH * vt.scale;
-        
-        const screenDeltaX = x - (drag.startScreenX ?? x);
-        const screenDeltaY = y - (drag.startScreenY ?? y);
-
-        if (handle === 'tl' || handle === 'tr' || handle === 'tm') {
-          scaleY = screenBboxH > 0 ? 1 - screenDeltaY / screenBboxH : 1;
-        }
-        if (handle === 'bl' || handle === 'br' || handle === 'bm') {
-          scaleY = screenBboxH > 0 ? 1 + screenDeltaY / screenBboxH : 1;
-        }
-        if (handle === 'tl' || handle === 'bl' || handle === 'lm') {
-          scaleX = screenBboxW > 0 ? 1 - screenDeltaX / screenBboxW : 1;
-        }
-        if (handle === 'tr' || handle === 'br' || handle === 'rm') {
-          scaleX = screenBboxW > 0 ? 1 + screenDeltaX / screenBboxW : 1;
-        }
-
-        if (e.shiftKey && (handle === 'tl' || handle === 'tr' || handle === 'bl' || handle === 'br')) {
-          const maxScale = Math.max(Math.abs(scaleX), Math.abs(scaleY));
-          scaleX = scaleX < 0 ? -maxScale : maxScale;
-          scaleY = scaleY < 0 ? -maxScale : maxScale;
-        }
-
-        for (const origPt of originalPoints) {
-          const targetX = center.x + (origPt.x - center.x) * scaleX;
-          const targetY = center.y + (origPt.y - center.y) * scaleY;
-          
-          const currentPt = getCurrentPos(origPt.id);
-          if (currentPt) {
-            deltas.set(origPt.id, { x: targetX - currentPt.x, y: targetY - currentPt.y });
-          }
-        }
-        
-        onTransformFeedback?.({ isActive: true, deltaX: 0, deltaY: 0, scaleX, scaleY, rotation: 0 });
-      }
-
-      setDragPos({ x: center.x, y: center.y });
-      dispatch({ type: 'TRANSFORM_POINTS_LIVE', deltas });
       redraw();
     } else if (drag.type === 'image-move' && drag.imageLayerId && drag.imageInitial) {
       const fp = toFontSpace(x, y, vt);
@@ -960,24 +720,13 @@ export function useEditorInteraction({
     } else if (drag.type === 'canvas') {
       const ids = pointsInRect(drag.rbStartX, drag.rbStartY, x, y, paths, vt);
       if (ids.size > 0) {
-        if (e.shiftKey) {
+        if (e.shiftKey || e.ctrlKey || e.metaKey) {
           dispatch({ type: 'SET_SELECTION', pointIds: new Set([...selection.pointIds, ...ids]) });
         } else {
           dispatch({ type: 'SET_SELECTION', pointIds: ids });
         }
       }
       setRubberBand(null);
-      redraw();
-    } else if (drag.type === 'transform') {
-      const deltaX = drag.curFx - drag.startFx;
-      const deltaY = drag.curFy - drag.startFy;
-      const threshold = 0; // 10 units in font space
-
-      if (drag.snapshot && (Math.abs(deltaX) > threshold || Math.abs(deltaY) > threshold)) {
-        dispatch({ type: 'COMMIT_TRANSFORM', snapshot: drag.snapshot });
-      }
-      onTransformFeedback?.({ isActive: false, deltaX: 0, deltaY: 0, scaleX: 1, scaleY: 1, rotation: 0 });
-      setDragPos(null);
       redraw();
     } else if (drag.type === 'image-move' || drag.type === 'image-rotate' || drag.type === 'image-scale') {
       // Image transforms are committed live; nothing special needed on release
