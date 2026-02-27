@@ -494,6 +494,10 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, showCoordinates: action.showCoordinates };
     }
 
+    case 'SET_SHOW_PIXEL_GRID': {
+      return { ...state, showPixelGrid: action.showPixelGrid };
+    }
+
     case 'SET_ACTIVE_PATH': {
       return { ...state, activePathId: action.pathId };
     }
@@ -1296,6 +1300,7 @@ export function makeInitialState(vt: ViewTransform): EditorState {
     activeLayerId: 'outline',
     focusedLayerId: 'outline',
     showTransformBox: false,
+    showPixelGrid: false,
   };
 }
 

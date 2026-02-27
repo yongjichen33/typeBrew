@@ -130,6 +130,8 @@ export interface EditorState {
   focusedLayerId: string;
   /** True after a multi-point drag completes; reset when selection changes. */
   showTransformBox: boolean;
+  /** Show a unit-grid in the background behind the glyph outline. */
+  showPixelGrid: boolean;
 }
 
 // ---- Actions ----
@@ -160,6 +162,7 @@ export type EditorAction =
   | { type: 'SET_SAVING'; saving: boolean }
   | { type: 'SET_SHOW_DIRECTION'; showDirection: boolean }
   | { type: 'SET_SHOW_COORDINATES'; showCoordinates: boolean }
+  | { type: 'SET_SHOW_PIXEL_GRID'; showPixelGrid: boolean }
   | { type: 'DELETE_SELECTED_POINTS' }
   | { type: 'PASTE_CLIPBOARD'; clipboard: ClipboardData; offsetX?: number; offsetY?: number }
   | { type: 'REVERSE_PATH_DIRECTION'; pathId: string }

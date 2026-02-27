@@ -38,8 +38,10 @@ interface GlyphEditorCanvasProps {
     activeLayerId: string;
     focusedLayerId: string;
     showTransformBox: boolean;
+    showPixelGrid: boolean;
   }>;
   showTransformBox: boolean;
+  showPixelGrid: boolean;
   onTransformFeedback?: (feedback: TransformFeedback) => void;
 }
 
@@ -56,6 +58,7 @@ export function GlyphEditorCanvas({
   dispatch,
   stateRef,
   showTransformBox,
+  showPixelGrid,
   onTransformFeedback,
 }: GlyphEditorCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -214,7 +217,7 @@ export function GlyphEditorCanvas({
   // Trigger redraw on relevant state changes
   useEffect(() => {
     redraw();
-  }, [redraw, paths, selection, toolMode, viewTransform, rubberBand, mousePos, pendingOffCurve, showDirection, showCoordinates, dragPos, layers, showTransformBox]);
+  }, [redraw, paths, selection, toolMode, viewTransform, rubberBand, mousePos, pendingOffCurve, showDirection, showCoordinates, dragPos, layers, showTransformBox, showPixelGrid]);
 
   // Observe container size and update canvas dimensions
   useEffect(() => {

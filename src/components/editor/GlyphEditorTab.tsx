@@ -72,6 +72,7 @@ export function GlyphEditorTab({ tabState }: Props) {
     activeLayerId: state.activeLayerId,
     focusedLayerId: state.focusedLayerId,
     showTransformBox: state.showTransformBox,
+    showPixelGrid: state.showPixelGrid,
   });
   // useLayoutEffect fires before paint so RAF callbacks always read fresh state
   useLayoutEffect(() => {
@@ -88,6 +89,7 @@ export function GlyphEditorTab({ tabState }: Props) {
       activeLayerId: state.activeLayerId,
       focusedLayerId: state.focusedLayerId,
       showTransformBox: state.showTransformBox,
+      showPixelGrid: state.showPixelGrid,
     };
   }, [state]);
 
@@ -280,6 +282,8 @@ export function GlyphEditorTab({ tabState }: Props) {
         onSetShowDirection={(showDirection) => dispatch({ type: 'SET_SHOW_DIRECTION', showDirection })}
         showCoordinates={state.showCoordinates}
         onSetShowCoordinates={(showCoordinates) => dispatch({ type: 'SET_SHOW_COORDINATES', showCoordinates })}
+        showPixelGrid={state.showPixelGrid}
+        onSetShowPixelGrid={(showPixelGrid) => dispatch({ type: 'SET_SHOW_PIXEL_GRID', showPixelGrid })}
       />
 
       {/* Canvas area with Inspector */}
@@ -307,6 +311,7 @@ export function GlyphEditorTab({ tabState }: Props) {
               layers={state.layers}
               activeLayerId={state.activeLayerId}
               showTransformBox={state.showTransformBox}
+              showPixelGrid={state.showPixelGrid}
               dispatch={dispatch as (action: unknown) => void}
               stateRef={stateRef}
               onTransformFeedback={setTransformFeedback}

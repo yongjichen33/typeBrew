@@ -167,6 +167,7 @@ export function renderFrame(
   focusedLayerId: string = '',
   showTransformBox: boolean = false,
   connectPreview: { fromX: number; fromY: number; toX: number; toY: number } | null = null,
+  showPixelGrid: boolean = false,
 ): void {
   if (!ck || !skCanvas) return;
 
@@ -210,6 +211,58 @@ export function renderFrame(
   drawVLine(0, C.metricLine, minY, maxY);
   drawVLine(metrics.advanceWidth, C.metricLine, minY, maxY);
   metricPaint.delete();
+
+  // ---- 1a. Pixel grid (adaptive background grid, always ~10px cells on screen) ----
+  if (showPixelGrid) {
+    // Pick a grid interval so cells are ~10 screen pixels wide.
+    // Snap to 1-2-5 sequence (1, 2, 5, 10, 20, 50, 100, …)
+    const TARGET_CELL_PX = 10;
+    const rawInterval = TARGET_CELL_PX / vt.scale;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(Math.max(rawInterval, 0.001))));
+    const normalized = rawInterval / magnitude;
+    const gridInterval = normalized < 2 ? magnitude : normalized < 5 ? 2 * magnitude : 5 * magnitude;
+
+    const gridMinFX = -metrics.advanceWidth;
+    const gridMaxFX = 2 * metrics.advanceWidth;
+    const gridMinFY = 2 * metrics.descender;
+    const gridMaxFY = 2 * metrics.ascender;
+
+    // Screen extents of grid bounds (for clamping line lengths)
+    const [, gridTopSy] = toScreen(0, gridMaxFY, vt);
+    const [, gridBotSy] = toScreen(0, gridMinFY, vt);
+    const [gridLeftSx] = toScreen(gridMinFX, 0, vt);
+    const [gridRightSx] = toScreen(gridMaxFX, 0, vt);
+
+    // Font-space range visible in viewport, clamped to grid bounds
+    const visMinFX = Math.max(gridMinFX, (RULER_WIDTH - vt.originX) / vt.scale);
+    const visMaxFX = Math.min(gridMaxFX, (canvasWidth - vt.originX) / vt.scale);
+    const visMinFY = Math.max(gridMinFY, (vt.originY - canvasHeight) / vt.scale);
+    const visMaxFY = Math.min(gridMaxFY, (vt.originY - RULER_WIDTH) / vt.scale);
+
+    const gridPaint = new Paint();
+    gridPaint.setAntiAlias(true);
+    gridPaint.setStyle(ck.PaintStyle.Stroke);
+    gridPaint.setStrokeWidth(0.5);
+    gridPaint.setColor(rgba(180, 180, 220, 0.5));
+
+    // Vertical lines
+    const startFX = Math.floor(visMinFX / gridInterval) * gridInterval;
+    for (let fx = startFX; fx <= visMaxFX + gridInterval; fx += gridInterval) {
+      if (fx < visMinFX) continue;
+      const [sx] = toScreen(fx, 0, vt);
+      skCanvas.drawLine(sx, Math.max(RULER_WIDTH, gridTopSy), sx, Math.min(canvasHeight, gridBotSy), gridPaint);
+    }
+
+    // Horizontal lines
+    const startFY = Math.floor(visMinFY / gridInterval) * gridInterval;
+    for (let fy = startFY; fy <= visMaxFY + gridInterval; fy += gridInterval) {
+      if (fy < visMinFY) continue;
+      const [, sy] = toScreen(0, fy, vt);
+      skCanvas.drawLine(Math.max(RULER_WIDTH, gridLeftSx), sy, Math.min(canvasWidth, gridRightSx), sy, gridPaint);
+    }
+
+    gridPaint.delete();
+  }
 
   // ---- 1b. Image layers (bottom-to-top order) ----
   for (const layer of layers) {
@@ -1024,6 +1077,7 @@ export function useEditorRenderer(
     activeLayerId: string;
     focusedLayerId: string;
     showTransformBox: boolean;
+    showPixelGrid: boolean;
   }>,
   metricsRef: React.MutableRefObject<FontMetrics | null>,
   extraRef: React.MutableRefObject<{
@@ -1082,6 +1136,7 @@ export function useEditorRenderer(
         s.focusedLayerId ?? '',
         s.showTransformBox ?? false,
         extra.connectPreview ?? null,
+        s.showPixelGrid ?? false,
       );
       surfaceRef.current.flush();
     });

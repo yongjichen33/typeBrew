@@ -9,6 +9,7 @@ import {
   Loader2,
   Navigation,
   Hash,
+  Grid3x3,
 } from 'lucide-react';
 import type { ToolMode } from '@/lib/editorTypes';
 
@@ -26,6 +27,8 @@ interface EditorToolbarProps {
   onSetShowDirection: (show: boolean) => void;
   showCoordinates: boolean;
   onSetShowCoordinates: (show: boolean) => void;
+  showPixelGrid: boolean;
+  onSetShowPixelGrid: (show: boolean) => void;
 }
 
 function ToolButton({
@@ -81,6 +84,8 @@ export function EditorToolbar({
   onSetShowDirection,
   showCoordinates,
   onSetShowCoordinates,
+  showPixelGrid,
+  onSetShowPixelGrid,
 }: EditorToolbarProps) {
   return (
     <div className="flex items-center gap-2 px-3 py-1 border-b bg-muted/30 shrink-0">
@@ -121,6 +126,12 @@ export function EditorToolbar({
           label="Show coordinates"
           active={showCoordinates}
           onClick={() => onSetShowCoordinates(!showCoordinates)}
+        />
+        <ToolButton
+          icon={<Grid3x3 size={15} />}
+          label="Show pixel grid"
+          active={showPixelGrid}
+          onClick={() => onSetShowPixelGrid(!showPixelGrid)}
         />
       </ToolGroup>
 
