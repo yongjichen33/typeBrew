@@ -985,6 +985,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
         redoStack: [],
         isDirty: true,
+        showTransformBox: newPointIds.size > 1,
       };
     }
 
