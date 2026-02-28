@@ -24,9 +24,16 @@ pre-commit:
       run: cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings
 
 pre-push:
+  parallel: true
   commands:
     cargo-audit:
       run: cd src-tauri && cargo audit
 
     typescript-check:
       run: npx tsc --noEmit
+
+    test-frontend:
+      run: npm run test:run
+
+    test-backend:
+      run: cd src-tauri && cargo test

@@ -16,7 +16,12 @@
     "typecheck": "tsc --noEmit",
     "lint:rust": "cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings",
     "format:rust": "cd src-tauri && cargo fmt",
-    "audit": "cd src-tauri && cargo audit"
+    "audit": "cd src-tauri && cargo audit",
+    "test:rust": "cd src-tauri && cargo test",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -45,11 +50,14 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "@vitest/ui": "^4.0.18",
     "eslint": "^9.22.0",
     "eslint-plugin-react": "^7.37.4",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^16.0.0",
+    "jsdom": "^28.1.0",
     "lefthook": "^1.11.3",
     "oxlint": "^0.16.4",
     "prettier": "^3.5.3",
@@ -60,6 +68,7 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.26.1",
     "vite": "^7.0.4",
-    "vite-tsconfig-paths": "^6.1.0"
+    "vite-tsconfig-paths": "^6.1.0",
+    "vitest": "^4.0.18"
   }
 }

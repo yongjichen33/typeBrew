@@ -1429,4 +1429,4 @@ export function useGlyphEditor(initialVt: ViewTransform) {
   return useReducer(reducer, initialVt, makeInitialState);
 }
 
-export { getPoint };
+export { getPoint, reducer };

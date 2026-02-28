@@ -78,6 +78,16 @@ npm run tauri dev
 | `npm run format:rust`  | Format Rust code with rustfmt                |
 | `npm run audit`        | Run cargo-audit for security vulnerabilities |
 
+### Testing
+
+| Command                 | Description                    |
+| ----------------------- | ------------------------------ |
+| `npm run test`          | Run tests in watch mode        |
+| `npm run test:rust`     | Run rust tests                 |
+| `npm run test:run`      | Run tests once                 |
+| `npm run test:ui`       | Run tests with UI              |
+| `npm run test:coverage` | Run tests with coverage report |
+
 ## Project Structure
 
 ```

@@ -1718,3 +1718,230 @@ pub fn save_glyph_outline(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tokenize_svg_path_empty() {
+        let tokens = tokenize_svg_path("");
+        assert!(tokens.is_empty());
+    }
+
+    #[test]
+    fn test_tokenize_svg_path_whitespace_only() {
+        let tokens = tokenize_svg_path("   \t\n  ");
+        assert!(tokens.is_empty());
+    }
+
+    #[test]
+    fn test_tokenize_svg_path_single_move() {
+        let tokens = tokenize_svg_path("M 100 200");
+        assert_eq!(tokens, vec!["M", "100", "200"]);
+    }
+
+    #[test]
+    fn test_tokenize_svg_path_move_line() {
+        let tokens = tokenize_svg_path("M 0 0 L 100 0");
+        assert_eq!(tokens, vec!["M", "0", "0", "L", "100", "0"]);
+    }
+
+    #[test]
+    fn test_tokenize_svg_path_negative_numbers() {
+        let tokens = tokenize_svg_path("M -100 -200 L 50 -50");
+        assert_eq!(tokens, vec!["M", "-100", "-200", "L", "50", "-50"]);
+    }
+
+    #[test]
+    fn test_tokenize_svg_path_decimals() {
+        let tokens = tokenize_svg_path("M 10.5 20.75 L 30.25 40.5");
+        assert_eq!(tokens, vec!["M", "10.5", "20.75", "L", "30.25", "40.5"]);
+    }
+
+    #[test]
+    fn test_tokenize_svg_path_scientific_notation() {
+        let tokens = tokenize_svg_path("M 1e2 2E-1 L 3e+1 4E0");
+        assert_eq!(tokens, vec!["M", "1e2", "2E-1", "L", "3e+1", "4E0"]);
+    }
+
+    #[test]
+    fn test_tokenize_svg_path_comma_separator() {
+        let tokens = tokenize_svg_path("M 0,0 L 100,0");
+        assert_eq!(tokens, vec!["M", "0", "0", "L", "100", "0"]);
+    }
+
+    #[test]
+    fn test_tokenize_svg_path_quadratic() {
+        let tokens = tokenize_svg_path("M 0 0 Q 50 100 100 0");
+        assert_eq!(tokens, vec!["M", "0", "0", "Q", "50", "100", "100", "0"]);
+    }
+
+    #[test]
+    fn test_tokenize_svg_path_cubic() {
+        let tokens = tokenize_svg_path("M 0 0 C 25 100 75 100 100 0");
+        assert_eq!(
+            tokens,
+            vec!["M", "0", "0", "C", "25", "100", "75", "100", "100", "0"]
+        );
+    }
+
+    #[test]
+    fn test_tokenize_svg_path_close() {
+        let tokens = tokenize_svg_path("M 0 0 L 100 0 Z");
+        assert_eq!(tokens, vec!["M", "0", "0", "L", "100", "0", "Z"]);
+    }
+
+    #[test]
+    fn test_tokenize_svg_path_lowercase() {
+        let tokens = tokenize_svg_path("m 100 200 l 300 400 z");
+        assert_eq!(tokens, vec!["m", "100", "200", "l", "300", "400", "z"]);
+    }
+
+    #[test]
+    fn test_parse_svg_path_cmds_empty() {
+        let result = parse_svg_path_cmds("");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_parse_svg_path_cmds_move_to() {
+        let result = parse_svg_path_cmds("M 100 200");
+        assert!(result.is_ok());
+        let cmds = result.unwrap();
+        assert_eq!(cmds.len(), 1);
+        assert!(matches!(cmds[0], SvgCmd::MoveTo(100.0, -200.0)));
+    }
+
+    #[test]
+    fn test_parse_svg_path_cmds_line_to() {
+        let result = parse_svg_path_cmds("M 0 0 L 100 0");
+        assert!(result.is_ok());
+        let cmds = result.unwrap();
+        assert_eq!(cmds.len(), 2);
+        assert!(matches!(cmds[0], SvgCmd::MoveTo(0.0, 0.0)));
+        assert!(matches!(cmds[1], SvgCmd::LineTo(100.0, 0.0)));
+    }
+
+    #[test]
+    fn test_parse_svg_path_cmds_quad_to() {
+        let result = parse_svg_path_cmds("M 0 0 Q 50 100 100 0");
+        assert!(result.is_ok());
+        let cmds = result.unwrap();
+        assert_eq!(cmds.len(), 2);
+        if let SvgCmd::QuadTo(cx, cy, x, y) = &cmds[1] {
+            assert_eq!(*cx, 50.0);
+            assert_eq!(*cy, -100.0);
+            assert_eq!(*x, 100.0);
+            assert_eq!(*y, 0.0);
+        } else {
+            panic!("Expected QuadTo");
+        }
+    }
+
+    #[test]
+    fn test_parse_svg_path_cmds_curve_to() {
+        let result = parse_svg_path_cmds("M 0 0 C 25 100 75 100 100 0");
+        assert!(result.is_ok());
+        let cmds = result.unwrap();
+        assert_eq!(cmds.len(), 2);
+        if let SvgCmd::CurveTo(cx1, cy1, cx2, cy2, x, y) = &cmds[1] {
+            assert_eq!(*cx1, 25.0);
+            assert_eq!(*cy1, -100.0);
+            assert_eq!(*cx2, 75.0);
+            assert_eq!(*cy2, -100.0);
+            assert_eq!(*x, 100.0);
+            assert_eq!(*y, 0.0);
+        } else {
+            panic!("Expected CurveTo");
+        }
+    }
+
+    #[test]
+    fn test_parse_svg_path_cmds_close() {
+        let result = parse_svg_path_cmds("M 0 0 L 100 0 Z");
+        assert!(result.is_ok());
+        let cmds = result.unwrap();
+        assert_eq!(cmds.len(), 3);
+        assert!(matches!(cmds[2], SvgCmd::Close));
+    }
+
+    #[test]
+    fn test_parse_svg_path_cmds_y_negation() {
+        let result = parse_svg_path_cmds("M 0 -100");
+        assert!(result.is_ok());
+        let cmds = result.unwrap();
+        if let SvgCmd::MoveTo(_, y) = &cmds[0] {
+            assert_eq!(*y, 100.0);
+        } else {
+            panic!("Expected MoveTo");
+        }
+    }
+
+    #[test]
+    fn test_build_glyf_glyph_bytes_empty() {
+        let result = build_glyf_glyph_bytes(&[]);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_build_glyf_glyph_bytes_simple_line() {
+        let cmds = vec![
+            SvgCmd::MoveTo(0.0, 0.0),
+            SvgCmd::LineTo(100.0, 0.0),
+            SvgCmd::LineTo(100.0, 200.0),
+            SvgCmd::Close,
+        ];
+        let result = build_glyf_glyph_bytes(&cmds);
+        assert!(result.is_ok());
+        let bytes = result.unwrap();
+        assert!(!bytes.is_empty());
+
+        let num_contours = i16::from_be_bytes([bytes[0], bytes[1]]);
+        assert_eq!(num_contours, 1);
+    }
+
+    #[test]
+    fn test_build_glyf_glyph_bytes_quadratic() {
+        let cmds = vec![
+            SvgCmd::MoveTo(0.0, 0.0),
+            SvgCmd::QuadTo(50.0, 100.0, 100.0, 0.0),
+            SvgCmd::Close,
+        ];
+        let result = build_glyf_glyph_bytes(&cmds);
+        assert!(result.is_ok());
+        let bytes = result.unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_build_glyf_glyph_bytes_cubic_error() {
+        let cmds = vec![
+            SvgCmd::MoveTo(0.0, 0.0),
+            SvgCmd::CurveTo(25.0, 100.0, 75.0, 100.0, 100.0, 0.0),
+        ];
+        let result = build_glyf_glyph_bytes(&cmds);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Cubic"));
+    }
+
+    #[test]
+    fn test_build_glyf_glyph_bytes_multiple_contours() {
+        let cmds = vec![
+            SvgCmd::MoveTo(0.0, 0.0),
+            SvgCmd::LineTo(10.0, 0.0),
+            SvgCmd::Close,
+            SvgCmd::MoveTo(100.0, 100.0),
+            SvgCmd::LineTo(110.0, 100.0),
+            SvgCmd::Close,
+        ];
+        let result = build_glyf_glyph_bytes(&cmds);
+        assert!(result.is_ok());
+        let bytes = result.unwrap();
+
+        let num_contours = i16::from_be_bytes([bytes[0], bytes[1]]);
+        assert_eq!(num_contours, 2);
+    }
+}
