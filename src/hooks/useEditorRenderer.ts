@@ -10,6 +10,7 @@ function rgba(r: number, g: number, b: number, a = 1): Float32Array {
 const C = {
   bg:              rgba(255, 255, 255),
   fill:            rgba(30, 30, 30, 0.12),
+  compositeFill:   rgba(30, 30, 30, 0.35),
   outline:         rgba(30, 30, 30, 0.85),
   baseline:        rgba(150, 150, 150),
   metricLine:      rgba(120, 120, 120, 0.6),
@@ -168,6 +169,7 @@ export function renderFrame(
   showTransformBox: boolean = false,
   connectPreview: { fromX: number; fromY: number; toX: number; toY: number } | null = null,
   showPixelGrid: boolean = false,
+  isComposite: boolean = false,
 ): void {
   if (!ck || !skCanvas) return;
 
@@ -361,7 +363,7 @@ export function renderFrame(
   const fillPaint = new Paint();
   fillPaint.setAntiAlias(true);
   fillPaint.setStyle(ck.PaintStyle.Fill);
-  fillPaint.setColor(C.fill);
+  fillPaint.setColor(isComposite ? C.compositeFill : C.fill);
   skCanvas.drawPath(skPath, fillPaint);
   fillPaint.delete();
 
@@ -1078,6 +1080,7 @@ export function useEditorRenderer(
     focusedLayerId: string;
     showTransformBox: boolean;
     showPixelGrid: boolean;
+    isComposite: boolean;
   }>,
   metricsRef: React.MutableRefObject<FontMetrics | null>,
   extraRef: React.MutableRefObject<{
@@ -1137,6 +1140,7 @@ export function useEditorRenderer(
         s.showTransformBox ?? false,
         extra.connectPreview ?? null,
         s.showPixelGrid ?? false,
+        s.isComposite ?? false,
       );
       surfaceRef.current.flush();
     });

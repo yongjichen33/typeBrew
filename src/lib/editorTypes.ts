@@ -138,12 +138,16 @@ export interface EditorState {
   previewInverted: boolean;
   /** Height of the preview panel in pixels. */
   previewHeight: number;
+  /** True if this glyph is a composite (references other glyphs). Read-only. */
+  isComposite: boolean;
+  /** Glyph IDs of components (only non-empty when isComposite is true). */
+  componentGlyphIds: number[];
 }
 
 // ---- Actions ----
 
 export type EditorAction =
-  | { type: 'SET_PATHS'; paths: EditablePath[] }
+  | { type: 'SET_PATHS'; paths: EditablePath[]; isComposite?: boolean; componentGlyphIds?: number[] }
   | { type: 'MOVE_POINTS_LIVE'; deltas: Map<string, Vec2> }
   | { type: 'COMMIT_MOVE'; snapshot: EditablePath[] }
   | { type: 'TRANSFORM_POINTS_LIVE'; deltas: Map<string, Vec2> }
@@ -275,6 +279,8 @@ export interface GlyphOutlineData {
     x_max: number;
     y_max: number;
   };
+  is_composite: boolean;
+  component_glyph_ids: number[];
 }
 
 // ---- State passed to GoldenLayout for a GlyphEditorTab ----

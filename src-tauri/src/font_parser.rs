@@ -74,6 +74,8 @@ pub struct GlyphOutlineData {
     pub contours: Vec<Contour>,
     pub advance_width: f32,
     pub bounds: Option<GlyphBounds>,
+    pub is_composite: bool,
+    pub component_glyph_ids: Vec<u32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -218,6 +220,8 @@ impl OutlineDataPen {
         glyph_id: u32,
         glyph_name: Option<String>,
         advance_width: f32,
+        is_composite: bool,
+        component_glyph_ids: Vec<u32>,
     ) -> GlyphOutlineData {
         GlyphOutlineData {
             glyph_id,
@@ -234,6 +238,8 @@ impl OutlineDataPen {
             } else {
                 None
             },
+            is_composite,
+            component_glyph_ids,
         }
     }
 }
@@ -446,6 +452,97 @@ pub fn get_glyph_outlines_binary(
     ))
 }
 
+fn parse_composite_component_ids(data: &[u8]) -> Vec<u32> {
+    const MORE_COMPONENTS: u16 = 0x0020;
+    const ARG_1_AND_2_ARE_WORDS: u16 = 0x0001;
+    const WE_HAVE_A_SCALE: u16 = 0x0008;
+    const WE_HAVE_AN_X_AND_Y_SCALE: u16 = 0x0040;
+    const WE_HAVE_A_TWO_BY_TWO: u16 = 0x0080;
+
+    let mut ids = Vec::new();
+    let mut pos = 0;
+    loop {
+        if pos + 4 > data.len() {
+            break;
+        }
+        let flags = u16::from_be_bytes([data[pos], data[pos + 1]]);
+        let component_glyph_id = u16::from_be_bytes([data[pos + 2], data[pos + 3]]);
+        ids.push(component_glyph_id as u32);
+        pos += 4;
+
+        // Skip variable-size arguments
+        pos += if flags & ARG_1_AND_2_ARE_WORDS != 0 { 4 } else { 2 };
+
+        // Skip optional transform data
+        if flags & WE_HAVE_A_TWO_BY_TWO != 0 {
+            pos += 8;
+        } else if flags & WE_HAVE_AN_X_AND_Y_SCALE != 0 {
+            pos += 4;
+        } else if flags & WE_HAVE_A_SCALE != 0 {
+            pos += 2;
+        }
+
+        if flags & MORE_COMPONENTS == 0 {
+            break;
+        }
+    }
+    ids
+}
+
+fn get_composite_info(font: &FontRef<'_>, glyph_id: u32) -> (bool, Vec<u32>) {
+    use skrifa::raw::types::Tag;
+
+    let glyf_bytes = match font.table_data(Tag::new(b"glyf")) {
+        Some(d) => d.as_bytes().to_owned(),
+        None => return (false, vec![]),
+    };
+    let loca_bytes = match font.table_data(Tag::new(b"loca")) {
+        Some(d) => d.as_bytes().to_owned(),
+        None => return (false, vec![]),
+    };
+    let is_long_loca = match font.head() {
+        Ok(h) => h.index_to_loc_format() == 1,
+        Err(_) => return (false, vec![]),
+    };
+
+    let glyph_start = if is_long_loca {
+        let idx = glyph_id as usize * 4;
+        if idx + 4 > loca_bytes.len() {
+            return (false, vec![]);
+        }
+        u32::from_be_bytes([
+            loca_bytes[idx],
+            loca_bytes[idx + 1],
+            loca_bytes[idx + 2],
+            loca_bytes[idx + 3],
+        ]) as usize
+    } else {
+        let idx = glyph_id as usize * 2;
+        if idx + 2 > loca_bytes.len() {
+            return (false, vec![]);
+        }
+        (u16::from_be_bytes([loca_bytes[idx], loca_bytes[idx + 1]]) as usize) * 2
+    };
+
+    if glyph_start + 2 > glyf_bytes.len() {
+        return (false, vec![]);
+    }
+
+    // numberOfContours < 0 → composite glyph
+    let num_contours =
+        i16::from_be_bytes([glyf_bytes[glyph_start], glyf_bytes[glyph_start + 1]]);
+    if num_contours >= 0 {
+        return (false, vec![]);
+    }
+
+    // Component records start at offset+10 (10-byte glyph header)
+    if glyph_start + 10 > glyf_bytes.len() {
+        return (true, vec![]);
+    }
+    let component_ids = parse_composite_component_ids(&glyf_bytes[glyph_start + 10..]);
+    (true, component_ids)
+}
+
 pub fn get_glyph_outline_data(
     file_path: &str,
     glyph_id: u32,
@@ -493,7 +590,9 @@ pub fn get_glyph_outline_data(
         pen.contours.push(Contour { commands });
     }
 
-    Ok(pen.into_outline_data(glyph_id, glyph_name, advance_width))
+    let (is_composite, component_glyph_ids) = get_composite_info(&font, glyph_id);
+
+    Ok(pen.into_outline_data(glyph_id, glyph_name, advance_width, is_composite, component_glyph_ids))
 }
 
 pub fn parse_font(file_path: &str, cache: &FontCache) -> Result<FontMetadata, String> {

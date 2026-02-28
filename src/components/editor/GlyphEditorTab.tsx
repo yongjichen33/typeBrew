@@ -11,7 +11,8 @@ import { EditorToolbar } from './EditorToolbar';
 import { GlyphEditorCanvas } from './GlyphEditorCanvas';
 import { InspectorPanel } from './InspectorPanel';
 import { GlyphPreview } from './GlyphPreview';
-import type { GlyphEditorTabState, FontMetrics, ViewTransform } from '@/lib/editorTypes';
+import { CompositeInfoBar } from './CompositeInfoBar';
+import type { GlyphEditorTabState, FontMetrics, ViewTransform, GlyphOutlineData } from '@/lib/editorTypes';
 
 export interface TransformFeedback {
   isActive: boolean;
@@ -77,6 +78,7 @@ export function GlyphEditorTab({ tabState }: Props) {
     showPreview: state.showPreview,
     previewInverted: state.previewInverted,
     previewHeight: state.previewHeight,
+    isComposite: state.isComposite,
   });
   // useLayoutEffect fires before paint so RAF callbacks always read fresh state
   useLayoutEffect(() => {
@@ -97,6 +99,7 @@ export function GlyphEditorTab({ tabState }: Props) {
       showPreview: state.showPreview,
       previewInverted: state.previewInverted,
       previewHeight: state.previewHeight,
+      isComposite: state.isComposite,
     };
   }, [state]);
 
@@ -115,7 +118,12 @@ export function GlyphEditorTab({ tabState }: Props) {
 
     // Convert outline data to editable paths
     const paths = outlineDataToEditablePaths(outlineData);
-    dispatch({ type: 'SET_PATHS', paths });
+    dispatch({
+      type: 'SET_PATHS',
+      paths,
+      isComposite: outlineData.is_composite,
+      componentGlyphIds: outlineData.component_glyph_ids,
+    });
 
     // Fetch hhea for ascender/descender and OS/2 for xHeight/capHeight
     Promise.all([
@@ -179,6 +187,32 @@ export function GlyphEditorTab({ tabState }: Props) {
 
   const focusedId = useFocusedGlyphId();
   const isFocused = focusedId === glyphId;
+
+  // Open a component glyph in a new editor tab
+  const handleOpenComponent = useCallback(async (componentGlyphId: number) => {
+    try {
+      const data = await invoke<GlyphOutlineData>('get_glyph_outline_data', {
+        filePath,
+        glyphId: componentGlyphId,
+      });
+      const tabState: GlyphEditorTabState = {
+        filePath,
+        tableName,
+        glyphId: componentGlyphId,
+        glyphName: data.glyph_name,
+        outlineData: data,
+        advanceWidth: data.advance_width,
+        boundsXMin: data.bounds?.x_min ?? 0,
+        boundsYMin: data.bounds?.y_min ?? 0,
+        boundsXMax: data.bounds?.x_max ?? 0,
+        boundsYMax: data.bounds?.y_max ?? 0,
+        unitsPerEm,
+      };
+      editorEventBus.emit(tabState);
+    } catch (error) {
+      toast.error(`Failed to open component glyph: ${error}`);
+    }
+  }, [filePath, tableName, unitsPerEm]);
 
   // Save handler
   const handleSave = useCallback(async () => {
@@ -296,6 +330,14 @@ export function GlyphEditorTab({ tabState }: Props) {
         previewInverted={state.previewInverted}
         onSetPreviewInverted={(previewInverted) => dispatch({ type: 'SET_PREVIEW_INVERTED', previewInverted })}
       />
+
+      {/* Composite info bar */}
+      {state.isComposite && (
+        <CompositeInfoBar
+          componentGlyphIds={state.componentGlyphIds}
+          onOpenComponent={handleOpenComponent}
+        />
+      )}
 
       {/* Canvas area with Inspector */}
       <div 

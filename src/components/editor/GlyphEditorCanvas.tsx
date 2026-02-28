@@ -39,6 +39,7 @@ interface GlyphEditorCanvasProps {
     focusedLayerId: string;
     showTransformBox: boolean;
     showPixelGrid: boolean;
+    isComposite: boolean;
   }>;
   showTransformBox: boolean;
   showPixelGrid: boolean;

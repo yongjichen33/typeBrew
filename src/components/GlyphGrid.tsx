@@ -165,6 +165,8 @@ export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLo
                   contours: [],
                   advance_width: unitsPerEm,
                   bounds: undefined,
+                  is_composite: false,
+                  component_glyph_ids: [],
                 };
                 editorEventBus.emit({
                   filePath,

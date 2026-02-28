@@ -451,6 +451,7 @@ interface InteractionParams {
     activeLayerId: string;
     focusedLayerId: string;
     showTransformBox: boolean;
+    isComposite: boolean;
   }>;
   dispatch: (action: unknown) => void;
   setRubberBand: (rb: RubberBand | null) => void;
@@ -561,6 +562,9 @@ export function useEditorInteraction({
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       return;
     }
+
+    // Composite glyphs are read-only — block all editing interactions
+    if (stateRef.current.isComposite) return;
 
     // Node tool: select and drag points and segments
     if (toolMode === 'node') {
@@ -753,6 +757,11 @@ export function useEditorInteraction({
     }
 
     setMousePos({ x, y });
+
+    if (stateRef.current.isComposite) {
+      redraw();
+      return;
+    }
 
     if (!dragRef.current) {
       if (toolMode === 'node') {
@@ -959,6 +968,7 @@ export function useEditorInteraction({
     const { paths, viewTransform: vt, selection } = stateRef.current;
 
     if (panRef.current) { panRef.current = null; return; }
+    if (stateRef.current.isComposite) return;
     if (!dragRef.current) return;
     const drag = dragRef.current;
     dragRef.current = null;

@@ -233,6 +233,8 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         undoStack: [],
         redoStack: [],
         isDirty: false,
+        isComposite: action.isComposite ?? false,
+        componentGlyphIds: action.componentGlyphIds ?? [],
       };
     }
 
@@ -1316,6 +1318,8 @@ export function makeInitialState(vt: ViewTransform): EditorState {
     showPreview: false,
     previewInverted: false,
     previewHeight: 100,
+    isComposite: false,
+    componentGlyphIds: [],
   };
 }
 
