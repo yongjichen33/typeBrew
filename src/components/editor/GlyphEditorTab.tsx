@@ -10,6 +10,7 @@ import { editorEventBus } from '@/lib/editorEventBus';
 import { EditorToolbar } from './EditorToolbar';
 import { GlyphEditorCanvas } from './GlyphEditorCanvas';
 import { InspectorPanel } from './InspectorPanel';
+import { GlyphPreview } from './GlyphPreview';
 import type { GlyphEditorTabState, FontMetrics, ViewTransform } from '@/lib/editorTypes';
 
 export interface TransformFeedback {
@@ -73,6 +74,9 @@ export function GlyphEditorTab({ tabState }: Props) {
     focusedLayerId: state.focusedLayerId,
     showTransformBox: state.showTransformBox,
     showPixelGrid: state.showPixelGrid,
+    showPreview: state.showPreview,
+    previewInverted: state.previewInverted,
+    previewHeight: state.previewHeight,
   });
   // useLayoutEffect fires before paint so RAF callbacks always read fresh state
   useLayoutEffect(() => {
@@ -90,6 +94,9 @@ export function GlyphEditorTab({ tabState }: Props) {
       focusedLayerId: state.focusedLayerId,
       showTransformBox: state.showTransformBox,
       showPixelGrid: state.showPixelGrid,
+      showPreview: state.showPreview,
+      previewInverted: state.previewInverted,
+      previewHeight: state.previewHeight,
     };
   }, [state]);
 
@@ -284,6 +291,10 @@ export function GlyphEditorTab({ tabState }: Props) {
         onSetShowCoordinates={(showCoordinates) => dispatch({ type: 'SET_SHOW_COORDINATES', showCoordinates })}
         showPixelGrid={state.showPixelGrid}
         onSetShowPixelGrid={(showPixelGrid) => dispatch({ type: 'SET_SHOW_PIXEL_GRID', showPixelGrid })}
+        showPreview={state.showPreview}
+        onSetShowPreview={(showPreview) => dispatch({ type: 'SET_SHOW_PREVIEW', showPreview })}
+        previewInverted={state.previewInverted}
+        onSetPreviewInverted={(previewInverted) => dispatch({ type: 'SET_PREVIEW_INVERTED', previewInverted })}
       />
 
       {/* Canvas area with Inspector */}
@@ -299,23 +310,61 @@ export function GlyphEditorTab({ tabState }: Props) {
           </div>
         ) : (
           <>
-            <GlyphEditorCanvas
-              ck={ck}
-              paths={state.paths}
-              selection={state.selection}
-              toolMode={state.toolMode}
-              viewTransform={state.viewTransform}
-              metrics={metrics}
-              showDirection={state.showDirection}
-              showCoordinates={state.showCoordinates}
-              layers={state.layers}
-              activeLayerId={state.activeLayerId}
-              showTransformBox={state.showTransformBox}
-              showPixelGrid={state.showPixelGrid}
-              dispatch={dispatch as (action: unknown) => void}
-              stateRef={stateRef}
-              onTransformFeedback={setTransformFeedback}
-            />
+            <div className="flex-1 min-h-0 flex flex-col">
+              <GlyphEditorCanvas
+                ck={ck}
+                paths={state.paths}
+                selection={state.selection}
+                toolMode={state.toolMode}
+                viewTransform={state.viewTransform}
+                metrics={metrics}
+                showDirection={state.showDirection}
+                showCoordinates={state.showCoordinates}
+                layers={state.layers}
+                activeLayerId={state.activeLayerId}
+                showTransformBox={state.showTransformBox}
+                showPixelGrid={state.showPixelGrid}
+                dispatch={dispatch as (action: unknown) => void}
+                stateRef={stateRef}
+                onTransformFeedback={setTransformFeedback}
+              />
+              {state.showPreview && (
+                <>
+                  <div
+                    className="h-1 bg-border hover:bg-primary/50 cursor-ns-resize transition-colors shrink-0"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      const startY = e.clientY;
+                      const startHeight = state.previewHeight;
+                      const containerHeight = containerRef.current?.offsetHeight ?? 400;
+                      const maxHeight = containerHeight * 0.5;
+                      const minHeight = 60;
+                      
+                      const handleMouseMove = (moveEvent: MouseEvent) => {
+                        const deltaY = startY - moveEvent.clientY;
+                        const newHeight = Math.min(maxHeight, Math.max(minHeight, startHeight + deltaY));
+                        dispatch({ type: 'SET_PREVIEW_HEIGHT', previewHeight: newHeight });
+                      };
+                      
+                      const handleMouseUp = () => {
+                        window.removeEventListener('mousemove', handleMouseMove);
+                        window.removeEventListener('mouseup', handleMouseUp);
+                      };
+                      
+                      window.addEventListener('mousemove', handleMouseMove);
+                      window.addEventListener('mouseup', handleMouseUp);
+                    }}
+                  />
+                  <GlyphPreview
+                    ck={ck}
+                    paths={state.paths}
+                    metrics={metrics}
+                    inverted={state.previewInverted}
+                    height={state.previewHeight}
+                  />
+                </>
+              )}
+            </div>
             <InspectorPanel
               selection={state.selection}
               paths={state.paths}

@@ -498,6 +498,18 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, showPixelGrid: action.showPixelGrid };
     }
 
+    case 'SET_SHOW_PREVIEW': {
+      return { ...state, showPreview: action.showPreview };
+    }
+
+    case 'SET_PREVIEW_INVERTED': {
+      return { ...state, previewInverted: action.previewInverted };
+    }
+
+    case 'SET_PREVIEW_HEIGHT': {
+      return { ...state, previewHeight: action.previewHeight };
+    }
+
     case 'SET_ACTIVE_PATH': {
       return { ...state, activePathId: action.pathId };
     }
@@ -1301,6 +1313,9 @@ export function makeInitialState(vt: ViewTransform): EditorState {
     focusedLayerId: 'outline',
     showTransformBox: false,
     showPixelGrid: false,
+    showPreview: false,
+    previewInverted: false,
+    previewHeight: 100,
   };
 }
 

@@ -132,6 +132,12 @@ export interface EditorState {
   showTransformBox: boolean;
   /** Show a unit-grid in the background behind the glyph outline. */
   showPixelGrid: boolean;
+  /** Show the filled glyph preview panel at the bottom of the canvas. */
+  showPreview: boolean;
+  /** Invert preview colors (white glyph on black background). */
+  previewInverted: boolean;
+  /** Height of the preview panel in pixels. */
+  previewHeight: number;
 }
 
 // ---- Actions ----
@@ -163,6 +169,9 @@ export type EditorAction =
   | { type: 'SET_SHOW_DIRECTION'; showDirection: boolean }
   | { type: 'SET_SHOW_COORDINATES'; showCoordinates: boolean }
   | { type: 'SET_SHOW_PIXEL_GRID'; showPixelGrid: boolean }
+  | { type: 'SET_SHOW_PREVIEW'; showPreview: boolean }
+  | { type: 'SET_PREVIEW_INVERTED'; previewInverted: boolean }
+  | { type: 'SET_PREVIEW_HEIGHT'; previewHeight: number }
   | { type: 'DELETE_SELECTED_POINTS' }
   | { type: 'PASTE_CLIPBOARD'; clipboard: ClipboardData; offsetX?: number; offsetY?: number }
   | { type: 'REVERSE_PATH_DIRECTION'; pathId: string }

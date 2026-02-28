@@ -10,6 +10,9 @@ import {
   Navigation,
   Hash,
   Grid3x3,
+  Eye,
+  EyeOff,
+  Contrast,
 } from 'lucide-react';
 import type { ToolMode } from '@/lib/editorTypes';
 
@@ -29,6 +32,10 @@ interface EditorToolbarProps {
   onSetShowCoordinates: (show: boolean) => void;
   showPixelGrid: boolean;
   onSetShowPixelGrid: (show: boolean) => void;
+  showPreview: boolean;
+  onSetShowPreview: (show: boolean) => void;
+  previewInverted: boolean;
+  onSetPreviewInverted: (inverted: boolean) => void;
 }
 
 function ToolButton({
@@ -86,6 +93,10 @@ export function EditorToolbar({
   onSetShowCoordinates,
   showPixelGrid,
   onSetShowPixelGrid,
+  showPreview,
+  onSetShowPreview,
+  previewInverted,
+  onSetPreviewInverted,
 }: EditorToolbarProps) {
   return (
     <div className="flex items-center gap-2 px-3 py-1 border-b bg-muted/30 shrink-0">
@@ -133,6 +144,20 @@ export function EditorToolbar({
           active={showPixelGrid}
           onClick={() => onSetShowPixelGrid(!showPixelGrid)}
         />
+        <ToolButton
+          icon={showPreview ? <Eye size={15} /> : <EyeOff size={15} />}
+          label={showPreview ? 'Hide preview' : 'Show preview'}
+          active={showPreview}
+          onClick={() => onSetShowPreview(!showPreview)}
+        />
+        {showPreview && (
+          <ToolButton
+            icon={<Contrast size={15} />}
+            label={previewInverted ? 'White on black' : 'Black on white'}
+            active={previewInverted}
+            onClick={() => onSetPreviewInverted(!previewInverted)}
+          />
+        )}
       </ToolGroup>
 
       <ToolDivider />

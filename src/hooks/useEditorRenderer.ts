@@ -212,11 +212,11 @@ export function renderFrame(
   drawVLine(metrics.advanceWidth, C.metricLine, minY, maxY);
   metricPaint.delete();
 
-  // ---- 1a. Pixel grid (adaptive background grid, always ~10px cells on screen) ----
+  // ---- 1a. Pixel grid (adaptive background grid, always ~20px cells on screen) ----
   if (showPixelGrid) {
     // Pick a grid interval so cells are ~10 screen pixels wide.
     // Snap to 1-2-5 sequence (1, 2, 5, 10, 20, 50, 100, …)
-    const TARGET_CELL_PX = 10;
+    const TARGET_CELL_PX = 20;
     const rawInterval = TARGET_CELL_PX / vt.scale;
     const magnitude = Math.pow(10, Math.floor(Math.log10(Math.max(rawInterval, 0.001))));
     const normalized = rawInterval / magnitude;
