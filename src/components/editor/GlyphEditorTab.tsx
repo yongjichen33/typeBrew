@@ -12,6 +12,7 @@ import {
 } from '@/lib/glyphClipboard';
 import { editablePathToSvg, outlineDataToEditablePaths } from '@/lib/svgPathParser';
 import { editorEventBus } from '@/lib/editorEventBus';
+import { glyphPathRegistry } from '@/lib/glyphPathRegistry';
 import { EditorToolbar } from './EditorToolbar';
 import { GlyphEditorCanvas } from './GlyphEditorCanvas';
 import { InspectorPanel } from './InspectorPanel';
@@ -101,6 +102,8 @@ export function GlyphEditorTab({ tabState }: Props) {
     previewInverted: state.previewInverted,
     previewHeight: state.previewHeight,
     isComposite: state.isComposite,
+    filePath,
+    componentGlyphIds: state.componentGlyphIds,
   });
   // useLayoutEffect fires before paint so RAF callbacks always read fresh state
   useLayoutEffect(() => {
@@ -122,8 +125,18 @@ export function GlyphEditorTab({ tabState }: Props) {
       previewInverted: state.previewInverted,
       previewHeight: state.previewHeight,
       isComposite: state.isComposite,
+      filePath,
+      componentGlyphIds: state.componentGlyphIds,
     };
-  }, [state]);
+    // Write this tab's current paths to the registry before every paint
+    glyphPathRegistry.update(filePath, glyphId, state.paths);
+  }, [state, filePath, glyphId]);
+
+  // Register watch for component glyphs (composite tabs only)
+  useEffect(() => {
+    if (!state.isComposite || state.componentGlyphIds.length === 0) return;
+    return glyphPathRegistry.watch(filePath, state.componentGlyphIds);
+  }, [state.isComposite, state.componentGlyphIds, filePath]);
 
   const [transformFeedback, setTransformFeedback] = useState<TransformFeedback>({
     isActive: false,
@@ -401,6 +414,7 @@ export function GlyphEditorTab({ tabState }: Props) {
                 dispatch={dispatch as (action: unknown) => void}
                 stateRef={stateRef}
                 onTransformFeedback={setTransformFeedback}
+                isComposite={state.isComposite}
               />
               {state.showPreview && (
                 <>

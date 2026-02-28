@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useEditorRenderer } from '@/hooks/useEditorRenderer';
 import { useEditorInteraction } from '@/hooks/useEditorInteraction';
+import { glyphPathRegistry } from '@/lib/glyphPathRegistry';
 import type {
   EditablePath,
   FontMetrics,
@@ -40,9 +41,12 @@ interface GlyphEditorCanvasProps {
     showTransformBox: boolean;
     showPixelGrid: boolean;
     isComposite: boolean;
+    filePath: string;
+    componentGlyphIds: number[];
   }>;
   showTransformBox: boolean;
   showPixelGrid: boolean;
+  isComposite: boolean;
   onTransformFeedback?: (feedback: TransformFeedback) => void;
 }
 
@@ -60,6 +64,7 @@ export function GlyphEditorCanvas({
   stateRef,
   showTransformBox,
   showPixelGrid,
+  isComposite,
   onTransformFeedback,
 }: GlyphEditorCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -189,6 +194,12 @@ export function GlyphEditorCanvas({
     extraRef,
     imageCacheRef
   );
+
+  // Register redraw callback with the path registry when this is a composite tab
+  useEffect(() => {
+    if (!isComposite) return;
+    return glyphPathRegistry.addRedrawListener(redraw);
+  }, [isComposite, redraw]);
 
   // Decode image layers into CanvasKit SkImage objects (must be after redraw is defined)
   useEffect(() => {

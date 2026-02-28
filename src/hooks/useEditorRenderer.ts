@@ -9,6 +9,7 @@ import type {
   DrawingLayer,
   ImageLayer,
 } from '@/lib/editorTypes';
+import { glyphPathRegistry } from '@/lib/glyphPathRegistry';
 
 // ---------- colour helpers ----------
 // CanvasKit Color4f: [R, G, B, A] each 0.0–1.0
@@ -1152,6 +1153,8 @@ export function useEditorRenderer(
     showTransformBox: boolean;
     showPixelGrid: boolean;
     isComposite: boolean;
+    filePath: string;
+    componentGlyphIds: number[];
   }>,
   metricsRef: React.MutableRefObject<FontMetrics | null>,
   extraRef: React.MutableRefObject<{
@@ -1198,6 +1201,12 @@ export function useEditorRenderer(
           (l): l is DrawingLayer => l.type === 'drawing' && l.visible && l.id !== s.activeLayerId
         )
         .flatMap((l) => l.paths);
+
+      // For composite glyphs: add live component outlines from the registry
+      const componentOutlinePaths = s.isComposite
+        ? (s.componentGlyphIds ?? []).flatMap((id) => glyphPathRegistry.get(s.filePath ?? '', id))
+        : [];
+
       renderFrame(
         ck,
         skCanvas,
@@ -1217,7 +1226,7 @@ export function useEditorRenderer(
         extra.dragPos ?? null,
         s.layers ?? [],
         imageCacheRef.current,
-        inactiveDrawingPaths,
+        [...inactiveDrawingPaths, ...componentOutlinePaths],
         s.focusedLayerId ?? '',
         s.showTransformBox ?? false,
         extra.connectPreview ?? null,
