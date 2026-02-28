@@ -1,6 +1,28 @@
-import { RefreshCw, X, Circle, Copy, Plus, ArrowUp, ArrowDown, Spline, Eye, EyeOff, ImageIcon, PenLine, Trash2 } from 'lucide-react';
+import {
+  RefreshCw,
+  X,
+  Circle,
+  Copy,
+  Plus,
+  ArrowUp,
+  ArrowDown,
+  Spline,
+  Eye,
+  EyeOff,
+  ImageIcon,
+  PenLine,
+  Trash2,
+} from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type { EditablePath, EditablePoint, Selection, SegmentType, EditorAction, Layer, ImageLayer } from '@/lib/editorTypes';
+import type {
+  EditablePath,
+  EditablePoint,
+  Selection,
+  SegmentType,
+  EditorAction,
+  Layer,
+  ImageLayer,
+} from '@/lib/editorTypes';
 import { computeClipboardData } from '@/hooks/useGlyphEditor';
 import { setClipboard } from '@/lib/glyphClipboard';
 import { computeSelectionBBox } from '@/hooks/useEditorInteraction';
@@ -70,7 +92,11 @@ function getSelectedPathIds(paths: EditablePath[], selection: Selection): string
           pathIds.add(path.id);
         }
       } else if (cmd.kind === 'C') {
-        if (selection.pointIds.has(cmd.ctrl1.id) || selection.pointIds.has(cmd.ctrl2.id) || selection.pointIds.has(cmd.point.id)) {
+        if (
+          selection.pointIds.has(cmd.ctrl1.id) ||
+          selection.pointIds.has(cmd.ctrl2.id) ||
+          selection.pointIds.has(cmd.point.id)
+        ) {
           pathIds.add(path.id);
         }
       }
@@ -81,16 +107,16 @@ function getSelectedPathIds(paths: EditablePath[], selection: Selection): string
 
 function getSelectedSegments(paths: EditablePath[], selection: Selection): Segment[] {
   const segments: Segment[] = [];
-  
+
   for (const path of paths) {
     const cmds = path.commands;
     let lastOnCurve: EditablePoint | null = null;
     let firstOnCurve: EditablePoint | null = null;
     const isClosed = cmds[cmds.length - 1]?.kind === 'Z';
-    
+
     for (let i = 0; i < cmds.length; i++) {
       const cmd = cmds[i];
-      
+
       if (cmd.kind === 'M') {
         lastOnCurve = cmd.point;
         firstOnCurve = cmd.point;
@@ -141,7 +167,7 @@ function getSelectedSegments(paths: EditablePath[], selection: Selection): Segme
         lastOnCurve = cmd.point;
       }
     }
-    
+
     // Handle closing segment in closed path
     if (isClosed && lastOnCurve && firstOnCurve && lastOnCurve.id !== firstOnCurve.id) {
       const segmentId = `${path.id}:${lastOnCurve.id}:${firstOnCurve.id}`;
@@ -158,7 +184,7 @@ function getSelectedSegments(paths: EditablePath[], selection: Selection): Segme
       }
     }
   }
-  
+
   return segments;
 }
 
@@ -168,8 +194,8 @@ function isPathClosed(path: EditablePath): boolean {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="border-b pb-3 mb-3 last:border-b-0 last:pb-0 last:mb-0">
-      <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">{title}</h4>
+    <div className="mb-3 border-b pb-3 last:mb-0 last:border-b-0 last:pb-0">
+      <h4 className="text-muted-foreground mb-2 text-[10px] tracking-wide uppercase">{title}</h4>
       {children}
     </div>
   );
@@ -177,23 +203,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Field({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex justify-between items-center py-1">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-xs font-mono">{value}</span>
+    <div className="flex items-center justify-between py-1">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className="font-mono text-xs">{value}</span>
     </div>
   );
 }
 
-function Button({ 
-  icon, 
-  label, 
-  active, 
+function Button({
+  icon,
+  label,
+  active,
   onClick,
   disabled,
   shortcut,
-}: { 
-  icon?: React.ReactNode; 
-  label: string; 
+}: {
+  icon?: React.ReactNode;
+  label: string;
   active?: boolean;
   disabled?: boolean;
   onClick: () => void;
@@ -205,31 +231,31 @@ function Button({
       disabled={disabled}
       title={shortcut ? `${label} (${shortcut})` : label}
       className={[
-        'flex items-center gap-1.5 px-2 py-1.5 rounded text-xs transition-colors w-full',
+        'flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs transition-colors',
         active
           ? 'bg-primary text-primary-foreground'
           : 'bg-muted hover:bg-muted/80 text-foreground',
-        disabled ? 'opacity-50 cursor-not-allowed' : '',
+        disabled ? 'cursor-not-allowed opacity-50' : '',
       ].join(' ')}
     >
-      {icon && <span className="w-3 h-3 flex-shrink-0">{icon}</span>}
+      {icon && <span className="h-3 w-3 flex-shrink-0">{icon}</span>}
       <span className="flex-1 text-left">{label}</span>
       {shortcut && <span className="text-[10px] opacity-60">{shortcut}</span>}
     </button>
   );
 }
 
-function InputField({ 
-  label, 
-  value, 
-  onChange, 
+function InputField({
+  label,
+  value,
+  onChange,
   unit,
   min,
   max,
   step = 1,
-}: { 
-  label: string; 
-  value: number; 
+}: {
+  label: string;
+  value: number;
   onChange: (value: number) => void;
   unit?: string;
   min?: number;
@@ -237,8 +263,8 @@ function InputField({
   step?: number;
 }) {
   return (
-    <div className="flex justify-between items-center py-1">
-      <span className="text-xs text-muted-foreground">{label}</span>
+    <div className="flex items-center justify-between py-1">
+      <span className="text-muted-foreground text-xs">{label}</span>
       <div className="flex items-center gap-1">
         <input
           type="number"
@@ -250,9 +276,9 @@ function InputField({
           min={min}
           max={max}
           step={step}
-          className="w-14 px-1.5 py-0.5 text-xs font-mono text-right bg-background border rounded"
+          className="bg-background w-14 rounded border px-1.5 py-0.5 text-right font-mono text-xs"
         />
-        {unit && <span className="text-[10px] text-muted-foreground">{unit}</span>}
+        {unit && <span className="text-muted-foreground text-[10px]">{unit}</span>}
       </div>
     </div>
   );
@@ -279,9 +305,17 @@ export function InspectorPanel({
       dispatch({
         type: 'ADD_IMAGE_LAYER',
         layer: {
-          id, type: 'image', name: file.name, visible: true,
-          imageDataUrl: dataUrl, opacity: 0.5,
-          scaleX: 1, scaleY: 1, rotation: 0, offsetX: 0, offsetY: 0,
+          id,
+          type: 'image',
+          name: file.name,
+          visible: true,
+          imageDataUrl: dataUrl,
+          opacity: 0.5,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
+          offsetX: 0,
+          offsetY: 0,
         },
       });
     };
@@ -297,15 +331,16 @@ export function InspectorPanel({
     });
   };
 
-  const activeImageLayer = layers.find(l => l.id === focusedLayerId && l.type === 'image') as ImageLayer | undefined;
+  const activeImageLayer = layers.find((l) => l.id === focusedLayerId && l.type === 'image') as
+    | ImageLayer
+    | undefined;
   const selectedPoints = getSelectedPoints(paths, selection);
   const selectedPathIds = getSelectedPathIds(paths, selection);
-  const selectedPath = selectedPathIds.length === 1 
-    ? paths.find(p => p.id === selectedPathIds[0]) 
-    : null;
+  const selectedPath =
+    selectedPathIds.length === 1 ? paths.find((p) => p.id === selectedPathIds[0]) : null;
   const selectedSegments = getSelectedSegments(paths, selection);
   const hasSegmentSelected = selectedSegments.length > 0;
-  const hasCurveSegment = selectedSegments.some(s => s.kind === 'quad' || s.kind === 'cubic');
+  const hasCurveSegment = selectedSegments.some((s) => s.kind === 'quad' || s.kind === 'cubic');
 
   const handleDeletePoints = () => {
     dispatch({ type: 'DELETE_SELECTED_POINTS' });
@@ -319,7 +354,7 @@ export function InspectorPanel({
   const handleAddPointOnSegment = () => {
     if (selectedSegments.length === 0) return;
     const segment = selectedSegments[0];
-    
+
     // For curves, add point at t=0.5 on the curve
     let x: number, y: number;
     if (segment.kind === 'line') {
@@ -329,8 +364,10 @@ export function InspectorPanel({
       // Quadratic bezier at t=0.5
       const t = 0.5;
       const mt = 1 - t;
-      x = mt * mt * segment.startPoint.x + 2 * mt * t * segment.ctrl1.x + t * t * segment.endPoint.x;
-      y = mt * mt * segment.startPoint.y + 2 * mt * t * segment.ctrl1.y + t * t * segment.endPoint.y;
+      x =
+        mt * mt * segment.startPoint.x + 2 * mt * t * segment.ctrl1.x + t * t * segment.endPoint.x;
+      y =
+        mt * mt * segment.startPoint.y + 2 * mt * t * segment.ctrl1.y + t * t * segment.endPoint.y;
     } else if (segment.kind === 'cubic' && segment.ctrl1 && segment.ctrl2) {
       // Cubic bezier at t=0.5
       const t = 0.5;
@@ -339,12 +376,20 @@ export function InspectorPanel({
       const mt3 = mt2 * mt;
       const t2 = t * t;
       const t3 = t2 * t;
-      x = mt3 * segment.startPoint.x + 3 * mt2 * t * segment.ctrl1.x + 3 * mt * t2 * segment.ctrl2.x + t3 * segment.endPoint.x;
-      y = mt3 * segment.startPoint.y + 3 * mt2 * t * segment.ctrl1.y + 3 * mt * t2 * segment.ctrl2.y + t3 * segment.endPoint.y;
+      x =
+        mt3 * segment.startPoint.x +
+        3 * mt2 * t * segment.ctrl1.x +
+        3 * mt * t2 * segment.ctrl2.x +
+        t3 * segment.endPoint.x;
+      y =
+        mt3 * segment.startPoint.y +
+        3 * mt2 * t * segment.ctrl1.y +
+        3 * mt * t2 * segment.ctrl2.y +
+        t3 * segment.endPoint.y;
     } else {
       return;
     }
-    
+
     const newPoint: EditablePoint = {
       id: `pt-mid-${Date.now()}`,
       x,
@@ -374,7 +419,7 @@ export function InspectorPanel({
   const selectionBBox = computeSelectionBBox(paths, selection);
   const totalSelected = selection.pointIds.size + selection.segmentIds.size;
   const showTransformBox = totalSelected > 1 && selectionBBox;
-  
+
   const [transformValues, setTransformValues] = useState({
     x: 0,
     y: 0,
@@ -416,43 +461,52 @@ export function InspectorPanel({
     wasTransformActiveRef.current = transformFeedback.isActive;
   }, [transformFeedback.isActive, selectionBBox, transformValues]);
 
-  const applyTransform = useCallback((newValues: typeof transformValues) => {
-    if (!selectionBBox) return;
+  const applyTransform = useCallback(
+    (newValues: typeof transformValues) => {
+      if (!selectionBBox) return;
 
-    const centerX = (selectionBBox.minX + selectionBBox.maxX) / 2;
-    const centerY = (selectionBBox.minY + selectionBBox.maxY) / 2;
+      const centerX = (selectionBBox.minX + selectionBBox.maxX) / 2;
+      const centerY = (selectionBBox.minY + selectionBBox.maxY) / 2;
 
-    const prev = prevTransformValuesRef.current;
-    const deltaX = newValues.x - Math.round(centerX);
-    const deltaY = newValues.y - Math.round(centerY);
-    const deltaScaleX = newValues.scaleX / prev.scaleX;
-    const deltaScaleY = newValues.scaleY / prev.scaleY;
-    const deltaRotation = newValues.rotation - prev.rotation;
+      const prev = prevTransformValuesRef.current;
+      const deltaX = newValues.x - Math.round(centerX);
+      const deltaY = newValues.y - Math.round(centerY);
+      const deltaScaleX = newValues.scaleX / prev.scaleX;
+      const deltaScaleY = newValues.scaleY / prev.scaleY;
+      const deltaRotation = newValues.rotation - prev.rotation;
 
-    if (deltaX === 0 && deltaY === 0 && deltaScaleX === 1 && deltaScaleY === 1 && deltaRotation === 0) {
-      return;
-    }
+      if (
+        deltaX === 0 &&
+        deltaY === 0 &&
+        deltaScaleX === 1 &&
+        deltaScaleY === 1 &&
+        deltaRotation === 0
+      ) {
+        return;
+      }
 
-    dispatch({
-      type: 'APPLY_TRANSFORM',
-      transform: {
-        translateX: deltaX,
-        translateY: deltaY,
-        scaleX: deltaScaleX,
-        scaleY: deltaScaleY,
-        rotation: deltaRotation,
-        centerX,
-        centerY,
-      },
-      selection,
-    });
+      dispatch({
+        type: 'APPLY_TRANSFORM',
+        transform: {
+          translateX: deltaX,
+          translateY: deltaY,
+          scaleX: deltaScaleX,
+          scaleY: deltaScaleY,
+          rotation: deltaRotation,
+          centerX,
+          centerY,
+        },
+        selection,
+      });
 
-    prevTransformValuesRef.current = newValues;
-  }, [selectionBBox, dispatch, selection]);
+      prevTransformValuesRef.current = newValues;
+    },
+    [selectionBBox, dispatch, selection]
+  );
 
   return (
-    <div className="w-56 border-l bg-muted/20 p-3 overflow-y-auto shrink-0">
-      <h3 className="text-sm font-medium mb-3">Inspector</h3>
+    <div className="bg-muted/20 w-56 shrink-0 overflow-y-auto border-l p-3">
+      <h3 className="mb-3 text-sm font-medium">Inspector</h3>
 
       {/* Hidden file input for image upload */}
       <input
@@ -465,27 +519,35 @@ export function InspectorPanel({
 
       {/* Layers */}
       <Section title="Layers">
-        <div className="space-y-0.5 mb-2">
+        <div className="mb-2 space-y-0.5">
           {layers.map((layer) => (
             <div key={layer.id}>
               <div
                 className={[
-                  'flex items-center gap-1 px-1.5 py-1 rounded cursor-pointer text-xs',
+                  'flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-xs',
                   layer.id === focusedLayerId ? 'bg-primary/10 text-primary' : 'hover:bg-muted',
                 ].join(' ')}
                 onClick={() => {
-                  if (layer.type === 'drawing') dispatch({ type: 'SET_ACTIVE_LAYER', layerId: layer.id });
+                  if (layer.type === 'drawing')
+                    dispatch({ type: 'SET_ACTIVE_LAYER', layerId: layer.id });
                   else dispatch({ type: 'SET_FOCUSED_LAYER', layerId: layer.id });
                 }}
               >
                 <button
-                  className="flex-shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_LAYER_VISIBLE', layerId: layer.id, visible: !layer.visible }); }}
+                  className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dispatch({
+                      type: 'SET_LAYER_VISIBLE',
+                      layerId: layer.id,
+                      visible: !layer.visible,
+                    });
+                  }}
                   title={layer.visible ? 'Hide layer' : 'Show layer'}
                 >
                   {layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}
                 </button>
-                <span className="flex-shrink-0 text-muted-foreground">
+                <span className="text-muted-foreground flex-shrink-0">
                   {layer.type === 'drawing' ? <PenLine size={12} /> : <ImageIcon size={12} />}
                 </span>
                 {renamingLayerId === layer.id ? (
@@ -493,10 +555,20 @@ export function InspectorPanel({
                     type="text"
                     defaultValue={layer.name}
                     autoFocus
-                    className="flex-1 px-0.5 py-0 text-xs bg-background border-b border-primary outline-none min-w-0"
-                    onBlur={(e) => { dispatch({ type: 'RENAME_LAYER', layerId: layer.id, name: e.target.value }); setRenamingLayerId(null); }}
+                    className="bg-background border-primary min-w-0 flex-1 border-b px-0.5 py-0 text-xs outline-none"
+                    onBlur={(e) => {
+                      dispatch({ type: 'RENAME_LAYER', layerId: layer.id, name: e.target.value });
+                      setRenamingLayerId(null);
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') { dispatch({ type: 'RENAME_LAYER', layerId: layer.id, name: e.currentTarget.value }); setRenamingLayerId(null); }
+                      if (e.key === 'Enter') {
+                        dispatch({
+                          type: 'RENAME_LAYER',
+                          layerId: layer.id,
+                          name: e.currentTarget.value,
+                        });
+                        setRenamingLayerId(null);
+                      }
                       if (e.key === 'Escape') setRenamingLayerId(null);
                       e.stopPropagation();
                     }}
@@ -505,15 +577,20 @@ export function InspectorPanel({
                 ) : (
                   <span
                     className="flex-1 truncate"
-                    onDoubleClick={() => { if (layer.id !== 'outline') setRenamingLayerId(layer.id); }}
+                    onDoubleClick={() => {
+                      if (layer.id !== 'outline') setRenamingLayerId(layer.id);
+                    }}
                   >
                     {layer.name}
                   </span>
                 )}
                 {layer.id !== 'outline' && (
                   <button
-                    className="flex-shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={(e) => { e.stopPropagation(); dispatch({ type: 'REMOVE_LAYER', layerId: layer.id }); }}
+                    className="text-muted-foreground hover:text-destructive flex-shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dispatch({ type: 'REMOVE_LAYER', layerId: layer.id });
+                    }}
                     title="Remove layer"
                   >
                     <Trash2 size={12} />
@@ -523,11 +600,17 @@ export function InspectorPanel({
 
               {/* Image layer settings (shown when focused) */}
               {layer.id === focusedLayerId && layer.type === 'image' && activeImageLayer && (
-                <div className="pl-2 mt-1 space-y-0.5 border-l-2 border-primary/20 ml-2">
+                <div className="border-primary/20 mt-1 ml-2 space-y-0.5 border-l-2 pl-2">
                   <InputField
                     label="Opacity"
                     value={Math.round(activeImageLayer.opacity * 100)}
-                    onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { opacity: Math.max(0, Math.min(1, v / 100)) } })}
+                    onChange={(v) =>
+                      dispatch({
+                        type: 'UPDATE_IMAGE_LAYER',
+                        layerId: layer.id,
+                        updates: { opacity: Math.max(0, Math.min(1, v / 100)) },
+                      })
+                    }
                     unit="%"
                     min={0}
                     max={100}
@@ -535,30 +618,60 @@ export function InspectorPanel({
                   <InputField
                     label="Scale X"
                     value={parseFloat(activeImageLayer.scaleX.toFixed(3))}
-                    onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { scaleX: v } })}
+                    onChange={(v) =>
+                      dispatch({
+                        type: 'UPDATE_IMAGE_LAYER',
+                        layerId: layer.id,
+                        updates: { scaleX: v },
+                      })
+                    }
                     step={0.1}
                   />
                   <InputField
                     label="Scale Y"
                     value={parseFloat(activeImageLayer.scaleY.toFixed(3))}
-                    onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { scaleY: v } })}
+                    onChange={(v) =>
+                      dispatch({
+                        type: 'UPDATE_IMAGE_LAYER',
+                        layerId: layer.id,
+                        updates: { scaleY: v },
+                      })
+                    }
                     step={0.1}
                   />
                   <InputField
                     label="Rotation"
                     value={parseFloat(activeImageLayer.rotation.toFixed(1))}
-                    onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { rotation: v } })}
+                    onChange={(v) =>
+                      dispatch({
+                        type: 'UPDATE_IMAGE_LAYER',
+                        layerId: layer.id,
+                        updates: { rotation: v },
+                      })
+                    }
                     unit="°"
                   />
                   <InputField
                     label="Offset X"
                     value={Math.round(activeImageLayer.offsetX)}
-                    onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { offsetX: v } })}
+                    onChange={(v) =>
+                      dispatch({
+                        type: 'UPDATE_IMAGE_LAYER',
+                        layerId: layer.id,
+                        updates: { offsetX: v },
+                      })
+                    }
                   />
                   <InputField
                     label="Offset Y"
                     value={Math.round(activeImageLayer.offsetY)}
-                    onChange={(v) => dispatch({ type: 'UPDATE_IMAGE_LAYER', layerId: layer.id, updates: { offsetY: v } })}
+                    onChange={(v) =>
+                      dispatch({
+                        type: 'UPDATE_IMAGE_LAYER',
+                        layerId: layer.id,
+                        updates: { offsetY: v },
+                      })
+                    }
                   />
                 </div>
               )}
@@ -568,14 +681,14 @@ export function InspectorPanel({
         <div className="flex gap-1">
           <button
             onClick={handleAddDrawingLayer}
-            className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 text-[10px] rounded bg-muted hover:bg-muted/80"
+            className="bg-muted hover:bg-muted/80 flex flex-1 items-center justify-center gap-1 rounded px-1.5 py-1 text-[10px]"
             title="Add drawing layer"
           >
             <PenLine size={10} /> Drawing
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 text-[10px] rounded bg-muted hover:bg-muted/80"
+            className="bg-muted hover:bg-muted/80 flex flex-1 items-center justify-center gap-1 rounded px-1.5 py-1 text-[10px]"
             title="Add image layer"
           >
             <ImageIcon size={10} /> Image
@@ -588,7 +701,11 @@ export function InspectorPanel({
         <Section title="Transform">
           <InputField
             label="X"
-            value={transformFeedback.isActive ? transformValues.x + Math.round(transformFeedback.deltaX) : transformValues.x}
+            value={
+              transformFeedback.isActive
+                ? transformValues.x + Math.round(transformFeedback.deltaX)
+                : transformValues.x
+            }
             onChange={(v) => {
               const newValues = { ...transformValues, x: v };
               setTransformValues(newValues);
@@ -597,7 +714,11 @@ export function InspectorPanel({
           />
           <InputField
             label="Y"
-            value={transformFeedback.isActive ? transformValues.y + Math.round(transformFeedback.deltaY) : transformValues.y}
+            value={
+              transformFeedback.isActive
+                ? transformValues.y + Math.round(transformFeedback.deltaY)
+                : transformValues.y
+            }
             onChange={(v) => {
               const newValues = { ...transformValues, y: v };
               setTransformValues(newValues);
@@ -606,7 +727,11 @@ export function InspectorPanel({
           />
           <InputField
             label="Scale X"
-            value={transformFeedback.isActive ? Math.round(transformFeedback.scaleX * 100) : transformValues.scaleX}
+            value={
+              transformFeedback.isActive
+                ? Math.round(transformFeedback.scaleX * 100)
+                : transformValues.scaleX
+            }
             onChange={(v) => {
               const newValues = { ...transformValues, scaleX: v };
               setTransformValues(newValues);
@@ -617,7 +742,11 @@ export function InspectorPanel({
           />
           <InputField
             label="Scale Y"
-            value={transformFeedback.isActive ? Math.round(transformFeedback.scaleY * 100) : transformValues.scaleY}
+            value={
+              transformFeedback.isActive
+                ? Math.round(transformFeedback.scaleY * 100)
+                : transformValues.scaleY
+            }
             onChange={(v) => {
               const newValues = { ...transformValues, scaleY: v };
               setTransformValues(newValues);
@@ -628,7 +757,11 @@ export function InspectorPanel({
           />
           <InputField
             label="Rotation"
-            value={transformFeedback.isActive ? Math.round(transformFeedback.rotation * 10) / 10 : transformValues.rotation}
+            value={
+              transformFeedback.isActive
+                ? Math.round(transformFeedback.rotation * 10) / 10
+                : transformValues.rotation
+            }
             onChange={(v) => {
               const newValues = { ...transformValues, rotation: v };
               setTransformValues(newValues);
@@ -643,7 +776,7 @@ export function InspectorPanel({
       {/* Point Selection Info */}
       <Section title="Selected Points">
         {selectedPoints.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">No points selected</p>
+          <p className="text-muted-foreground text-xs italic">No points selected</p>
         ) : (
           <>
             <Field label="Count" value={selectedPoints.length} />
@@ -655,15 +788,15 @@ export function InspectorPanel({
               </>
             )}
             <div className="mt-2 space-y-1">
-              <Button 
+              <Button
                 icon={<Copy size={12} />}
-                label="Copy" 
+                label="Copy"
                 onClick={handleCopyPoints}
                 shortcut="Ctrl+C"
               />
-              <Button 
+              <Button
                 icon={<X size={12} />}
-                label="Delete" 
+                label="Delete"
                 onClick={handleDeletePoints}
                 shortcut="Del"
               />
@@ -675,11 +808,14 @@ export function InspectorPanel({
       {/* Segment Actions */}
       {hasSegmentSelected && (
         <Section title={hasCurveSegment ? 'Curve Segment' : 'Line Segment'}>
-          <p className="text-xs text-muted-foreground mb-2">
+          <p className="text-muted-foreground mb-2 text-xs">
             {selectedSegments[0].kind === 'line' && 'Line'}
             {selectedSegments[0].kind === 'quad' && 'Quadratic Curve'}
-            {selectedSegments[0].kind === 'cubic' && 'Cubic Curve'}
-            : ({Math.round(selectedSegments[0].startPoint.x)}, {Math.round(selectedSegments[0].startPoint.y)}) → ({Math.round(selectedSegments[0].endPoint.x)}, {Math.round(selectedSegments[0].endPoint.y)})
+            {selectedSegments[0].kind === 'cubic' && 'Cubic Curve'}: (
+            {Math.round(selectedSegments[0].startPoint.x)},{' '}
+            {Math.round(selectedSegments[0].startPoint.y)}) → (
+            {Math.round(selectedSegments[0].endPoint.x)},{' '}
+            {Math.round(selectedSegments[0].endPoint.y)})
           </p>
           <div className="space-y-1">
             <Button
@@ -692,20 +828,24 @@ export function InspectorPanel({
                 <Button
                   icon={<Spline size={12} />}
                   label="Convert to Quadratic"
-                  onClick={() => dispatch({ 
-                    type: 'CONVERT_SEGMENT_TO_CURVE', 
-                    segmentId: `${selectedSegments[0].pathId}:${selectedSegments[0].startPointId}:${selectedSegments[0].endPointId}`,
-                    curveType: 'quadratic'
-                  })}
+                  onClick={() =>
+                    dispatch({
+                      type: 'CONVERT_SEGMENT_TO_CURVE',
+                      segmentId: `${selectedSegments[0].pathId}:${selectedSegments[0].startPointId}:${selectedSegments[0].endPointId}`,
+                      curveType: 'quadratic',
+                    })
+                  }
                 />
                 <Button
                   icon={<Spline size={12} />}
                   label="Convert to Cubic"
-                  onClick={() => dispatch({ 
-                    type: 'CONVERT_SEGMENT_TO_CURVE', 
-                    segmentId: `${selectedSegments[0].pathId}:${selectedSegments[0].startPointId}:${selectedSegments[0].endPointId}`,
-                    curveType: 'cubic'
-                  })}
+                  onClick={() =>
+                    dispatch({
+                      type: 'CONVERT_SEGMENT_TO_CURVE',
+                      segmentId: `${selectedSegments[0].pathId}:${selectedSegments[0].startPointId}:${selectedSegments[0].endPointId}`,
+                      curveType: 'cubic',
+                    })
+                  }
                 />
               </>
             )}
@@ -716,15 +856,12 @@ export function InspectorPanel({
       {/* Path Info */}
       {selectedPath && (
         <Section title="Path">
-          <Field 
-            label="Status" 
-            value={isPathClosed(selectedPath) ? 'Closed' : 'Open'} 
+          <Field label="Status" value={isPathClosed(selectedPath) ? 'Closed' : 'Open'} />
+          <Field
+            label="Points"
+            value={selectedPath.commands.filter((c) => c.kind !== 'Z').length}
           />
-          <Field 
-            label="Points" 
-            value={selectedPath.commands.filter(c => c.kind !== 'Z').length} 
-          />
-          
+
           <div className="mt-2 space-y-1">
             <Button
               icon={isPathClosed(selectedPath) ? <X size={12} /> : <Circle size={12} />}
@@ -744,20 +881,10 @@ export function InspectorPanel({
       {selectedPath && (
         <Section title="Direction">
           <div className="flex gap-1">
-            <Button
-              icon={<ArrowUp size={12} />}
-              label="CW"
-              onClick={handleReverseDirection}
-            />
-            <Button
-              icon={<ArrowDown size={12} />}
-              label="CCW"
-              onClick={handleReverseDirection}
-            />
+            <Button icon={<ArrowUp size={12} />} label="CW" onClick={handleReverseDirection} />
+            <Button icon={<ArrowDown size={12} />} label="CCW" onClick={handleReverseDirection} />
           </div>
-          <p className="text-[10px] text-muted-foreground mt-2">
-            Click to reverse path direction
-          </p>
+          <p className="text-muted-foreground mt-2 text-[10px]">Click to reverse path direction</p>
         </Section>
       )}
 
@@ -767,11 +894,23 @@ export function InspectorPanel({
           <div className="flex gap-1">
             <Button
               label="Line"
-              onClick={() => dispatch({ type: 'CONVERT_SEGMENT_TYPE', pointId: selectedPoints[0].id, segmentType: 'line' as SegmentType })}
+              onClick={() =>
+                dispatch({
+                  type: 'CONVERT_SEGMENT_TYPE',
+                  pointId: selectedPoints[0].id,
+                  segmentType: 'line' as SegmentType,
+                })
+              }
             />
             <Button
               label="Curve"
-              onClick={() => dispatch({ type: 'CONVERT_SEGMENT_TYPE', pointId: selectedPoints[0].id, segmentType: 'curve' as SegmentType })}
+              onClick={() =>
+                dispatch({
+                  type: 'CONVERT_SEGMENT_TYPE',
+                  pointId: selectedPoints[0].id,
+                  segmentType: 'curve' as SegmentType,
+                })
+              }
             />
           </div>
         </Section>
@@ -780,7 +919,10 @@ export function InspectorPanel({
       {/* Handle Info */}
       {selectedPoints.length === 1 && selectedPoints[0].type.startsWith('off-curve') && (
         <Section title="Handle">
-          <Field label="Type" value={selectedPoints[0].type === 'off-curve-quad' ? 'Quadratic' : 'Cubic'} />
+          <Field
+            label="Type"
+            value={selectedPoints[0].type === 'off-curve-quad' ? 'Quadratic' : 'Cubic'}
+          />
           <Field label="X" value={Math.round(selectedPoints[0].x)} />
           <Field label="Y" value={Math.round(selectedPoints[0].y)} />
         </Section>
@@ -788,12 +930,22 @@ export function InspectorPanel({
 
       {/* Keyboard Shortcuts Help */}
       <Section title="Shortcuts">
-        <div className="text-[10px] text-muted-foreground space-y-1">
-          <p><kbd className="px-1 bg-muted rounded">Ctrl+C</kbd> Copy points</p>
-          <p><kbd className="px-1 bg-muted rounded">Del</kbd> Delete points</p>
-          <p><kbd className="px-1 bg-muted rounded">Ctrl+V</kbd> Paste points</p>
-          <p><kbd className="px-1 bg-muted rounded">S</kbd> Select tool</p>
-          <p><kbd className="px-1 bg-muted rounded">P</kbd> Pen tool</p>
+        <div className="text-muted-foreground space-y-1 text-[10px]">
+          <p>
+            <kbd className="bg-muted rounded px-1">Ctrl+C</kbd> Copy points
+          </p>
+          <p>
+            <kbd className="bg-muted rounded px-1">Del</kbd> Delete points
+          </p>
+          <p>
+            <kbd className="bg-muted rounded px-1">Ctrl+V</kbd> Paste points
+          </p>
+          <p>
+            <kbd className="bg-muted rounded px-1">S</kbd> Select tool
+          </p>
+          <p>
+            <kbd className="bg-muted rounded px-1">P</kbd> Pen tool
+          </p>
         </div>
       </Section>
     </div>

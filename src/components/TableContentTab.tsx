@@ -25,14 +25,17 @@ export function TableContentTab({ filePath, tableName }: TableContentTabProps) {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
 
-  const loadGlyphBatch = useCallback(async (offset: number) => {
-    const buffer = await invoke<ArrayBuffer>('get_glyph_outlines', {
-      filePath,
-      offset,
-      limit: GLYPH_BATCH_SIZE,
-    });
-    return parseGlyphOutlines(buffer);
-  }, [filePath]);
+  const loadGlyphBatch = useCallback(
+    async (offset: number) => {
+      const buffer = await invoke<ArrayBuffer>('get_glyph_outlines', {
+        filePath,
+        offset,
+        limit: GLYPH_BATCH_SIZE,
+      });
+      return parseGlyphOutlines(buffer);
+    },
+    [filePath]
+  );
 
   // Load data on mount
   useEffect(() => {
@@ -70,10 +73,14 @@ export function TableContentTab({ filePath, tableName }: TableContentTabProps) {
     setIsLoadingMore(true);
     try {
       const data = await loadGlyphBatch(glyphState.glyphs.length);
-      setGlyphState(prev => prev ? {
-        ...prev,
-        glyphs: [...prev.glyphs, ...data.glyphs],
-      } : null);
+      setGlyphState((prev) =>
+        prev
+          ? {
+              ...prev,
+              glyphs: [...prev.glyphs, ...data.glyphs],
+            }
+          : null
+      );
     } catch (error) {
       toast.error(`Failed to load more glyphs: ${error}`);
     } finally {
@@ -98,13 +105,13 @@ export function TableContentTab({ filePath, tableName }: TableContentTabProps) {
   const fileName = filePath.split(/[\\/]/).pop() ?? filePath;
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center gap-1.5 px-4 py-2 border-b text-sm text-muted-foreground font-mono shrink-0">
+    <div className="flex h-full flex-col">
+      <div className="text-muted-foreground flex shrink-0 items-center gap-1.5 border-b px-4 py-2 font-mono text-sm">
         <span>{fileName}</span>
         <span className="text-border">/</span>
         <span className="text-foreground font-medium">{tableName}</span>
       </div>
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto">
         <TableContent
           data={tableData}
           glyphData={glyphState}

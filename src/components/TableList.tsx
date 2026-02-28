@@ -49,15 +49,16 @@ export function TableList({
   }, []);
 
   // Convert fonts to tree data format
-  const treeData: TreeNode[] = useMemo(() =>
-    fonts.map(font => ({
-      id: font.file_path,
-      label: font.file_name,
-      children: font.available_tables.map(table => ({
-        id: tableNodeId(font.file_path, table),
-        label: table,
+  const treeData: TreeNode[] = useMemo(
+    () =>
+      fonts.map((font) => ({
+        id: font.file_path,
+        label: font.file_name,
+        children: font.available_tables.map((table) => ({
+          id: tableNodeId(font.file_path, table),
+          label: table,
+        })),
       })),
-    })),
     [fonts]
   );
 
@@ -78,43 +79,47 @@ export function TableList({
   // Auto-expand when activeTab changes
   useEffect(() => {
     const prevTab = prevActiveTabRef.current;
-    const tabChanged = (
+    const tabChanged =
       (activeTab === null && prevTab !== null) ||
       (activeTab !== null && prevTab === null) ||
-      (activeTab && prevTab && (
-        activeTab.filePath !== prevTab.filePath ||
-        activeTab.type !== prevTab.type ||
-        (activeTab.type === 'table' && prevTab.type === 'table' && activeTab.tableName !== prevTab.tableName) ||
-        (activeTab.type === 'glyph' && prevTab.type === 'glyph' && activeTab.glyphId !== prevTab.glyphId)
-      ))
-    );
-    
+      (activeTab &&
+        prevTab &&
+        (activeTab.filePath !== prevTab.filePath ||
+          activeTab.type !== prevTab.type ||
+          (activeTab.type === 'table' &&
+            prevTab.type === 'table' &&
+            activeTab.tableName !== prevTab.tableName) ||
+          (activeTab.type === 'glyph' &&
+            prevTab.type === 'glyph' &&
+            activeTab.glyphId !== prevTab.glyphId)));
+
     prevActiveTabRef.current = activeTab ?? null;
-    
+
     if (activeTab && tabChanged && !expandedIds.includes(activeTab.filePath)) {
       handleExpandChange([...expandedIds, activeTab.filePath]);
     }
   }, [activeTab, expandedIds, handleExpandChange]);
 
   // Handle node selection — only table (leaf) nodes trigger onSelectTable
-  const handleSelect = useCallback((ids: string[]) => {
-    const id = ids[0];
-    if (!id) return;
+  const handleSelect = useCallback(
+    (ids: string[]) => {
+      const id = ids[0];
+      if (!id) return;
 
-    const sepIndex = id.indexOf('::');
-    if (sepIndex === -1) return; // clicked a font node, ignore
+      const sepIndex = id.indexOf('::');
+      if (sepIndex === -1) return; // clicked a font node, ignore
 
-    const filePath = id.substring(0, sepIndex);
-    const table = id.substring(sepIndex + 2);
-    onSelectTable(filePath, table);
-  }, [onSelectTable]);
+      const filePath = id.substring(0, sepIndex);
+      const table = id.substring(sepIndex + 2);
+      onSelectTable(filePath, table);
+    },
+    [onSelectTable]
+  );
 
   return (
     <div ref={containerRef} className="h-full">
       {fonts.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">
-          No fonts opened
-        </p>
+        <p className="text-muted-foreground py-8 text-center">No fonts opened</p>
       ) : (
         <FontTree
           data={treeData}

@@ -57,11 +57,11 @@ function ToolButton({
       disabled={disabled}
       onClick={onClick}
       className={[
-        'flex items-center justify-center w-8 h-8 rounded transition-colors',
+        'flex h-8 w-8 items-center justify-center rounded transition-colors',
         active
           ? 'bg-foreground text-background'
           : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-        disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer',
+        disabled ? 'cursor-not-allowed opacity-30' : 'cursor-pointer',
       ].join(' ')}
     >
       {icon}
@@ -70,7 +70,7 @@ function ToolButton({
 }
 
 function ToolDivider() {
-  return <div className="w-px h-5 bg-border mx-1" />;
+  return <div className="bg-border mx-1 h-5 w-px" />;
 }
 
 function ToolGroup({ children }: { children: React.ReactNode }) {
@@ -99,7 +99,7 @@ export function EditorToolbar({
   onSetPreviewInverted,
 }: EditorToolbarProps) {
   return (
-    <div className="flex items-center gap-2 px-3 py-1 border-b bg-muted/30 shrink-0">
+    <div className="bg-muted/30 flex shrink-0 items-center gap-2 border-b px-3 py-1">
       {/* Tool Palette */}
       <ToolGroup>
         <ToolButton
@@ -198,7 +198,7 @@ export function EditorToolbar({
         disabled={!isDirty || isSaving}
         onClick={onSave}
         className={[
-          'flex items-center gap-1.5 px-2.5 h-7 rounded text-xs font-medium transition-colors',
+          'flex h-7 items-center gap-1.5 rounded px-2.5 text-xs font-medium transition-colors',
           isDirty && !isSaving
             ? 'bg-primary text-primary-foreground hover:bg-primary/90'
             : 'bg-muted text-muted-foreground cursor-not-allowed opacity-50',

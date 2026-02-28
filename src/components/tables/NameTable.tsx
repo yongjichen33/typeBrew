@@ -129,7 +129,7 @@ export function NameTable({ data, filePath, onSaved }: NameTableProps) {
 
   if (!data.name_records?.length) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
+      <div className="text-muted-foreground flex h-full items-center justify-center">
         No name records available
       </div>
     );
@@ -138,7 +138,7 @@ export function NameTable({ data, filePath, onSaved }: NameTableProps) {
   return (
     <ScrollArea className="h-full">
       {isDirty && (
-        <div className="sticky top-0 z-10 flex items-center justify-end gap-2 border-b bg-background/95 backdrop-blur px-6 py-3">
+        <div className="bg-background/95 sticky top-0 z-10 flex items-center justify-end gap-2 border-b px-6 py-3 backdrop-blur">
           <Button variant="outline" size="sm" onClick={handleReset}>
             <RotateCcw className="mr-2 h-3 w-3" />
             Reset
@@ -153,20 +153,20 @@ export function NameTable({ data, filePath, onSaved }: NameTableProps) {
           </Button>
         </div>
       )}
-      <div className="p-6 space-y-3">
+      <div className="space-y-3 p-6">
         {data.name_records.map((record, i) => {
           const platformId = parseInt(record.platform_id);
           const value = values[record.name_id]?.[platformId] ?? record.value;
           return (
             <div key={i}>
-              <div className="flex items-center gap-2 mb-1.5">
+              <div className="mb-1.5 flex items-center gap-2">
                 <Badge variant="outline" className="font-mono text-xs">
                   {record.name_id}
                 </Badge>
-                <span className="text-sm font-medium text-muted-foreground">
+                <span className="text-muted-foreground text-sm font-medium">
                   {NAME_ID_LABELS[record.name_id] ?? `Name ID ${record.name_id}`}
                 </span>
-                <Badge variant="secondary" className="text-xs ml-auto">
+                <Badge variant="secondary" className="ml-auto text-xs">
                   {record.platform_id}
                 </Badge>
               </div>

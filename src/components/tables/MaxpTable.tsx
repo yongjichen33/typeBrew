@@ -20,20 +20,24 @@ interface MaxpTableProps {
 function ReadOnlyField({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-muted-foreground">{label}</label>
+      <label className="text-muted-foreground text-sm font-medium">{label}</label>
       <Input value={String(value)} disabled className="opacity-60" />
     </div>
   );
 }
 
-function EditableField({ label, value, onChange }: {
+function EditableField({
+  label,
+  value,
+  onChange,
+}: {
   label: string;
   value: string;
   onChange: (value: string) => void;
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-muted-foreground">{label}</label>
+      <label className="text-muted-foreground text-sm font-medium">{label}</label>
       <Input value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
@@ -76,7 +80,7 @@ export function MaxpTable({ data, filePath, onSaved }: MaxpTableProps) {
   return (
     <ScrollArea className="h-full">
       {isDirty && (
-        <div className="sticky top-0 z-10 flex items-center justify-end gap-2 border-b bg-background/95 backdrop-blur px-6 py-3">
+        <div className="bg-background/95 sticky top-0 z-10 flex items-center justify-end gap-2 border-b px-6 py-3 backdrop-blur">
           <Button variant="outline" size="sm" onClick={handleReset}>
             <RotateCcw className="mr-2 h-3 w-3" />
             Reset
@@ -92,7 +96,7 @@ export function MaxpTable({ data, filePath, onSaved }: MaxpTableProps) {
         </div>
       )}
       <div className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ReadOnlyField label="Version" value={data.version} />
           <EditableField label="Number of Glyphs" value={numGlyphs} onChange={setNumGlyphs} />
         </div>

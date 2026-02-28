@@ -4,7 +4,12 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { useCanvasKit } from '@/hooks/useCanvasKit';
 import { useGlyphEditor, computeClipboardData } from '@/hooks/useGlyphEditor';
-import { getClipboard, setClipboard, setFocusedGlyphId, useFocusedGlyphId } from '@/lib/glyphClipboard';
+import {
+  getClipboard,
+  setClipboard,
+  setFocusedGlyphId,
+  useFocusedGlyphId,
+} from '@/lib/glyphClipboard';
 import { editablePathToSvg, outlineDataToEditablePaths } from '@/lib/svgPathParser';
 import { editorEventBus } from '@/lib/editorEventBus';
 import { EditorToolbar } from './EditorToolbar';
@@ -12,7 +17,12 @@ import { GlyphEditorCanvas } from './GlyphEditorCanvas';
 import { InspectorPanel } from './InspectorPanel';
 import { GlyphPreview } from './GlyphPreview';
 import { CompositeInfoBar } from './CompositeInfoBar';
-import type { GlyphEditorTabState, FontMetrics, ViewTransform, GlyphOutlineData } from '@/lib/editorTypes';
+import type {
+  GlyphEditorTabState,
+  FontMetrics,
+  ViewTransform,
+  GlyphOutlineData,
+} from '@/lib/editorTypes';
 
 export interface TransformFeedback {
   isActive: boolean;
@@ -25,15 +35,15 @@ export interface TransformFeedback {
 
 /** Compute an initial view transform that fits the glyph in the canvas. */
 function computeInitialVt(metrics: FontMetrics, canvasW: number, canvasH: number): ViewTransform {
-  const glyphH = (metrics.yMax - metrics.yMin) || metrics.unitsPerEm;
-  const glyphW = (metrics.xMax - metrics.xMin) || metrics.advanceWidth || metrics.unitsPerEm;
+  const glyphH = metrics.yMax - metrics.yMin || metrics.unitsPerEm;
+  const glyphW = metrics.xMax - metrics.xMin || metrics.advanceWidth || metrics.unitsPerEm;
   if (glyphW === 0 || glyphH === 0) {
     return { scale: 1, originX: canvasW / 2, originY: canvasH / 2 };
   }
   const padding = 0.15;
   const scale = Math.min(
     (canvasW * (1 - 2 * padding)) / glyphW,
-    (canvasH * (1 - 2 * padding)) / glyphH,
+    (canvasH * (1 - 2 * padding)) / glyphH
   );
   // Center the glyph
   const centerFontX = (metrics.xMin + metrics.xMax) / 2;
@@ -50,7 +60,19 @@ interface Props {
 }
 
 export function GlyphEditorTab({ tabState }: Props) {
-  const { filePath, tableName, glyphId, glyphName, outlineData, advanceWidth, boundsXMin, boundsYMin, boundsXMax, boundsYMax, unitsPerEm } = tabState;
+  const {
+    filePath,
+    tableName,
+    glyphId,
+    glyphName,
+    outlineData,
+    advanceWidth,
+    boundsXMin,
+    boundsYMin,
+    boundsXMax,
+    boundsYMax,
+    unitsPerEm,
+  } = tabState;
 
   const ck = useCanvasKit();
 
@@ -169,7 +191,7 @@ export function GlyphEditorTab({ tabState }: Props) {
         };
         setMetrics(m);
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filePath, outlineData]);
 
   // Once we have metrics and ck, compute initial view transform
@@ -189,30 +211,33 @@ export function GlyphEditorTab({ tabState }: Props) {
   const isFocused = focusedId === glyphId;
 
   // Open a component glyph in a new editor tab
-  const handleOpenComponent = useCallback(async (componentGlyphId: number) => {
-    try {
-      const data = await invoke<GlyphOutlineData>('get_glyph_outline_data', {
-        filePath,
-        glyphId: componentGlyphId,
-      });
-      const tabState: GlyphEditorTabState = {
-        filePath,
-        tableName,
-        glyphId: componentGlyphId,
-        glyphName: data.glyph_name,
-        outlineData: data,
-        advanceWidth: data.advance_width,
-        boundsXMin: data.bounds?.x_min ?? 0,
-        boundsYMin: data.bounds?.y_min ?? 0,
-        boundsXMax: data.bounds?.x_max ?? 0,
-        boundsYMax: data.bounds?.y_max ?? 0,
-        unitsPerEm,
-      };
-      editorEventBus.emit(tabState);
-    } catch (error) {
-      toast.error(`Failed to open component glyph: ${error}`);
-    }
-  }, [filePath, tableName, unitsPerEm]);
+  const handleOpenComponent = useCallback(
+    async (componentGlyphId: number) => {
+      try {
+        const data = await invoke<GlyphOutlineData>('get_glyph_outline_data', {
+          filePath,
+          glyphId: componentGlyphId,
+        });
+        const tabState: GlyphEditorTabState = {
+          filePath,
+          tableName,
+          glyphId: componentGlyphId,
+          glyphName: data.glyph_name,
+          outlineData: data,
+          advanceWidth: data.advance_width,
+          boundsXMin: data.bounds?.x_min ?? 0,
+          boundsYMin: data.bounds?.y_min ?? 0,
+          boundsXMax: data.bounds?.x_max ?? 0,
+          boundsYMax: data.bounds?.y_max ?? 0,
+          unitsPerEm,
+        };
+        editorEventBus.emit(tabState);
+      } catch (error) {
+        toast.error(`Failed to open component glyph: ${error}`);
+      }
+    },
+    [filePath, tableName, unitsPerEm]
+  );
 
   // Save handler
   const handleSave = useCallback(async () => {
@@ -238,16 +263,17 @@ export function GlyphEditorTab({ tabState }: Props) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isFocused) return;
-      
+
       const activeEl = document.activeElement;
-      const isInputFocused = activeEl instanceof HTMLInputElement || 
-                             activeEl instanceof HTMLTextAreaElement ||
-                             activeEl?.getAttribute('contenteditable') === 'true';
-      
+      const isInputFocused =
+        activeEl instanceof HTMLInputElement ||
+        activeEl instanceof HTMLTextAreaElement ||
+        activeEl?.getAttribute('contenteditable') === 'true';
+
       if (isInputFocused) {
         return;
       }
-      
+
       // Ctrl/Cmd + S to save
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
@@ -256,7 +282,7 @@ export function GlyphEditorTab({ tabState }: Props) {
         }
         return;
       }
-      
+
       if (e.key === 's' || e.key === 'S') dispatch({ type: 'SET_TOOL_MODE', mode: 'node' });
       if (e.key === 'p' || e.key === 'P') dispatch({ type: 'SET_TOOL_MODE', mode: 'pen' });
       if (e.key === 'h' || e.key === 'H') dispatch({ type: 'SET_TOOL_MODE', mode: 'hand' });
@@ -285,21 +311,19 @@ export function GlyphEditorTab({ tabState }: Props) {
         dispatch({ type: 'DELETE_SELECTED_POINTS' });
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [dispatch, isFocused, state.isDirty, state.isSaving, handleSave]);
 
   // Format tab breadcrumb
   const fileName = filePath.split(/[\\/]/).pop() ?? filePath;
-  const glyphLabel = glyphName
-    ? `#${glyphId} (${glyphName})`
-    : `#${glyphId}`;
+  const glyphLabel = glyphName ? `#${glyphId} (${glyphName})` : `#${glyphId}`;
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex h-full flex-col">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 px-4 py-2 border-b text-sm text-muted-foreground font-mono shrink-0">
+      <div className="text-muted-foreground flex shrink-0 items-center gap-1.5 border-b px-4 py-2 font-mono text-sm">
         <span>{fileName}</span>
         <span className="text-border">/</span>
         <span>{tableName}</span>
@@ -320,15 +344,23 @@ export function GlyphEditorTab({ tabState }: Props) {
         isSaving={state.isSaving}
         onSave={handleSave}
         showDirection={state.showDirection}
-        onSetShowDirection={(showDirection) => dispatch({ type: 'SET_SHOW_DIRECTION', showDirection })}
+        onSetShowDirection={(showDirection) =>
+          dispatch({ type: 'SET_SHOW_DIRECTION', showDirection })
+        }
         showCoordinates={state.showCoordinates}
-        onSetShowCoordinates={(showCoordinates) => dispatch({ type: 'SET_SHOW_COORDINATES', showCoordinates })}
+        onSetShowCoordinates={(showCoordinates) =>
+          dispatch({ type: 'SET_SHOW_COORDINATES', showCoordinates })
+        }
         showPixelGrid={state.showPixelGrid}
-        onSetShowPixelGrid={(showPixelGrid) => dispatch({ type: 'SET_SHOW_PIXEL_GRID', showPixelGrid })}
+        onSetShowPixelGrid={(showPixelGrid) =>
+          dispatch({ type: 'SET_SHOW_PIXEL_GRID', showPixelGrid })
+        }
         showPreview={state.showPreview}
         onSetShowPreview={(showPreview) => dispatch({ type: 'SET_SHOW_PREVIEW', showPreview })}
         previewInverted={state.previewInverted}
-        onSetPreviewInverted={(previewInverted) => dispatch({ type: 'SET_PREVIEW_INVERTED', previewInverted })}
+        onSetPreviewInverted={(previewInverted) =>
+          dispatch({ type: 'SET_PREVIEW_INVERTED', previewInverted })
+        }
       />
 
       {/* Composite info bar */}
@@ -340,19 +372,19 @@ export function GlyphEditorTab({ tabState }: Props) {
       )}
 
       {/* Canvas area with Inspector */}
-      <div 
+      <div
         ref={containerRef}
         onMouseDown={() => setFocusedGlyphId(glyphId)}
-        className="flex-1 min-h-0 flex"
+        className="flex min-h-0 flex-1"
       >
         {!ck || !metrics ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground gap-2">
+          <div className="text-muted-foreground flex flex-1 items-center justify-center gap-2">
             <Loader2 className="h-5 w-5 animate-spin" />
             <span className="text-sm">Loading editor…</span>
           </div>
         ) : (
           <>
-            <div className="flex-1 min-h-0 flex flex-col">
+            <div className="flex min-h-0 flex-1 flex-col">
               <GlyphEditorCanvas
                 ck={ck}
                 paths={state.paths}
@@ -373,7 +405,7 @@ export function GlyphEditorTab({ tabState }: Props) {
               {state.showPreview && (
                 <>
                   <div
-                    className="h-1 bg-border hover:bg-primary/50 cursor-ns-resize transition-colors shrink-0"
+                    className="bg-border hover:bg-primary/50 h-1 shrink-0 cursor-ns-resize transition-colors"
                     onMouseDown={(e) => {
                       e.preventDefault();
                       const startY = e.clientY;
@@ -381,18 +413,21 @@ export function GlyphEditorTab({ tabState }: Props) {
                       const containerHeight = containerRef.current?.offsetHeight ?? 400;
                       const maxHeight = containerHeight * 0.5;
                       const minHeight = 60;
-                      
+
                       const handleMouseMove = (moveEvent: MouseEvent) => {
                         const deltaY = startY - moveEvent.clientY;
-                        const newHeight = Math.min(maxHeight, Math.max(minHeight, startHeight + deltaY));
+                        const newHeight = Math.min(
+                          maxHeight,
+                          Math.max(minHeight, startHeight + deltaY)
+                        );
                         dispatch({ type: 'SET_PREVIEW_HEIGHT', previewHeight: newHeight });
                       };
-                      
+
                       const handleMouseUp = () => {
                         window.removeEventListener('mousemove', handleMouseMove);
                         window.removeEventListener('mouseup', handleMouseUp);
                       };
-                      
+
                       window.addEventListener('mousemove', handleMouseMove);
                       window.addEventListener('mouseup', handleMouseUp);
                     }}

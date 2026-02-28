@@ -11,16 +11,12 @@ export function DefaultTable({ tableName, data }: DefaultTableProps) {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-        <Badge variant="outline" className="text-sm font-mono">
+      <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-3">
+        <Badge variant="outline" className="font-mono text-sm">
           {tableName}
         </Badge>
-        {sizeBytes !== null && (
-          <p className="text-sm">{sizeBytes.toLocaleString()} bytes</p>
-        )}
-        <p className="text-sm">
-          Specialized viewer not yet implemented for this table type.
-        </p>
+        {sizeBytes !== null && <p className="text-sm">{sizeBytes.toLocaleString()} bytes</p>}
+        <p className="text-sm">Specialized viewer not yet implemented for this table type.</p>
       </div>
     </ScrollArea>
   );

@@ -49,13 +49,13 @@ export interface ImageLayer {
   type: 'image';
   name: string;
   visible: boolean;
-  imageDataUrl: string;  // base64 data URL
-  opacity: number;       // 0–1
-  scaleX: number;        // 1 = 1 image px per font unit at vt.scale=1
+  imageDataUrl: string; // base64 data URL
+  opacity: number; // 0–1
+  scaleX: number; // 1 = 1 image px per font unit at vt.scale=1
   scaleY: number;
-  rotation: number;      // degrees
-  offsetX: number;       // font-space center X
-  offsetY: number;       // font-space center Y
+  rotation: number; // degrees
+  offsetX: number; // font-space center X
+  offsetY: number; // font-space center Y
 }
 
 export type Layer = DrawingLayer | ImageLayer;
@@ -147,12 +147,29 @@ export interface EditorState {
 // ---- Actions ----
 
 export type EditorAction =
-  | { type: 'SET_PATHS'; paths: EditablePath[]; isComposite?: boolean; componentGlyphIds?: number[] }
+  | {
+      type: 'SET_PATHS';
+      paths: EditablePath[];
+      isComposite?: boolean;
+      componentGlyphIds?: number[];
+    }
   | { type: 'MOVE_POINTS_LIVE'; deltas: Map<string, Vec2> }
   | { type: 'COMMIT_MOVE'; snapshot: EditablePath[] }
   | { type: 'TRANSFORM_POINTS_LIVE'; deltas: Map<string, Vec2> }
   | { type: 'COMMIT_TRANSFORM'; snapshot: EditablePath[] }
-  | { type: 'APPLY_TRANSFORM'; transform: { translateX?: number; translateY?: number; scaleX?: number; scaleY?: number; rotation?: number; centerX: number; centerY: number }; selection: Selection }
+  | {
+      type: 'APPLY_TRANSFORM';
+      transform: {
+        translateX?: number;
+        translateY?: number;
+        scaleX?: number;
+        scaleY?: number;
+        rotation?: number;
+        centerX: number;
+        centerY: number;
+      };
+      selection: Selection;
+    }
   | { type: 'ADD_POINT'; pathId: string; command: PathCommand }
   | { type: 'APPEND_TO_ACTIVE_PATH'; command: PathCommand }
   | { type: 'CLOSE_ACTIVE_PATH' }
@@ -187,14 +204,20 @@ export type EditorAction =
   | { type: 'ADD_IMAGE_LAYER'; layer: ImageLayer }
   | { type: 'REMOVE_LAYER'; layerId: string }
   | { type: 'SET_LAYER_VISIBLE'; layerId: string; visible: boolean }
-  | { type: 'UPDATE_IMAGE_LAYER'; layerId: string; updates: Partial<Omit<ImageLayer, 'id' | 'type'>> }
+  | {
+      type: 'UPDATE_IMAGE_LAYER';
+      layerId: string;
+      updates: Partial<Omit<ImageLayer, 'id' | 'type'>>;
+    }
   | { type: 'RENAME_LAYER'; layerId: string; name: string }
   | { type: 'SET_ACTIVE_LAYER'; layerId: string }
   | { type: 'SET_FOCUSED_LAYER'; layerId: string }
   | {
       type: 'CONNECT_WITH_LINE';
-      fromX: number; fromY: number;
-      toX: number; toY: number;
+      fromX: number;
+      fromY: number;
+      toX: number;
+      toY: number;
       /** If set, extend this existing open path with L(toX,toY) instead of creating a new M+L sub-path. */
       extendSourcePathId?: string;
       /** If set, insert a new point on a segment before creating the connecting path. */

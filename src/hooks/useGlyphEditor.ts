@@ -17,7 +17,7 @@ const MAX_UNDO = 50;
 
 function applyPointDelta(
   paths: EditablePath[],
-  deltas: Map<string, { x: number; y: number }>,
+  deltas: Map<string, { x: number; y: number }>
 ): EditablePath[] {
   return paths.map((path) => ({
     ...path,
@@ -84,7 +84,7 @@ function cmdEndpoint(cmd: PathCommand): EditablePoint | null {
  * The bridge L to targetPath's last point is included as the first command.
  */
 function buildReversedAppendCmds(targetPath: EditablePath): PathCommand[] {
-  const cmds = targetPath.commands.filter(c => c.kind !== 'Z');
+  const cmds = targetPath.commands.filter((c) => c.kind !== 'Z');
   if (cmds.length === 0) return [];
 
   const result: PathCommand[] = [];
@@ -114,21 +114,22 @@ function buildReversedAppendCmds(targetPath: EditablePath): PathCommand[] {
 export function computeClipboardData(paths: EditablePath[], selection: Selection): ClipboardData {
   const clipboard: ClipboardData = { points: [], segments: [] };
   const pointsInSegments = new Set<string>();
-  
+
   for (const path of paths) {
     let lastOnCurve: EditablePoint | null = null;
     let firstOnCurve: EditablePoint | null = null;
     const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
-    
+
     for (const cmd of path.commands) {
       if (cmd.kind === 'M') {
         lastOnCurve = cmd.point;
         firstOnCurve = cmd.point;
       } else if (cmd.kind === 'L' && lastOnCurve) {
         const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
-        const shouldCopySegment = selection.segmentIds.has(segmentId) ||
+        const shouldCopySegment =
+          selection.segmentIds.has(segmentId) ||
           (selection.pointIds.has(lastOnCurve.id) && selection.pointIds.has(cmd.point.id));
-        
+
         if (shouldCopySegment) {
           clipboard.segments.push({
             pathId: path.id,
@@ -142,9 +143,10 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
         lastOnCurve = cmd.point;
       } else if (cmd.kind === 'Q' && lastOnCurve) {
         const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
-        const shouldCopySegment = selection.segmentIds.has(segmentId) ||
+        const shouldCopySegment =
+          selection.segmentIds.has(segmentId) ||
           (selection.pointIds.has(lastOnCurve.id) && selection.pointIds.has(cmd.point.id));
-        
+
         if (shouldCopySegment) {
           clipboard.segments.push({
             pathId: path.id,
@@ -159,9 +161,10 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
         lastOnCurve = cmd.point;
       } else if (cmd.kind === 'C' && lastOnCurve) {
         const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
-        const shouldCopySegment = selection.segmentIds.has(segmentId) ||
+        const shouldCopySegment =
+          selection.segmentIds.has(segmentId) ||
           (selection.pointIds.has(lastOnCurve.id) && selection.pointIds.has(cmd.point.id));
-        
+
         if (shouldCopySegment) {
           clipboard.segments.push({
             pathId: path.id,
@@ -177,13 +180,14 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
         lastOnCurve = cmd.point;
       }
     }
-    
+
     // Handle closing segment in closed path
     if (isClosed && lastOnCurve && firstOnCurve && lastOnCurve.id !== firstOnCurve.id) {
       const segmentId = `${path.id}:${lastOnCurve.id}:${firstOnCurve.id}`;
-      const shouldCopySegment = selection.segmentIds.has(segmentId) ||
+      const shouldCopySegment =
+        selection.segmentIds.has(segmentId) ||
         (selection.pointIds.has(lastOnCurve.id) && selection.pointIds.has(firstOnCurve.id));
-      
+
       if (shouldCopySegment) {
         clipboard.segments.push({
           pathId: path.id,
@@ -196,7 +200,7 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
       }
     }
   }
-  
+
   // Add loose points that aren't part of any segment
   for (const path of paths) {
     for (const cmd of path.commands) {
@@ -219,7 +223,7 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
       }
     }
   }
-  
+
   return clipboard;
 }
 
@@ -259,13 +263,21 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case 'APPLY_TRANSFORM': {
-      const { translateX = 0, translateY = 0, scaleX = 1, scaleY = 1, rotation = 0, centerX, centerY } = action.transform;
+      const {
+        translateX = 0,
+        translateY = 0,
+        scaleX = 1,
+        scaleY = 1,
+        rotation = 0,
+        centerX,
+        centerY,
+      } = action.transform;
       const { selection } = action;
       const prev = clonePaths(state.paths);
-      
-      const cos = Math.cos(rotation * Math.PI / 180);
-      const sin = Math.sin(rotation * Math.PI / 180);
-      
+
+      const cos = Math.cos((rotation * Math.PI) / 180);
+      const sin = Math.sin((rotation * Math.PI) / 180);
+
       const transformPoint = (x: number, y: number): { x: number; y: number } => {
         const sx = centerX + (x - centerX) * scaleX;
         const sy = centerY + (y - centerY) * scaleY;
@@ -273,14 +285,14 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         const ry = centerY + (sx - centerX) * sin + (sy - centerY) * cos;
         return { x: rx + translateX, y: ry + translateY };
       };
-      
+
       const pointsToTransform = new Set<string>(selection.pointIds);
-      
+
       for (const path of state.paths) {
         let lastOnCurveId: string | null = null;
         let firstOnCurveId: string | null = null;
         const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
-        
+
         for (const cmd of path.commands) {
           if (cmd.kind === 'M') {
             lastOnCurveId = cmd.point.id;
@@ -311,7 +323,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
             lastOnCurveId = cmd.point.id;
           }
         }
-        
+
         // Handle closing segment in closed path
         if (isClosed && lastOnCurveId && firstOnCurveId && lastOnCurveId !== firstOnCurveId) {
           const segmentId = `${path.id}:${lastOnCurveId}:${firstOnCurveId}`;
@@ -321,7 +333,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
           }
         }
       }
-      
+
       const newPaths = state.paths.map((path) => ({
         ...path,
         commands: path.commands.map((cmd) => {
@@ -367,10 +379,17 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
           return cmd;
         }),
       }));
-      
+
       const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), prev];
       const showTransformBox = action.selection.pointIds.size > 1;
-      return { ...state, paths: newPaths, undoStack, redoStack: [], isDirty: true, showTransformBox };
+      return {
+        ...state,
+        paths: newPaths,
+        undoStack,
+        redoStack: [],
+        isDirty: true,
+        showTransformBox,
+      };
     }
 
     case 'ADD_POINT': {
@@ -388,7 +407,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         selection: {
           pointIds: action.pointIds,
-          segmentIds: action.segmentIds ?? new Set()
+          segmentIds: action.segmentIds ?? new Set(),
         },
         showTransformBox: action.pointIds.size > 1,
       };
@@ -398,22 +417,38 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       const ids = new Set(state.selection.pointIds);
       if (ids.has(action.pointId)) ids.delete(action.pointId);
       else ids.add(action.pointId);
-      return { ...state, selection: { ...state.selection, pointIds: ids }, showTransformBox: false };
+      return {
+        ...state,
+        selection: { ...state.selection, pointIds: ids },
+        showTransformBox: false,
+      };
     }
 
     case 'TOGGLE_SEGMENT_SELECTION': {
       const ids = new Set(state.selection.segmentIds);
       if (ids.has(action.segmentId)) ids.delete(action.segmentId);
       else ids.add(action.segmentId);
-      return { ...state, selection: { ...state.selection, segmentIds: ids }, showTransformBox: false };
+      return {
+        ...state,
+        selection: { ...state.selection, segmentIds: ids },
+        showTransformBox: false,
+      };
     }
 
     case 'CLEAR_SELECTION': {
-      return { ...state, selection: { pointIds: new Set(), segmentIds: new Set() }, showTransformBox: false };
+      return {
+        ...state,
+        selection: { pointIds: new Set(), segmentIds: new Set() },
+        showTransformBox: false,
+      };
     }
 
     case 'SET_TOOL_MODE': {
-      return { ...state, toolMode: action.mode, selection: { pointIds: new Set(), segmentIds: new Set() } };
+      return {
+        ...state,
+        toolMode: action.mode,
+        selection: { pointIds: new Set(), segmentIds: new Set() },
+      };
     }
 
     case 'SET_VIEW_TRANSFORM': {
@@ -423,21 +458,24 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     case 'CENTER_VIEW': {
       const { canvasWidth, canvasHeight } = action;
       const metrics: FontMetrics = action.metrics;
-      const glyphH = (metrics.yMax - metrics.yMin) || metrics.unitsPerEm;
-      const glyphW = (metrics.xMax - metrics.xMin) || metrics.advanceWidth || metrics.unitsPerEm;
-      
+      const glyphH = metrics.yMax - metrics.yMin || metrics.unitsPerEm;
+      const glyphW = metrics.xMax - metrics.xMin || metrics.advanceWidth || metrics.unitsPerEm;
+
       if (glyphW === 0 || glyphH === 0) {
-        return { ...state, viewTransform: { scale: 1, originX: canvasWidth / 2, originY: canvasHeight / 2 } };
+        return {
+          ...state,
+          viewTransform: { scale: 1, originX: canvasWidth / 2, originY: canvasHeight / 2 },
+        };
       }
-      
+
       const padding = 0.15;
       const scale = Math.min(
         (canvasWidth * (1 - 2 * padding)) / glyphW,
-        (canvasHeight * (1 - 2 * padding)) / glyphH,
+        (canvasHeight * (1 - 2 * padding)) / glyphH
       );
       const centerFontX = (metrics.xMin + metrics.xMax) / 2;
       const centerFontY = (metrics.yMin + metrics.yMax) / 2;
-      
+
       return {
         ...state,
         viewTransform: {
@@ -569,38 +607,44 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case 'DELETE_SELECTED_POINTS': {
-      if (state.selection.pointIds.size === 0 && state.selection.segmentIds.size === 0) return state;
+      if (state.selection.pointIds.size === 0 && state.selection.segmentIds.size === 0)
+        return state;
       const prev = clonePaths(state.paths);
-      
+
       // Collect all point IDs to delete (selected points + endpoints of selected segments)
       const pointIdsToDelete = new Set(state.selection.pointIds);
-      
+
       for (const segmentId of state.selection.segmentIds) {
         const [, startPointId, endPointId] = segmentId.split(':');
         pointIdsToDelete.add(startPointId);
         pointIdsToDelete.add(endPointId);
       }
-      
-      const newPaths = state.paths.map((path) => ({
-        ...path,
-        commands: path.commands.filter((cmd) => {
-          if (cmd.kind === 'M' || cmd.kind === 'L') {
-            return !pointIdsToDelete.has(cmd.point.id);
-          }
-          if (cmd.kind === 'Q') {
-            return !pointIdsToDelete.has(cmd.point.id) && !pointIdsToDelete.has(cmd.ctrl.id);
-          }
-          if (cmd.kind === 'C') {
-            return !pointIdsToDelete.has(cmd.point.id) &&
-                   !pointIdsToDelete.has(cmd.ctrl1.id) &&
-                   !pointIdsToDelete.has(cmd.ctrl2.id);
-          }
-          return true;
-        }),
-      })).filter((p) => p.commands.length > 0);
-      
-      const activePathStillExists = state.activePathId && newPaths.some(p => p.id === state.activePathId);
-      
+
+      const newPaths = state.paths
+        .map((path) => ({
+          ...path,
+          commands: path.commands.filter((cmd) => {
+            if (cmd.kind === 'M' || cmd.kind === 'L') {
+              return !pointIdsToDelete.has(cmd.point.id);
+            }
+            if (cmd.kind === 'Q') {
+              return !pointIdsToDelete.has(cmd.point.id) && !pointIdsToDelete.has(cmd.ctrl.id);
+            }
+            if (cmd.kind === 'C') {
+              return (
+                !pointIdsToDelete.has(cmd.point.id) &&
+                !pointIdsToDelete.has(cmd.ctrl1.id) &&
+                !pointIdsToDelete.has(cmd.ctrl2.id)
+              );
+            }
+            return true;
+          }),
+        }))
+        .filter((p) => p.commands.length > 0);
+
+      const activePathStillExists =
+        state.activePathId && newPaths.some((p) => p.id === state.activePathId);
+
       return {
         ...state,
         paths: newPaths,
@@ -655,25 +699,24 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     case 'ADD_POINT_ON_SEGMENT': {
       const { pathId, insertIndex, point } = action;
       const prev = clonePaths(state.paths);
-      
+
       const newPaths = state.paths.map((path) => {
         if (path.id !== pathId) return path;
-        
+
         const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
         // For closing segments, insertIndex === cmds.length, so insert before Z
-        const actualIndex = (isClosed && insertIndex === path.commands.length)
-          ? path.commands.length - 1
-          : insertIndex;
-        
+        const actualIndex =
+          isClosed && insertIndex === path.commands.length ? path.commands.length - 1 : insertIndex;
+
         const newCommands = [...path.commands];
         newCommands.splice(actualIndex, 0, {
           kind: 'L' as const,
           point,
         });
-        
+
         return { ...path, commands: newCommands };
       });
-      
+
       return {
         ...state,
         paths: newPaths,
@@ -687,18 +730,18 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     case 'CONVERT_SEGMENT_TO_CURVE': {
       const { segmentId, curveType } = action;
       const [pathId, startPointId, endPointId] = segmentId.split(':');
-      
+
       const prev = clonePaths(state.paths);
-      
+
       const newPaths = state.paths.map((path) => {
         if (path.id !== pathId) return path;
-        
+
         const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
-        
+
         // Find start and end points
         let startPoint: EditablePoint | null = null;
         let endPoint: EditablePoint | null = null;
-        
+
         for (const cmd of path.commands) {
           if (cmd.kind === 'M' || cmd.kind === 'L') {
             if (cmd.point.id === startPointId) startPoint = cmd.point;
@@ -711,24 +754,26 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
             if (cmd.point.id === endPointId) endPoint = cmd.point;
           }
         }
-        
+
         if (!startPoint || !endPoint) return path;
-        
+
         // Check if this is the closing segment
-        const isClosingSegment = isClosed && 
+        const isClosingSegment =
+          isClosed &&
           path.commands[path.commands.length - 2]?.kind === 'L' &&
-          (path.commands[path.commands.length - 2] as { kind: 'L'; point: EditablePoint }).point.id === startPointId &&
+          (path.commands[path.commands.length - 2] as { kind: 'L'; point: EditablePoint }).point
+            .id === startPointId &&
           path.commands[0].kind === 'M' &&
           path.commands[0].point.id === endPointId;
-        
+
         const newCommands: PathCommand[] = [];
-        
+
         if (isClosingSegment) {
           // Handle closing segment - insert curve before Z
           for (let i = 0; i < path.commands.length - 1; i++) {
             newCommands.push(path.commands[i]);
           }
-          
+
           if (curveType === 'quadratic') {
             const ctrlId = `ctrl-${Date.now()}`;
             const midX = (startPoint.x + endPoint.x) / 2;
@@ -748,8 +793,8 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
             const ctrl2Id = `ctrl2-${Date.now()}`;
             const thirdX = startPoint.x + (endPoint.x - startPoint.x) / 3;
             const thirdY = startPoint.y + (endPoint.y - startPoint.y) / 3;
-            const twoThirdX = startPoint.x + 2 * (endPoint.x - startPoint.x) / 3;
-            const twoThirdY = startPoint.y + 2 * (endPoint.y - startPoint.y) / 3;
+            const twoThirdX = startPoint.x + (2 * (endPoint.x - startPoint.x)) / 3;
+            const twoThirdY = startPoint.y + (2 * (endPoint.y - startPoint.y)) / 3;
             newCommands.push({
               kind: 'C' as const,
               ctrl1: {
@@ -771,7 +816,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         } else {
           // Regular segment - find and replace L command
           let lastOnCurveId: string | null = null;
-          
+
           for (const cmd of path.commands) {
             if (cmd.kind === 'M') {
               lastOnCurveId = cmd.point.id;
@@ -798,8 +843,8 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
                   const ctrl2Id = `ctrl2-${Date.now()}`;
                   const thirdX = startPoint.x + (cmd.point.x - startPoint.x) / 3;
                   const thirdY = startPoint.y + (cmd.point.y - startPoint.y) / 3;
-                  const twoThirdX = startPoint.x + 2 * (cmd.point.x - startPoint.x) / 3;
-                  const twoThirdY = startPoint.y + 2 * (cmd.point.y - startPoint.y) / 3;
+                  const twoThirdX = startPoint.x + (2 * (cmd.point.x - startPoint.x)) / 3;
+                  const twoThirdY = startPoint.y + (2 * (cmd.point.y - startPoint.y)) / 3;
                   newCommands.push({
                     kind: 'C' as const,
                     ctrl1: {
@@ -828,10 +873,10 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
             }
           }
         }
-        
+
         return { ...path, commands: newCommands };
       });
-      
+
       return {
         ...state,
         paths: newPaths,
@@ -844,20 +889,20 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     case 'PASTE_CLIPBOARD': {
       const { points, segments } = action.clipboard;
       if (points.length === 0 && segments.length === 0) return state;
-      
+
       const prev = clonePaths(state.paths);
       const offsetX = action.offsetX ?? 50;
       const offsetY = action.offsetY ?? 50;
-      
+
       const newPointIds = new Set<string>();
       const newPaths: EditablePath[] = [];
       let idCounter = 0;
       const genId = () => `pt-paste-${Date.now()}-${++idCounter}`;
-      
+
       // Helper to create point key for deduplication
-      const pointKey = (pt: { x: number; y: number }) => 
+      const pointKey = (pt: { x: number; y: number }) =>
         `${Math.round(pt.x * 1000)}:${Math.round(pt.y * 1000)}`;
-      
+
       // Group segments by their original pathId
       const segmentsByPath = new Map<string, typeof segments>();
       for (const seg of segments) {
@@ -865,13 +910,13 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         group.push(seg);
         segmentsByPath.set(seg.pathId, group);
       }
-      
+
       // Create a separate path for each original path group
       for (const [, pathSegments] of segmentsByPath) {
         const newPathId = `path-paste-${Date.now()}-${newPaths.length}`;
         const newCommands: PathCommand[] = [];
         const pointIdMap = new Map<string, string>();
-        
+
         // Get or create a point ID, reusing if same position exists
         const getOrCreatePointId = (origPt: { x: number; y: number }): string => {
           const key = pointKey(origPt);
@@ -883,22 +928,25 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
           newPointIds.add(newId);
           return newId;
         };
-        
+
         // Build a connected chain of segments
         // Collect all unique points and their connections
-        const pointConnections = new Map<string, Array<{ seg: typeof pathSegments[0]; dir: 'forward' | 'reverse' }>>();
-        
+        const pointConnections = new Map<
+          string,
+          Array<{ seg: (typeof pathSegments)[0]; dir: 'forward' | 'reverse' }>
+        >();
+
         for (const seg of pathSegments) {
           const startKey = pointKey(seg.startPoint);
           const endKey = pointKey(seg.endPoint);
-          
+
           if (!pointConnections.has(startKey)) pointConnections.set(startKey, []);
           if (!pointConnections.has(endKey)) pointConnections.set(endKey, []);
-          
+
           pointConnections.get(startKey)!.push({ seg, dir: 'forward' });
           pointConnections.get(endKey)!.push({ seg, dir: 'reverse' });
         }
-        
+
         // Find starting point (a point with only one connection, or any point if all are connected twice)
         let startKey: string | null = null;
         for (const [key, conns] of pointConnections) {
@@ -910,12 +958,12 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         if (!startKey && pointConnections.size > 0) {
           startKey = pointConnections.keys().next().value ?? null;
         }
-        
+
         // Traverse the chain
         if (startKey) {
-          const usedSegments = new Set<typeof pathSegments[0]>();
+          const usedSegments = new Set<(typeof pathSegments)[0]>();
           let currentKey = startKey;
-          
+
           // Add starting M command
           const startSeg = pointConnections.get(currentKey)?.[0];
           if (startSeg) {
@@ -923,34 +971,46 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
             const startId = getOrCreatePointId(pt);
             newCommands.push({
               kind: 'M' as const,
-              point: { id: startId, x: pt.x + offsetX, y: pt.y + offsetY, type: 'on-curve' as const },
+              point: {
+                id: startId,
+                x: pt.x + offsetX,
+                y: pt.y + offsetY,
+                type: 'on-curve' as const,
+              },
             });
           }
-          
+
           while (true) {
             const conns = pointConnections.get(currentKey);
             if (!conns) break;
-            
+
             // Find next unused segment
             let found = false;
             for (const { seg, dir } of conns) {
               if (usedSegments.has(seg)) continue;
-              
+
               // Check if this segment starts from current point
               const segStartKey = pointKey(seg.startPoint);
-              if ((dir === 'forward' && segStartKey === currentKey) || 
-                  (dir === 'reverse' && segStartKey !== currentKey)) {
+              if (
+                (dir === 'forward' && segStartKey === currentKey) ||
+                (dir === 'reverse' && segStartKey !== currentKey)
+              ) {
                 // This segment continues from current point
                 usedSegments.add(seg);
-                
+
                 const nextPt = dir === 'forward' ? seg.endPoint : seg.startPoint;
                 const nextKey = pointKey(nextPt);
                 const nextId = getOrCreatePointId(nextPt);
-                
+
                 if (seg.kind === 'L') {
                   newCommands.push({
                     kind: 'L' as const,
-                    point: { id: nextId, x: nextPt.x + offsetX, y: nextPt.y + offsetY, type: 'on-curve' as const },
+                    point: {
+                      id: nextId,
+                      x: nextPt.x + offsetX,
+                      y: nextPt.y + offsetY,
+                      type: 'on-curve' as const,
+                    },
                   });
                 } else if (seg.kind === 'Q') {
                   const ctrl = seg.ctrl1!;
@@ -958,8 +1018,18 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
                   newPointIds.add(ctrlId);
                   newCommands.push({
                     kind: 'Q' as const,
-                    ctrl: { id: ctrlId, x: ctrl.x + offsetX, y: ctrl.y + offsetY, type: 'off-curve-quad' as const },
-                    point: { id: nextId, x: nextPt.x + offsetX, y: nextPt.y + offsetY, type: 'on-curve' as const },
+                    ctrl: {
+                      id: ctrlId,
+                      x: ctrl.x + offsetX,
+                      y: ctrl.y + offsetY,
+                      type: 'off-curve-quad' as const,
+                    },
+                    point: {
+                      id: nextId,
+                      x: nextPt.x + offsetX,
+                      y: nextPt.y + offsetY,
+                      type: 'on-curve' as const,
+                    },
                   });
                 } else if (seg.kind === 'C') {
                   const ctrl1 = seg.ctrl1!;
@@ -970,21 +1040,36 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
                   newPointIds.add(ctrl2Id);
                   newCommands.push({
                     kind: 'C' as const,
-                    ctrl1: { id: ctrl1Id, x: ctrl1.x + offsetX, y: ctrl1.y + offsetY, type: 'off-curve-cubic' as const },
-                    ctrl2: { id: ctrl2Id, x: ctrl2.x + offsetX, y: ctrl2.y + offsetY, type: 'off-curve-cubic' as const },
-                    point: { id: nextId, x: nextPt.x + offsetX, y: nextPt.y + offsetY, type: 'on-curve' as const },
+                    ctrl1: {
+                      id: ctrl1Id,
+                      x: ctrl1.x + offsetX,
+                      y: ctrl1.y + offsetY,
+                      type: 'off-curve-cubic' as const,
+                    },
+                    ctrl2: {
+                      id: ctrl2Id,
+                      x: ctrl2.x + offsetX,
+                      y: ctrl2.y + offsetY,
+                      type: 'off-curve-cubic' as const,
+                    },
+                    point: {
+                      id: nextId,
+                      x: nextPt.x + offsetX,
+                      y: nextPt.y + offsetY,
+                      type: 'on-curve' as const,
+                    },
                   });
                 }
-                
+
                 currentKey = nextKey;
                 found = true;
                 break;
               }
             }
-            
+
             if (!found) break;
           }
-          
+
           // Check if path should be closed (we ended back at start)
           if (newCommands.length > 1 && currentKey === startKey) {
             // Remove the last command that goes back to start
@@ -992,21 +1077,21 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
             newCommands.push({ kind: 'Z' as const });
           }
         }
-        
+
         if (newCommands.length > 0) {
           newPaths.push({ id: newPathId, commands: newCommands });
         }
       }
-      
+
       // Handle loose points - create a separate path for them
       if (points.length > 0) {
         const pointsPathId = `path-paste-${Date.now()}-points`;
         const pointsCommands: PathCommand[] = [];
-        
+
         for (const pt of points) {
           const pointId = genId();
           newPointIds.add(pointId);
-          
+
           if (pointsCommands.length === 0) {
             pointsCommands.push({
               kind: 'M' as const,
@@ -1029,14 +1114,14 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
             });
           }
         }
-        
+
         if (pointsCommands.length > 0) {
           newPaths.push({ id: pointsPathId, commands: pointsCommands });
         }
       }
-      
+
       if (newPaths.length === 0) return state;
-      
+
       return {
         ...state,
         paths: [...state.paths, ...newPaths],
@@ -1056,12 +1141,13 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       let basePaths = state.paths;
       if (insertInSegment) {
         const { pathId, insertIndex, newPointId, newPointX, newPointY } = insertInSegment;
-        basePaths = basePaths.map(path => {
+        basePaths = basePaths.map((path) => {
           if (path.id !== pathId) return path;
           const isClosed = path.commands[path.commands.length - 1]?.kind === 'Z';
-          const actualIndex = (isClosed && insertIndex === path.commands.length)
-            ? path.commands.length - 1
-            : insertIndex;
+          const actualIndex =
+            isClosed && insertIndex === path.commands.length
+              ? path.commands.length - 1
+              : insertIndex;
           const newCmds = [...path.commands];
           newCmds.splice(actualIndex, 0, {
             kind: 'L' as const,
@@ -1074,13 +1160,16 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       // If source is the last endpoint of an open path, extend that path instead of creating M+L
       if (extendSourcePathId) {
         const newEndId = `pt-connect-${Date.now()}`;
-        const newPaths = basePaths.map(path => {
+        const newPaths = basePaths.map((path) => {
           if (path.id !== extendSourcePathId) return path;
           return {
             ...path,
             commands: [
               ...path.commands,
-              { kind: 'L' as const, point: { id: newEndId, x: toX, y: toY, type: 'on-curve' as const } },
+              {
+                kind: 'L' as const,
+                point: { id: newEndId, x: toX, y: toY, type: 'on-curve' as const },
+              },
             ],
           };
         });
@@ -1102,8 +1191,11 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       const newPath = {
         id: newPathId,
         commands: [
-          { kind: 'M' as const, point: { id: fromId, x: fromX, y: fromY, type: 'on-curve' as const } },
-          { kind: 'L' as const, point: { id: toId,   x: toX,   y: toY,   type: 'on-curve' as const } },
+          {
+            kind: 'M' as const,
+            point: { id: fromId, x: fromX, y: fromY, type: 'on-curve' as const },
+          },
+          { kind: 'L' as const, point: { id: toId, x: toX, y: toY, type: 'on-curve' as const } },
         ],
       };
 
@@ -1122,7 +1214,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       const { sourcePathId, targetPointId } = action;
       const prev = clonePaths(state.paths);
 
-      const sourcePath = state.paths.find(p => p.id === sourcePathId);
+      const sourcePath = state.paths.find((p) => p.id === sourcePathId);
       if (!sourcePath) return state;
       if (sourcePath.commands[sourcePath.commands.length - 1]?.kind === 'Z') return state;
 
@@ -1154,21 +1246,24 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
 
       // Case 1: Close the source path (source last → source first)
       if (targetPathId === sourcePathId && targetIsFirst) {
-        const newPaths = state.paths.map(path => {
+        const newPaths = state.paths.map((path) => {
           if (path.id !== sourcePathId) return path;
           return { ...path, commands: [...path.commands, { kind: 'Z' as const }] };
         });
         return {
-          ...state, paths: newPaths,
+          ...state,
+          paths: newPaths,
           undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
-          redoStack: [], isDirty: true, showTransformBox: false,
+          redoStack: [],
+          isDirty: true,
+          showTransformBox: false,
         };
       }
 
       if (targetPathId === sourcePathId) return state; // same path but not a close — ignore
 
       // Case 2/3: Merge source path with a different open path
-      const targetPath = state.paths.find(p => p.id === targetPathId)!;
+      const targetPath = state.paths.find((p) => p.id === targetPathId)!;
 
       let bridgeAndAppend: PathCommand[];
       if (targetIsFirst) {
@@ -1191,20 +1286,23 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       };
 
       const newPaths = state.paths
-        .filter(p => p.id !== targetPathId)
-        .map(p => p.id === sourcePathId ? mergedPath : p);
+        .filter((p) => p.id !== targetPathId)
+        .map((p) => (p.id === sourcePathId ? mergedPath : p));
 
       return {
-        ...state, paths: newPaths,
+        ...state,
+        paths: newPaths,
         selection: { pointIds: new Set(), segmentIds: new Set() },
         undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
-        redoStack: [], isDirty: true, showTransformBox: false,
+        redoStack: [],
+        isDirty: true,
+        showTransformBox: false,
       };
     }
 
     case 'ADD_DRAWING_LAYER': {
-      const updatedLayers = state.layers.map(l =>
-        l.id === state.activeLayerId ? { ...l, paths: state.paths } : l,
+      const updatedLayers = state.layers.map((l) =>
+        l.id === state.activeLayerId ? { ...l, paths: state.paths } : l
       );
       return {
         ...state,
@@ -1213,7 +1311,8 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         focusedLayerId: action.layer.id,
         paths: [],
         selection: { pointIds: new Set(), segmentIds: new Set() },
-        undoStack: [], redoStack: [],
+        undoStack: [],
+        redoStack: [],
         isDirty: false,
       };
     }
@@ -1222,11 +1321,12 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, layers: [...state.layers, action.layer], focusedLayerId: action.layer.id };
 
     case 'SET_ACTIVE_LAYER': {
-      if (action.layerId === state.activeLayerId) return { ...state, focusedLayerId: action.layerId };
-      const target = state.layers.find(l => l.id === action.layerId);
+      if (action.layerId === state.activeLayerId)
+        return { ...state, focusedLayerId: action.layerId };
+      const target = state.layers.find((l) => l.id === action.layerId);
       if (!target || target.type !== 'drawing') return state;
-      const updatedLayers = state.layers.map(l =>
-        l.id === state.activeLayerId ? { ...l, paths: state.paths } : l,
+      const updatedLayers = state.layers.map((l) =>
+        l.id === state.activeLayerId ? { ...l, paths: state.paths } : l
       );
       return {
         ...state,
@@ -1235,7 +1335,8 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         focusedLayerId: action.layerId,
         paths: (target as DrawingLayer).paths,
         selection: { pointIds: new Set(), segmentIds: new Set() },
-        undoStack: [], redoStack: [],
+        undoStack: [],
+        redoStack: [],
         isDirty: false,
         activePathId: null,
         isDrawingPath: false,
@@ -1247,10 +1348,10 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
 
     case 'REMOVE_LAYER': {
       if (action.layerId === 'outline') return state;
-      const newLayers = state.layers.filter(l => l.id !== action.layerId);
+      const newLayers = state.layers.filter((l) => l.id !== action.layerId);
       const newFocused = state.focusedLayerId === action.layerId ? 'outline' : state.focusedLayerId;
       if (state.activeLayerId === action.layerId) {
-        const outlineLayer = state.layers.find(l => l.id === 'outline') as DrawingLayer;
+        const outlineLayer = state.layers.find((l) => l.id === 'outline') as DrawingLayer;
         return {
           ...state,
           layers: newLayers,
@@ -1258,7 +1359,8 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
           focusedLayerId: 'outline',
           paths: outlineLayer?.paths ?? [],
           selection: { pointIds: new Set(), segmentIds: new Set() },
-          undoStack: [], redoStack: [],
+          undoStack: [],
+          redoStack: [],
           isDirty: false,
           activePathId: null,
           isDrawingPath: false,
@@ -1270,24 +1372,24 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     case 'SET_LAYER_VISIBLE':
       return {
         ...state,
-        layers: state.layers.map(l =>
-          l.id === action.layerId ? { ...l, visible: action.visible } : l,
+        layers: state.layers.map((l) =>
+          l.id === action.layerId ? { ...l, visible: action.visible } : l
         ),
       };
 
     case 'UPDATE_IMAGE_LAYER':
       return {
         ...state,
-        layers: state.layers.map(l =>
-          l.id === action.layerId ? { ...l, ...action.updates } : l,
+        layers: state.layers.map((l) =>
+          l.id === action.layerId ? { ...l, ...action.updates } : l
         ),
       };
 
     case 'RENAME_LAYER':
       return {
         ...state,
-        layers: state.layers.map(l =>
-          l.id === action.layerId ? { ...l, name: action.name } : l,
+        layers: state.layers.map((l) =>
+          l.id === action.layerId ? { ...l, name: action.name } : l
         ),
       };
 

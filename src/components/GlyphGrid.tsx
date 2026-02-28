@@ -61,26 +61,30 @@ function GlyphCell({
   return (
     <div
       onClick={handleClick}
-      className="flex flex-col items-center p-2 border rounded-lg cursor-pointer transition-all duration-150 hover:bg-primary/10 hover:border-primary/50 hover:shadow-md hover:scale-[1.02]"
+      className="hover:bg-primary/10 hover:border-primary/50 flex cursor-pointer flex-col items-center rounded-lg border p-2 transition-all duration-150 hover:scale-[1.02] hover:shadow-md"
     >
-      <svg viewBox={viewBox} className="w-full h-12 mb-1">
+      <svg viewBox={viewBox} className="mb-1 h-12 w-full">
         <path d={glyph.svg_path} fill="currentColor" className="text-foreground" />
       </svg>
       <div className="text-center">
-        <div className="text-xs font-mono text-muted-foreground">
-          #{glyph.glyph_id}
-        </div>
+        <div className="text-muted-foreground font-mono text-xs">#{glyph.glyph_id}</div>
         {glyph.glyph_name && (
-          <div className="text-xs text-muted-foreground mt-1">
-            {glyph.glyph_name}
-          </div>
+          <div className="text-muted-foreground mt-1 text-xs">{glyph.glyph_name}</div>
         )}
       </div>
     </div>
   );
 }
 
-export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLoadMore, isLoadingMore, filePath, tableName }: GlyphGridProps) {
+export function GlyphGrid({
+  glyphs: initialGlyphs,
+  totalGlyphs,
+  unitsPerEm,
+  onLoadMore,
+  isLoadingMore,
+  filePath,
+  tableName,
+}: GlyphGridProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);
@@ -95,12 +99,10 @@ export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLo
   useEffect(() => {
     const handleGlyphSaved = (data: { filePath: string; glyphId: number; svgPath: string }) => {
       if (data.filePath !== filePath) return;
-      
-      setGlyphs(prev => prev.map(g => 
-        g.glyph_id === data.glyphId 
-          ? { ...g, svg_path: data.svgPath }
-          : g
-      ));
+
+      setGlyphs((prev) =>
+        prev.map((g) => (g.glyph_id === data.glyphId ? { ...g, svg_path: data.svgPath } : g))
+      );
     };
 
     editorEventBus.setGlyphSavedHandler(handleGlyphSaved);
@@ -117,7 +119,7 @@ export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLo
           onLoadMore();
         }
       },
-      { rootMargin: '200px' },
+      { rootMargin: '200px' }
     );
 
     observer.observe(sentinel);
@@ -129,7 +131,9 @@ export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLo
     if (!container) return;
 
     // Find the viewport element within the container
-    const viewport = container.querySelector('[data-radix-scroll-area-viewport]') as HTMLDivElement | null;
+    const viewport = container.querySelector(
+      '[data-radix-scroll-area-viewport]'
+    ) as HTMLDivElement | null;
     if (!viewport) return;
 
     scrollViewportRef.current = viewport;
@@ -153,7 +157,7 @@ export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLo
       <ScrollArea className="h-full">
         <div className="p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-muted-foreground">
+            <h3 className="text-muted-foreground text-sm font-medium">
               Showing {glyphs.length} of {totalGlyphs} glyphs
             </h3>
             <button
@@ -182,13 +186,13 @@ export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLo
                   unitsPerEm,
                 });
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded px-3 py-1.5 text-xs transition-colors"
             >
               <Plus size={14} />
               <span>New Glyph</span>
             </button>
           </div>
-          <div className="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-2">
+          <div className="grid grid-cols-6 gap-2 md:grid-cols-8 lg:grid-cols-12">
             {glyphs.map((glyph) => (
               <GlyphCell
                 key={glyph.glyph_id}
@@ -201,9 +205,7 @@ export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLo
           </div>
           {hasMore && (
             <div ref={sentinelRef} className="flex justify-center py-6">
-              {isLoadingMore && (
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              )}
+              {isLoadingMore && <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />}
             </div>
           )}
         </div>
@@ -211,7 +213,7 @@ export function GlyphGrid({ glyphs: initialGlyphs, totalGlyphs, unitsPerEm, onLo
       {showScrollTop && (
         <button
           onClick={scrollToTop}
-          className="absolute bottom-4 right-4 w-10 h-10 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center z-50"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 absolute right-4 bottom-4 z-50 flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-all"
           aria-label="Scroll to top"
         >
           <ArrowUp size={20} />

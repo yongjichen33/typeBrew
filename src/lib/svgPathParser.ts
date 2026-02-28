@@ -1,4 +1,10 @@
-import type { EditablePath, EditablePoint, PathCommand, GlyphOutlineData, PointType } from './editorTypes';
+import type {
+  EditablePath,
+  EditablePoint,
+  PathCommand,
+  GlyphOutlineData,
+  PointType,
+} from './editorTypes';
 
 let _idCounter = 0;
 function uid(): string {
@@ -34,7 +40,8 @@ export function parseSvgPath(svgPath: string): EditablePath[] {
           paths.push({ id: uid(), commands });
         }
         commands = [];
-        const x = num(), y = yflip();
+        const x = num(),
+          y = yflip();
         const pt: EditablePoint = { id: uid(), x, y, type: 'on-curve' };
         commands.push({ kind: 'M', point: pt });
         break;
@@ -42,7 +49,8 @@ export function parseSvgPath(svgPath: string): EditablePath[] {
       case 'L':
       case 'l': {
         if (!commands) break;
-        const x = num(), y = yflip();
+        const x = num(),
+          y = yflip();
         const pt: EditablePoint = { id: uid(), x, y, type: 'on-curve' };
         commands.push({ kind: 'L', point: pt });
         break;
@@ -50,8 +58,10 @@ export function parseSvgPath(svgPath: string): EditablePath[] {
       case 'Q':
       case 'q': {
         if (!commands) break;
-        const cx = num(), cy = yflip();
-        const x = num(), y = yflip();
+        const cx = num(),
+          cy = yflip();
+        const x = num(),
+          y = yflip();
         commands.push({
           kind: 'Q',
           ctrl: { id: uid(), x: cx, y: cy, type: 'off-curve-quad' },
@@ -62,9 +72,12 @@ export function parseSvgPath(svgPath: string): EditablePath[] {
       case 'C':
       case 'c': {
         if (!commands) break;
-        const cx1 = num(), cy1 = yflip();
-        const cx2 = num(), cy2 = yflip();
-        const x = num(), y = yflip();
+        const cx1 = num(),
+          cy1 = yflip();
+        const cx2 = num(),
+          cy2 = yflip();
+        const x = num(),
+          y = yflip();
         commands.push({
           kind: 'C',
           ctrl1: { id: uid(), x: cx1, y: cy1, type: 'off-curve-cubic' },
@@ -111,7 +124,7 @@ export function editablePathToSvg(paths: EditablePath[]): string {
           break;
         case 'C':
           parts.push(
-            `C${cmd.ctrl1.x} ${-cmd.ctrl1.y} ${cmd.ctrl2.x} ${-cmd.ctrl2.y} ${cmd.point.x} ${-cmd.point.y}`,
+            `C${cmd.ctrl1.x} ${-cmd.ctrl1.y} ${cmd.ctrl2.x} ${-cmd.ctrl2.y} ${cmd.point.x} ${-cmd.point.y}`
           );
           break;
         case 'Z':
@@ -130,8 +143,11 @@ export function collectAllPoints(paths: EditablePath[]): EditablePoint[] {
   for (const path of paths) {
     for (const cmd of path.commands) {
       if (cmd.kind === 'M' || cmd.kind === 'L') pts.push(cmd.point);
-      else if (cmd.kind === 'Q') { pts.push(cmd.ctrl, cmd.point); }
-      else if (cmd.kind === 'C') { pts.push(cmd.ctrl1, cmd.ctrl2, cmd.point); }
+      else if (cmd.kind === 'Q') {
+        pts.push(cmd.ctrl, cmd.point);
+      } else if (cmd.kind === 'C') {
+        pts.push(cmd.ctrl1, cmd.ctrl2, cmd.point);
+      }
     }
   }
   return pts;

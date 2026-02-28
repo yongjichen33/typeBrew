@@ -28,11 +28,15 @@ interface HheaTableProps {
 }
 
 const EDITABLE_KEYS = [
-  'ascender', 'descender', 'line_gap',
-  'caret_slope_rise', 'caret_slope_run', 'caret_offset',
+  'ascender',
+  'descender',
+  'line_gap',
+  'caret_slope_rise',
+  'caret_slope_run',
+  'caret_offset',
 ] as const;
 
-type EditableKey = typeof EDITABLE_KEYS[number];
+type EditableKey = (typeof EDITABLE_KEYS)[number];
 type EditValues = Record<EditableKey, string>;
 
 function toEditValues(data: HheaTableData): EditValues {
@@ -46,20 +50,24 @@ function toEditValues(data: HheaTableData): EditValues {
 function ReadOnlyField({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-muted-foreground">{label}</label>
+      <label className="text-muted-foreground text-sm font-medium">{label}</label>
       <Input value={String(value)} disabled className="opacity-60" />
     </div>
   );
 }
 
-function EditableField({ label, value, onChange }: {
+function EditableField({
+  label,
+  value,
+  onChange,
+}: {
   label: string;
   value: string;
   onChange: (value: string) => void;
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-muted-foreground">{label}</label>
+      <label className="text-muted-foreground text-sm font-medium">{label}</label>
       <Input value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
@@ -75,11 +83,11 @@ export function HheaTable({ data, filePath, onSaved }: HheaTableProps) {
 
   const isDirty = useMemo(() => {
     const original = toEditValues(data);
-    return EDITABLE_KEYS.some(key => values[key] !== original[key]);
+    return EDITABLE_KEYS.some((key) => values[key] !== original[key]);
   }, [values, data]);
 
   const update = (field: EditableKey) => (value: string) => {
-    setValues(prev => ({ ...prev, [field]: value }));
+    setValues((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSave = async () => {
@@ -112,7 +120,7 @@ export function HheaTable({ data, filePath, onSaved }: HheaTableProps) {
   return (
     <ScrollArea className="h-full">
       {isDirty && (
-        <div className="sticky top-0 z-10 flex items-center justify-end gap-2 border-b bg-background/95 backdrop-blur px-6 py-3">
+        <div className="bg-background/95 sticky top-0 z-10 flex items-center justify-end gap-2 border-b px-6 py-3 backdrop-blur">
           <Button variant="outline" size="sm" onClick={handleReset}>
             <RotateCcw className="mr-2 h-3 w-3" />
             Reset
@@ -127,24 +135,28 @@ export function HheaTable({ data, filePath, onSaved }: HheaTableProps) {
           </Button>
         </div>
       )}
-      <div className="p-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="space-y-6 p-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ReadOnlyField label="Version" value={data.version} />
           <ReadOnlyField label="Number of HMetrics" value={data.number_of_hmetrics} />
         </div>
 
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground mb-3">Vertical Metrics</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <h4 className="text-muted-foreground mb-3 text-sm font-medium">Vertical Metrics</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <EditableField label="Ascender" value={values.ascender} onChange={update('ascender')} />
-            <EditableField label="Descender" value={values.descender} onChange={update('descender')} />
+            <EditableField
+              label="Descender"
+              value={values.descender}
+              onChange={update('descender')}
+            />
             <EditableField label="Line Gap" value={values.line_gap} onChange={update('line_gap')} />
           </div>
         </div>
 
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground mb-3">Horizontal Extents</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h4 className="text-muted-foreground mb-3 text-sm font-medium">Horizontal Extents</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ReadOnlyField label="Advance Width Max" value={data.advance_width_max} />
             <ReadOnlyField label="Min Left Side Bearing" value={data.min_left_side_bearing} />
             <ReadOnlyField label="Min Right Side Bearing" value={data.min_right_side_bearing} />
@@ -153,11 +165,23 @@ export function HheaTable({ data, filePath, onSaved }: HheaTableProps) {
         </div>
 
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground mb-3">Caret</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <EditableField label="Caret Slope Rise" value={values.caret_slope_rise} onChange={update('caret_slope_rise')} />
-            <EditableField label="Caret Slope Run" value={values.caret_slope_run} onChange={update('caret_slope_run')} />
-            <EditableField label="Caret Offset" value={values.caret_offset} onChange={update('caret_offset')} />
+          <h4 className="text-muted-foreground mb-3 text-sm font-medium">Caret</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <EditableField
+              label="Caret Slope Rise"
+              value={values.caret_slope_rise}
+              onChange={update('caret_slope_rise')}
+            />
+            <EditableField
+              label="Caret Slope Run"
+              value={values.caret_slope_run}
+              onChange={update('caret_slope_run')}
+            />
+            <EditableField
+              label="Caret Offset"
+              value={values.caret_offset}
+              onChange={update('caret_offset')}
+            />
           </div>
         </div>
       </div>

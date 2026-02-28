@@ -471,7 +471,11 @@ fn parse_composite_component_ids(data: &[u8]) -> Vec<u32> {
         pos += 4;
 
         // Skip variable-size arguments
-        pos += if flags & ARG_1_AND_2_ARE_WORDS != 0 { 4 } else { 2 };
+        pos += if flags & ARG_1_AND_2_ARE_WORDS != 0 {
+            4
+        } else {
+            2
+        };
 
         // Skip optional transform data
         if flags & WE_HAVE_A_TWO_BY_TWO != 0 {
@@ -529,8 +533,7 @@ fn get_composite_info(font: &FontRef<'_>, glyph_id: u32) -> (bool, Vec<u32>) {
     }
 
     // numberOfContours < 0 → composite glyph
-    let num_contours =
-        i16::from_be_bytes([glyf_bytes[glyph_start], glyf_bytes[glyph_start + 1]]);
+    let num_contours = i16::from_be_bytes([glyf_bytes[glyph_start], glyf_bytes[glyph_start + 1]]);
     if num_contours >= 0 {
         return (false, vec![]);
     }
@@ -592,7 +595,13 @@ pub fn get_glyph_outline_data(
 
     let (is_composite, component_glyph_ids) = get_composite_info(&font, glyph_id);
 
-    Ok(pen.into_outline_data(glyph_id, glyph_name, advance_width, is_composite, component_glyph_ids))
+    Ok(pen.into_outline_data(
+        glyph_id,
+        glyph_name,
+        advance_width,
+        is_composite,
+        component_glyph_ids,
+    ))
 }
 
 pub fn parse_font(file_path: &str, cache: &FontCache) -> Result<FontMetadata, String> {
@@ -997,9 +1006,9 @@ pub fn update_hhea_table(
     hhea.ascender = updates.ascender.into();
     hhea.descender = updates.descender.into();
     hhea.line_gap = updates.line_gap.into();
-    hhea.caret_slope_rise = updates.caret_slope_rise.into();
-    hhea.caret_slope_run = updates.caret_slope_run.into();
-    hhea.caret_offset = updates.caret_offset.into();
+    hhea.caret_slope_rise = updates.caret_slope_rise;
+    hhea.caret_slope_run = updates.caret_slope_run;
+    hhea.caret_offset = updates.caret_offset;
 
     let new_bytes = FontBuilder::new()
         .add_table(&hhea)
@@ -1102,7 +1111,7 @@ pub fn update_name_table(
 
     for record in name_table.name_record().iter() {
         if record.name_id().to_u16() == updates.name_id
-            && record.platform_id() as u16 == updates.platform_id
+            && record.platform_id() == updates.platform_id
         {
             let new_record = NameRecord {
                 platform_id: record.platform_id.get(),
@@ -1458,7 +1467,7 @@ fn rebuild_glyf_with_patch(
             // Empty glyph (start == end) - nothing to copy
         }
         // Pad to 4-byte boundary (required by OpenType spec)
-        while new_glyf.len() % 4 != 0 {
+        while !new_glyf.len().is_multiple_of(4) {
             new_glyf.push(0);
         }
     }

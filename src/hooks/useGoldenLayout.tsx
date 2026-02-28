@@ -1,10 +1,5 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
-import {
-  GoldenLayout,
-  ComponentContainer,
-  type LayoutConfig,
-  type JsonValue,
-} from 'golden-layout';
+import { GoldenLayout, ComponentContainer, type LayoutConfig, type JsonValue } from 'golden-layout';
 import { createRoot, type Root } from 'react-dom/client';
 import { TableContentTab } from '@/components/TableContentTab';
 import { GlyphEditorTab } from '@/components/editor/GlyphEditorTab';
@@ -23,7 +18,7 @@ interface TableTabState {
   tableName: string;
 }
 
-export type ActiveTabInfo = 
+export type ActiveTabInfo =
   | { type: 'table'; filePath: string; tableName: string }
   | { type: 'glyph'; filePath: string; glyphId: number }
   | null;
@@ -53,10 +48,7 @@ export function useGoldenLayout() {
         openTabsRef.current.set(key, glContainer);
 
         root.render(
-          <TableContentTab
-            filePath={tabState.filePath}
-            tableName={tabState.tableName}
-          />,
+          <TableContentTab filePath={tabState.filePath} tableName={tabState.tableName} />
         );
 
         setIsEmpty(false);
@@ -64,16 +56,23 @@ export function useGoldenLayout() {
 
         glContainer.addEventListener('beforeComponentRelease', () => {
           const r = reactRootsRef.current.get(key);
-          if (r) { r.unmount(); reactRootsRef.current.delete(key); }
+          if (r) {
+            r.unmount();
+            reactRootsRef.current.delete(key);
+          }
           openTabsRef.current.delete(key);
         });
 
         glContainer.addEventListener('focus', () => {
-          setActiveTab({ type: 'table', filePath: tabState.filePath, tableName: tabState.tableName });
+          setActiveTab({
+            type: 'table',
+            filePath: tabState.filePath,
+            tableName: tabState.tableName,
+          });
         });
 
         return undefined;
-      },
+      }
     );
 
     // ---- GlyphEditorTab component ----
@@ -94,7 +93,10 @@ export function useGoldenLayout() {
 
         glContainer.addEventListener('beforeComponentRelease', () => {
           const r = reactRootsRef.current.get(key);
-          if (r) { r.unmount(); reactRootsRef.current.delete(key); }
+          if (r) {
+            r.unmount();
+            reactRootsRef.current.delete(key);
+          }
           openTabsRef.current.delete(key);
         });
 
@@ -103,7 +105,7 @@ export function useGoldenLayout() {
         });
 
         return undefined;
-      },
+      }
     );
 
     layout.on('itemDestroyed', () => {
@@ -126,10 +128,14 @@ export function useGoldenLayout() {
       if (container) {
         const state = container.state;
         const componentType = container.componentType as string;
-        
+
         if (componentType === 'TableContentTab' && state) {
           const tabState = state as unknown as TableTabState;
-          setActiveTab({ type: 'table', filePath: tabState.filePath, tableName: tabState.tableName });
+          setActiveTab({
+            type: 'table',
+            filePath: tabState.filePath,
+            tableName: tabState.tableName,
+          });
         } else if (componentType === 'GlyphEditorTab' && state) {
           const tabState = state as unknown as GlyphEditorTabState;
           setActiveTab({ type: 'glyph', filePath: tabState.filePath, glyphId: tabState.glyphId });

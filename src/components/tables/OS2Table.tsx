@@ -23,7 +23,7 @@ interface OS2TableData {
 function Field({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-muted-foreground">{label}</label>
+      <label className="text-muted-foreground text-sm font-medium">{label}</label>
       <Input defaultValue={String(value)} disabled className="opacity-60" />
     </div>
   );
@@ -62,23 +62,29 @@ function getWidthClassName(value: number): string {
 export function OS2Table({ data }: { data: OS2TableData }) {
   return (
     <ScrollArea className="h-full">
-      <div className="p-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="space-y-6 p-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field label="Version" value={data.version} />
           <Field label="Average Character Width" value={data.x_avg_char_width} />
         </div>
 
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground mb-3">Weight &amp; Width</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Weight Class" value={`${data.us_weight_class} (${getWeightClassName(data.us_weight_class)})`} />
-            <Field label="Width Class" value={`${data.us_width_class} (${getWidthClassName(data.us_width_class)})`} />
+          <h4 className="text-muted-foreground mb-3 text-sm font-medium">Weight &amp; Width</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Field
+              label="Weight Class"
+              value={`${data.us_weight_class} (${getWeightClassName(data.us_weight_class)})`}
+            />
+            <Field
+              label="Width Class"
+              value={`${data.us_width_class} (${getWidthClassName(data.us_width_class)})`}
+            />
           </div>
         </div>
 
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground mb-3">Subscript</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h4 className="text-muted-foreground mb-3 text-sm font-medium">Subscript</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="X Size" value={data.y_subscript_x_size} />
             <Field label="Y Size" value={data.y_subscript_y_size} />
             <Field label="X Offset" value={data.y_subscript_x_offset} />
@@ -87,8 +93,8 @@ export function OS2Table({ data }: { data: OS2TableData }) {
         </div>
 
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground mb-3">Superscript</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h4 className="text-muted-foreground mb-3 text-sm font-medium">Superscript</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="X Size" value={data.y_superscript_x_size} />
             <Field label="Y Size" value={data.y_superscript_y_size} />
             <Field label="X Offset" value={data.y_superscript_x_offset} />
@@ -97,16 +103,16 @@ export function OS2Table({ data }: { data: OS2TableData }) {
         </div>
 
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground mb-3">Strikeout</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h4 className="text-muted-foreground mb-3 text-sm font-medium">Strikeout</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="Size" value={data.y_strikeout_size} />
             <Field label="Position" value={data.y_strikeout_position} />
           </div>
         </div>
 
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground mb-3">Miscellaneous</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h4 className="text-muted-foreground mb-3 text-sm font-medium">Miscellaneous</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="FS Type" value={data.fs_type} />
             <Field label="Family Class" value={data.s_family_class} />
           </div>

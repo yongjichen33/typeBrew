@@ -34,33 +34,44 @@ export function parseGlyphOutlines(buffer: ArrayBuffer): GlyphOutlineData {
   const decoder = new TextDecoder();
   let offset = 0;
 
-  const totalGlyphs = view.getUint32(offset, true); offset += 4;
-  const batchCount = view.getUint32(offset, true); offset += 4;
-  const unitsPerEm = view.getUint16(offset, true); offset += 2;
+  const totalGlyphs = view.getUint32(offset, true);
+  offset += 4;
+  const batchCount = view.getUint32(offset, true);
+  offset += 4;
+  const unitsPerEm = view.getUint16(offset, true);
+  offset += 2;
 
   const glyphs: Glyph[] = new Array(batchCount);
 
   for (let i = 0; i < batchCount; i++) {
-    const glyph_id = view.getUint32(offset, true); offset += 4;
-    const advance_width = view.getFloat32(offset, true); offset += 4;
+    const glyph_id = view.getUint32(offset, true);
+    offset += 4;
+    const advance_width = view.getFloat32(offset, true);
+    offset += 4;
 
-    const hasBounds = view.getUint8(offset); offset += 1;
+    const hasBounds = view.getUint8(offset);
+    offset += 1;
     let bounds: GlyphBounds | undefined;
     if (hasBounds) {
-      const x_min = view.getFloat32(offset, true); offset += 4;
-      const y_min = view.getFloat32(offset, true); offset += 4;
-      const x_max = view.getFloat32(offset, true); offset += 4;
-      const y_max = view.getFloat32(offset, true); offset += 4;
+      const x_min = view.getFloat32(offset, true);
+      offset += 4;
+      const y_min = view.getFloat32(offset, true);
+      offset += 4;
+      const x_max = view.getFloat32(offset, true);
+      offset += 4;
+      const y_max = view.getFloat32(offset, true);
+      offset += 4;
       bounds = { x_min, y_min, x_max, y_max };
     }
 
-    const nameLen = view.getUint16(offset, true); offset += 2;
-    const glyph_name = nameLen > 0
-      ? decoder.decode(new Uint8Array(buffer, offset, nameLen))
-      : undefined;
+    const nameLen = view.getUint16(offset, true);
+    offset += 2;
+    const glyph_name =
+      nameLen > 0 ? decoder.decode(new Uint8Array(buffer, offset, nameLen)) : undefined;
     offset += nameLen;
 
-    const pathLen = view.getUint32(offset, true); offset += 4;
+    const pathLen = view.getUint32(offset, true);
+    offset += 4;
     const svg_path = decoder.decode(new Uint8Array(buffer, offset, pathLen));
     offset += pathLen;
 

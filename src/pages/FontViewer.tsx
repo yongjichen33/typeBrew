@@ -12,14 +12,14 @@ import { useGoldenLayout } from '@/hooks/useGoldenLayout';
 import { editorEventBus } from '@/lib/editorEventBus';
 import '@/styles/golden-layout.css';
 
-function ToolbarButton({ 
-  icon, 
-  title, 
-  active, 
-  onClick 
-}: { 
-  icon: React.ReactNode; 
-  title: string; 
+function ToolbarButton({
+  icon,
+  title,
+  active,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
   active?: boolean;
   onClick: () => void;
 }) {
@@ -28,9 +28,9 @@ function ToolbarButton({
       title={title}
       onClick={onClick}
       className={[
-        'flex items-center justify-center w-6 h-6 rounded transition-colors',
-        active 
-          ? 'bg-primary text-primary-foreground' 
+        'flex h-6 w-6 items-center justify-center rounded transition-colors',
+        active
+          ? 'bg-primary text-primary-foreground'
           : 'text-muted-foreground hover:bg-muted hover:text-foreground',
       ].join(' ')}
     >
@@ -40,7 +40,7 @@ function ToolbarButton({
 }
 
 function ToolbarDivider() {
-  return <div className="w-px h-3 bg-border mx-0.5" />;
+  return <div className="bg-border mx-0.5 h-3 w-px" />;
 }
 
 export function FontViewer() {
@@ -72,23 +72,28 @@ export function FontViewer() {
     const unlisten = listen('menu:open-font', async () => {
       const newFonts = await openFontDialog();
       if (newFonts.length > 0) {
-        setFonts(prev => {
-          const existing = new Set(prev.map(f => f.file_path));
-          const unique = newFonts.filter(f => !existing.has(f.file_path));
+        setFonts((prev) => {
+          const existing = new Set(prev.map((f) => f.file_path));
+          const unique = newFonts.filter((f) => !existing.has(f.file_path));
           return [...prev, ...unique];
         });
         setSelectedFilePath(newFonts[0].file_path);
         setSelectedTable(null);
       }
     });
-    return () => { unlisten.then(fn => fn()); };
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, []);
 
-  const handleSelectTable = useCallback((filePath: string, table: string) => {
-    setSelectedFilePath(filePath);
-    setSelectedTable(table);
-    addTab(filePath, table, table);
-  }, [addTab]);
+  const handleSelectTable = useCallback(
+    (filePath: string, table: string) => {
+      setSelectedFilePath(filePath);
+      setSelectedTable(table);
+      addTab(filePath, table, table);
+    },
+    [addTab]
+  );
 
   // Sorted fonts based on sortAscending
   const sortedFonts = useMemo(() => {
@@ -99,11 +104,11 @@ export function FontViewer() {
   }, [fonts, sortAscending]);
 
   // Get all font file paths for expand/collapse all
-  const allFontPaths = useMemo(() => fonts.map(f => f.file_path), [fonts]);
-  
+  const allFontPaths = useMemo(() => fonts.map((f) => f.file_path), [fonts]);
+
   // Derive allExpanded state from actual expandedIds
-  const allExpanded = useMemo(() => 
-    allFontPaths.every(path => expandedIds.includes(path)),
+  const allExpanded = useMemo(
+    () => allFontPaths.every((path) => expandedIds.includes(path)),
     [allFontPaths, expandedIds]
   );
 
@@ -124,13 +129,13 @@ export function FontViewer() {
   }, [allExpanded, handleExpandAll, handleCollapseAll]);
 
   return (
-    <div className="h-screen bg-background">
+    <div className="bg-background h-screen">
       <SplitPane direction="horizontal">
         {/* Left: Font Tree */}
         <Pane defaultSize="300px" minSize="200px" maxSize="500px">
-          <Card className="h-full rounded-none border-0 border-r flex flex-col py-0">
+          <Card className="flex h-full flex-col rounded-none border-0 border-r py-0">
             {/* Compact Toolbar */}
-            <div className="p-1.5 border-b bg-muted/30">
+            <div className="bg-muted/30 border-b p-1.5">
               <div className="flex items-center gap-0.5">
                 <ToolbarButton
                   icon={<Search size={14} />}
@@ -145,7 +150,7 @@ export function FontViewer() {
                 />
                 <ToolbarButton
                   icon={allExpanded ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                  title={allExpanded ? "Collapse all" : "Expand all"}
+                  title={allExpanded ? 'Collapse all' : 'Expand all'}
                   onClick={handleToggleExpand}
                 />
                 <ToolbarDivider />
@@ -155,22 +160,22 @@ export function FontViewer() {
                   onClick={() => setSortAscending(!sortAscending)}
                 />
               </div>
-              
+
               {/* Search input (shown when search is active) */}
               {showSearch && (
                 <div className="relative mt-1.5">
-                  <Search className="absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Search className="text-muted-foreground absolute top-1.5 left-2 h-3.5 w-3.5" />
                   <Input
                     placeholder="Search tables..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-7 h-6 text-xs"
+                    className="h-6 pl-7 text-xs"
                     autoFocus
                   />
                 </div>
               )}
             </div>
-            <CardContent className="p-0 flex-1 min-h-0 overflow-hidden">
+            <CardContent className="min-h-0 flex-1 overflow-hidden p-0">
               <TableList
                 fonts={sortedFonts}
                 selectedFilePath={selectedFilePath}
@@ -190,7 +195,7 @@ export function FontViewer() {
           <div className="relative h-full overflow-hidden">
             <div ref={containerRef} className="h-full w-full" />
             {isEmpty && (
-              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground pointer-events-none">
+              <div className="text-muted-foreground pointer-events-none absolute inset-0 flex items-center justify-center">
                 Select a table to view its contents
               </div>
             )}

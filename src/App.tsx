@@ -3,15 +3,11 @@ import { Toaster } from 'sonner';
 
 function App() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background min-h-screen">
       <div className="container mx-auto py-8">
-        <header className="text-center mb-12">
-          <h1 className="text-4xl font-bold tracking-tight mb-2">
-            typeBrew
-          </h1>
-          <p className="text-muted-foreground">
-            Manage your font collection with ease
-          </p>
+        <header className="mb-12 text-center">
+          <h1 className="mb-2 text-4xl font-bold tracking-tight">typeBrew</h1>
+          <p className="text-muted-foreground">Manage your font collection with ease</p>
         </header>
 
         <FontDropzone />

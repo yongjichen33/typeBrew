@@ -71,18 +71,27 @@ export function GlyphEditorCanvas({
   const [canvasSize, setCanvasSize] = useState({ w: 1, h: 1 });
 
   const metricsRef = useRef<FontMetrics>(metrics);
-  useEffect(() => { metricsRef.current = metrics; }, [metrics]);
+  useEffect(() => {
+    metricsRef.current = metrics;
+  }, [metrics]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const imageCacheRef = useRef<Map<string, any>>(new Map());
 
   const [rubberBand, setRubberBandState] = useState<RubberBand | null>(null);
   const [mousePos, setMousePosState] = useState<{ x: number; y: number } | null>(null);
-  const [pendingOffCurve, setPendingOffCurveState] = useState<{ x: number; y: number } | null>(null);
+  const [pendingOffCurve, setPendingOffCurveState] = useState<{ x: number; y: number } | null>(
+    null
+  );
   const [hoveredPointId, setHoveredPointIdState] = useState<string | null>(null);
   const [hoveredSegmentId, setHoveredSegmentIdState] = useState<string | null>(null);
   const [dragPos, setDragPosState] = useState<{ x: number; y: number } | null>(null);
-  const [connectPreview, setConnectPreviewState] = useState<{ fromX: number; fromY: number; toX: number; toY: number } | null>(null);
+  const [connectPreview, setConnectPreviewState] = useState<{
+    fromX: number;
+    fromY: number;
+    toX: number;
+    toY: number;
+  } | null>(null);
 
   const rubberBandRef = useRef<RubberBand | null>(null);
   const mousePosRef = useRef<{ x: number; y: number } | null>(null);
@@ -90,7 +99,12 @@ export function GlyphEditorCanvas({
   const hoveredPointIdRef = useRef<string | null>(null);
   const hoveredSegmentIdRef = useRef<string | null>(null);
   const dragPosRef = useRef<{ x: number; y: number } | null>(null);
-  const connectPreviewRef = useRef<{ fromX: number; fromY: number; toX: number; toY: number } | null>(null);
+  const connectPreviewRef = useRef<{
+    fromX: number;
+    fromY: number;
+    toX: number;
+    toY: number;
+  } | null>(null);
 
   const extraRef = useRef({
     rubberBand: rubberBandRef.current,
@@ -117,7 +131,16 @@ export function GlyphEditorCanvas({
       dragPos: dragPosRef.current,
       connectPreview: connectPreviewRef.current,
     };
-  }, [rubberBand, mousePos, pendingOffCurve, canvasSize, hoveredPointId, hoveredSegmentId, dragPos, connectPreview]);
+  }, [
+    rubberBand,
+    mousePos,
+    pendingOffCurve,
+    canvasSize,
+    hoveredPointId,
+    hoveredSegmentId,
+    dragPos,
+    connectPreview,
+  ]);
 
   const setRubberBand = (rb: RubberBand | null) => {
     rubberBandRef.current = rb;
@@ -149,33 +172,51 @@ export function GlyphEditorCanvas({
     extraRef.current = { ...extraRef.current, dragPos: pos };
     setDragPosState(pos);
   };
-  const setConnectPreview = (preview: { fromX: number; fromY: number; toX: number; toY: number } | null) => {
+  const setConnectPreview = (
+    preview: { fromX: number; fromY: number; toX: number; toY: number } | null
+  ) => {
     connectPreviewRef.current = preview;
     extraRef.current = { ...extraRef.current, connectPreview: preview };
     setConnectPreviewState(preview);
   };
 
-  const { redraw, registerSurface } = useEditorRenderer(ck, surfaceRef, surfaceValidRef, stateRef, metricsRef, extraRef, imageCacheRef);
+  const { redraw, registerSurface } = useEditorRenderer(
+    ck,
+    surfaceRef,
+    surfaceValidRef,
+    stateRef,
+    metricsRef,
+    extraRef,
+    imageCacheRef
+  );
 
   // Decode image layers into CanvasKit SkImage objects (must be after redraw is defined)
   useEffect(() => {
     if (!ck) return;
     const imageLayers = layers.filter((l): l is ImageLayer => l.type === 'image');
-    const activeIds = new Set(imageLayers.map(l => l.id));
+    const activeIds = new Set(imageLayers.map((l) => l.id));
     for (const [id, img] of imageCacheRef.current) {
-      if (!activeIds.has(id)) { img.delete(); imageCacheRef.current.delete(id); }
+      if (!activeIds.has(id)) {
+        img.delete();
+        imageCacheRef.current.delete(id);
+      }
     }
     for (const layer of imageLayers) {
       if (imageCacheRef.current.has(layer.id)) continue;
       fetch(layer.imageDataUrl)
-        .then(r => r.arrayBuffer())
-        .then(ab => {
+        .then((r) => r.arrayBuffer())
+        .then((ab) => {
           const skImg = ck.MakeImageFromEncoded(new Uint8Array(ab));
-          if (skImg) { imageCacheRef.current.set(layer.id, skImg); redraw(); }
+          if (skImg) {
+            imageCacheRef.current.set(layer.id, skImg);
+            redraw();
+          }
         })
-        .catch(() => { /* ignore decode errors */ });
+        .catch(() => {
+          /* ignore decode errors */
+        });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ck, layers]);
 
   // Create/destroy CanvasKit surface when ck or canvas size changes
@@ -186,7 +227,11 @@ export function GlyphEditorCanvas({
     const canvas = canvasRef.current;
     canvas.width = canvasSize.w;
     canvas.height = canvasSize.h;
-    extraRef.current = { ...extraRef.current, canvasWidth: canvasSize.w, canvasHeight: canvasSize.h };
+    extraRef.current = {
+      ...extraRef.current,
+      canvasWidth: canvasSize.w,
+      canvasHeight: canvasSize.h,
+    };
 
     // Destroy old surface
     if (surfaceRef.current) {
@@ -218,7 +263,22 @@ export function GlyphEditorCanvas({
   // Trigger redraw on relevant state changes
   useEffect(() => {
     redraw();
-  }, [redraw, paths, selection, toolMode, viewTransform, rubberBand, mousePos, pendingOffCurve, showDirection, showCoordinates, dragPos, layers, showTransformBox, showPixelGrid]);
+  }, [
+    redraw,
+    paths,
+    selection,
+    toolMode,
+    viewTransform,
+    rubberBand,
+    mousePos,
+    pendingOffCurve,
+    showDirection,
+    showCoordinates,
+    dragPos,
+    layers,
+    showTransformBox,
+    showPixelGrid,
+  ]);
 
   // Observe container size and update canvas dimensions
   useEffect(() => {
@@ -261,36 +321,71 @@ export function GlyphEditorCanvas({
   const getCanvasRect = () => canvasRef.current?.getBoundingClientRect() ?? null;
 
   const { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave, getCursor } =
-    useEditorInteraction({ stateRef, dispatch, setRubberBand, setMousePos, setPendingOffCurve, redraw, getCanvasRect, onTransformFeedback, setHoveredPointId, setHoveredSegmentId, setDragPos, setConnectPreview, imageCacheRef });
+    useEditorInteraction({
+      stateRef,
+      dispatch,
+      setRubberBand,
+      setMousePos,
+      setPendingOffCurve,
+      redraw,
+      getCanvasRect,
+      onTransformFeedback,
+      setHoveredPointId,
+      setHoveredSegmentId,
+      setDragPos,
+      setConnectPreview,
+      imageCacheRef,
+    });
 
-  const coordLabels = showCoordinates ? paths.flatMap((path) =>
-    path.commands.flatMap((cmd) => {
-      const labels: Array<{ id: string; label: string; sx: number; sy: number; color: string }> = [];
-      const { originX, originY, scale } = viewTransform;
-      
-      const addLabel = (pt: { id: string; x: number; y: number }, color: string) => {
-        const sx = originX + pt.x * scale;
-        const sy = originY - pt.y * scale;
-        labels.push({ id: pt.id, label: `${Math.round(pt.x)}, ${Math.round(pt.y)}`, sx, sy, color });
-      };
-      
-      if (cmd.kind === 'M' || cmd.kind === 'L') {
-        addLabel(cmd.point, 'rgb(30,30,30)');
-      } else if (cmd.kind === 'Q') {
-        addLabel(cmd.ctrl, 'rgb(65,105,225)');
-        addLabel(cmd.point, 'rgb(30,30,30)');
-      } else if (cmd.kind === 'C') {
-        addLabel(cmd.ctrl1, 'rgb(65,105,225)');
-        addLabel(cmd.ctrl2, 'rgb(65,105,225)');
-        addLabel(cmd.point, 'rgb(30,30,30)');
-      }
-      return labels;
-    })
-  ) : [];
+  const coordLabels = showCoordinates
+    ? paths.flatMap((path) =>
+        path.commands.flatMap((cmd) => {
+          const labels: Array<{
+            id: string;
+            label: string;
+            sx: number;
+            sy: number;
+            color: string;
+          }> = [];
+          const { originX, originY, scale } = viewTransform;
+
+          const addLabel = (pt: { id: string; x: number; y: number }, color: string) => {
+            const sx = originX + pt.x * scale;
+            const sy = originY - pt.y * scale;
+            labels.push({
+              id: pt.id,
+              label: `${Math.round(pt.x)}, ${Math.round(pt.y)}`,
+              sx,
+              sy,
+              color,
+            });
+          };
+
+          if (cmd.kind === 'M' || cmd.kind === 'L') {
+            addLabel(cmd.point, 'rgb(30,30,30)');
+          } else if (cmd.kind === 'Q') {
+            addLabel(cmd.ctrl, 'rgb(65,105,225)');
+            addLabel(cmd.point, 'rgb(30,30,30)');
+          } else if (cmd.kind === 'C') {
+            addLabel(cmd.ctrl1, 'rgb(65,105,225)');
+            addLabel(cmd.ctrl2, 'rgb(65,105,225)');
+            addLabel(cmd.point, 'rgb(30,30,30)');
+          }
+          return labels;
+        })
+      )
+    : [];
 
   // Metric line labels (HTML overlay, since CanvasKit has no bundled fonts)
   const metricLabels = (() => {
-    const labels: Array<{ key: string; label: string; sx?: number; sy?: number; isVertical: boolean; color: string }> = [];
+    const labels: Array<{
+      key: string;
+      label: string;
+      sx?: number;
+      sy?: number;
+      isVertical: boolean;
+      color: string;
+    }> = [];
     const { originX, originY, scale } = viewTransform;
     const advanceX = originX + metrics.advanceWidth * scale;
     const addH = (fontY: number, label: string, color: string) => {
@@ -305,18 +400,24 @@ export function GlyphEditorCanvas({
     if (metrics.xHeight) addH(metrics.xHeight, 'x-height', 'rgb(120,120,120)');
     if (metrics.capHeight) addH(metrics.capHeight, 'Cap height', 'rgb(120,120,120)');
 
-
     return labels;
   })();
 
   return (
-    <div ref={containerRef} className="flex-1 min-h-0 w-full relative overflow-hidden bg-white">
+    <div ref={containerRef} className="relative min-h-0 w-full flex-1 overflow-hidden bg-white">
       <canvas
         ref={canvasRef}
         style={{
           width: canvasSize.w,
           height: canvasSize.h,
-          cursor: toolMode === 'pen' ? 'crosshair' : toolMode === 'hand' ? 'grab' : toolMode === 'node' ? getCursor() : 'default',
+          cursor:
+            toolMode === 'pen'
+              ? 'crosshair'
+              : toolMode === 'hand'
+                ? 'grab'
+                : toolMode === 'node'
+                  ? getCursor()
+                  : 'default',
           display: 'block',
         }}
         onPointerDown={(e) => onPointerDown(e.nativeEvent)}
@@ -326,11 +427,11 @@ export function GlyphEditorCanvas({
         onWheel={(e) => onWheel(e.nativeEvent)}
       />
       {/* Metric line labels */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
         {metricLabels.map(({ key, label, sx, sy, isVertical, color }) => (
           <span
             key={key}
-            className="absolute text-[10px] font-mono whitespace-nowrap"
+            className="absolute font-mono text-[10px] whitespace-nowrap"
             style={
               isVertical
                 ? { left: (sx ?? 0) + 4, top: (sy ?? 4) - 14, color }
@@ -342,11 +443,11 @@ export function GlyphEditorCanvas({
         ))}
       </div>
       {coordLabels.length > 0 && (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
           {coordLabels.map(({ id, label, sx, sy, color }) => (
             <span
               key={id}
-              className="absolute text-xs font-mono whitespace-nowrap px-1 py-0.5 rounded bg-white/80 shadow-sm"
+              className="absolute rounded bg-white/80 px-1 py-0.5 font-mono text-xs whitespace-nowrap shadow-sm"
               style={{ left: sx + 10, top: sy - 8, color }}
             >
               {label}

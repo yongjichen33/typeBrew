@@ -6,23 +6,31 @@ TypeBrew leverages Google's [fontations](https://github.com/googlefonts/fontatio
 
 **Cross-Platform**: Runs natively on Windows, macOS, and Linux.
 
-## Features
-
-- Open and edit TrueType/OpenType fonts (.ttf, .otf)
-- Glyph grid view for browsing all glyphs
-- Vector editing with Bezier curves (quadratic and cubic)
-- Multiple editing tools: select, pen, draw
-- Smart guides for alignment
-- Copy/paste paths and segments
-- Undo/redo support
-- Add new glyphs to fonts
-
 ## Tech Stack
 
-- **Frontend**: React 19, TypeScript, Tailwind CSS
-- **Backend**: Rust (Tauri), Google fontations crate
-- **Rendering**: CanvasKit WASM
+### Frontend
+
+- **Framework**: React 19, TypeScript 5.8
+- **Build Tool**: Vite 7
+- **Styling**: Tailwind CSS 4
+- **Rendering**: CanvasKit WASM (Skia)
 - **UI Components**: Radix UI, Lucide icons
+- **Layout**: Golden Layout (docked panels)
+
+### Backend
+
+- **Framework**: Tauri v2
+- **Font Parsing**: Google fontations (skrifa, read-fonts, write-fonts)
+
+### Code Quality
+
+- **ESLint** - TypeScript & React linting (flat config)
+- **Oxlint** - Fast supplemental linting
+- **Prettier** - Code formatting with Tailwind plugin
+- **Clippy** - Rust linting
+- **Rustfmt** - Rust formatting
+- **cargo-audit** - Security auditing
+- **Lefthook** - Git hooks for pre-commit/pre-push checks
 
 ## Prerequisites
 
@@ -46,13 +54,29 @@ npm run tauri dev
 
 ## Available Commands
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start Vite development server (frontend only) |
-| `npm run build` | Build frontend for production |
-| `npm run preview` | Preview production build |
-| `npm run tauri dev` | Start Tauri in development mode with hot reload |
-| `npm run tauri build` | Build production executable |
+### Development
+
+| Command               | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| `npm run dev`         | Start Vite development server (frontend only)   |
+| `npm run tauri dev`   | Start Tauri in development mode with hot reload |
+| `npm run build`       | Build frontend for production                   |
+| `npm run preview`     | Preview production build                        |
+| `npm run tauri build` | Build production executable                     |
+
+### Code Quality
+
+| Command                | Description                                  |
+| ---------------------- | -------------------------------------------- |
+| `npm run lint`         | Run ESLint check                             |
+| `npm run lint:fix`     | Run ESLint with auto-fix                     |
+| `npm run lint:ox`      | Run Oxlint (fast linting)                    |
+| `npm run format`       | Format code with Prettier                    |
+| `npm run format:check` | Check code formatting                        |
+| `npm run typecheck`    | Run TypeScript type check                    |
+| `npm run lint:rust`    | Run Clippy on Rust code                      |
+| `npm run format:rust`  | Format Rust code with rustfmt                |
+| `npm run audit`        | Run cargo-audit for security vulnerabilities |
 
 ## Project Structure
 
@@ -60,12 +84,20 @@ npm run tauri dev
 typebrew/
 ├── src/                    # React frontend
 │   ├── components/         # UI components
+│   │   ├── editor/         # Glyph editor components
+│   │   ├── tables/         # Font table viewers
+│   │   └── ui/             # Shared UI primitives
 │   ├── hooks/              # Custom React hooks
 │   ├── lib/                # Utilities and types
-│   └── routes/             # React Router routes
+│   ├── contexts/           # React contexts
+│   └── pages/              # Page components
 ├── src-tauri/              # Rust backend
 │   └── src/
+│       ├── lib.rs          # Tauri command registry
 │       └── font_parser.rs  # Font parsing and saving logic
+├── eslint.config.js        # ESLint flat config
+├── .prettierrc             # Prettier config
+├── lefthook.yml            # Git hooks config
 └── package.json
 ```
 

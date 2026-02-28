@@ -30,7 +30,7 @@ interface TableContentProps {
 
 function LoadingSkeleton() {
   return (
-    <div className="p-4 space-y-3">
+    <div className="space-y-3 p-4">
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-3/4" />
       <Skeleton className="h-4 w-5/6" />
@@ -42,17 +42,26 @@ function LoadingSkeleton() {
 
 function LoadingSpinner() {
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+    <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-3">
       <Loader2 className="h-8 w-8 animate-spin" />
       <p className="text-sm">Loading table data...</p>
     </div>
   );
 }
 
-export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableName, onLoadMore, filePath, onTableUpdated }: TableContentProps) {
+export function TableContent({
+  data,
+  glyphData,
+  isLoading,
+  isLoadingMore,
+  tableName,
+  onLoadMore,
+  filePath,
+  onTableUpdated,
+}: TableContentProps) {
   if (!tableName) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
+      <div className="text-muted-foreground flex h-full items-center justify-center">
         Select a table to view its contents
       </div>
     );
@@ -87,7 +96,7 @@ export function TableContent({ data, glyphData, isLoading, isLoadingMore, tableN
     parsed = JSON.parse(data);
   } catch {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
+      <div className="text-muted-foreground flex h-full items-center justify-center">
         Failed to parse table data
       </div>
     );

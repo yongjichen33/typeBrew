@@ -33,12 +33,22 @@ interface HeadTableProps {
 }
 
 const EDITABLE_KEYS = [
-  'font_revision', 'flags', 'units_per_em', 'created', 'modified',
-  'x_min', 'y_min', 'x_max', 'y_max', 'mac_style', 'lowest_rec_ppem',
-  'font_direction_hint', 'index_to_loc_format',
+  'font_revision',
+  'flags',
+  'units_per_em',
+  'created',
+  'modified',
+  'x_min',
+  'y_min',
+  'x_max',
+  'y_max',
+  'mac_style',
+  'lowest_rec_ppem',
+  'font_direction_hint',
+  'index_to_loc_format',
 ] as const;
 
-type EditableKey = typeof EDITABLE_KEYS[number];
+type EditableKey = (typeof EDITABLE_KEYS)[number];
 type EditValues = Record<EditableKey, string>;
 
 function toEditValues(data: HeadTableData): EditValues {
@@ -52,20 +62,24 @@ function toEditValues(data: HeadTableData): EditValues {
 function ReadOnlyField({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-muted-foreground">{label}</label>
+      <label className="text-muted-foreground text-sm font-medium">{label}</label>
       <Input value={String(value)} disabled className="opacity-60" />
     </div>
   );
 }
 
-function EditableField({ label, value, onChange }: {
+function EditableField({
+  label,
+  value,
+  onChange,
+}: {
   label: string;
   value: string;
   onChange: (value: string) => void;
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-muted-foreground">{label}</label>
+      <label className="text-muted-foreground text-sm font-medium">{label}</label>
       <Input value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
@@ -81,11 +95,11 @@ export function HeadTable({ data, filePath, onSaved }: HeadTableProps) {
 
   const isDirty = useMemo(() => {
     const original = toEditValues(data);
-    return EDITABLE_KEYS.some(key => values[key] !== original[key]);
+    return EDITABLE_KEYS.some((key) => values[key] !== original[key]);
   }, [values, data]);
 
   const update = (field: EditableKey) => (value: string) => {
-    setValues(prev => ({ ...prev, [field]: value }));
+    setValues((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSave = async () => {
@@ -125,7 +139,7 @@ export function HeadTable({ data, filePath, onSaved }: HeadTableProps) {
   return (
     <ScrollArea className="h-full">
       {isDirty && (
-        <div className="sticky top-0 z-10 flex items-center justify-end gap-2 border-b bg-background/95 backdrop-blur px-6 py-3">
+        <div className="bg-background/95 sticky top-0 z-10 flex items-center justify-end gap-2 border-b px-6 py-3 backdrop-blur">
           <Button variant="outline" size="sm" onClick={handleReset}>
             <RotateCcw className="mr-2 h-3 w-3" />
             Reset
@@ -140,21 +154,40 @@ export function HeadTable({ data, filePath, onSaved }: HeadTableProps) {
           </Button>
         </div>
       )}
-      <div className="p-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="space-y-6 p-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ReadOnlyField label="Version" value={data.version} />
-          <EditableField label="Font Revision" value={values.font_revision} onChange={update('font_revision')} />
-          <EditableField label="Units Per Em" value={values.units_per_em} onChange={update('units_per_em')} />
-          <ReadOnlyField label="Magic Number" value={`0x${data.magic_number.toString(16).toUpperCase()}`} />
+          <EditableField
+            label="Font Revision"
+            value={values.font_revision}
+            onChange={update('font_revision')}
+          />
+          <EditableField
+            label="Units Per Em"
+            value={values.units_per_em}
+            onChange={update('units_per_em')}
+          />
+          <ReadOnlyField
+            label="Magic Number"
+            value={`0x${data.magic_number.toString(16).toUpperCase()}`}
+          />
           <EditableField label="Flags" value={values.flags} onChange={update('flags')} />
-          <EditableField label="Mac Style" value={values.mac_style} onChange={update('mac_style')} />
+          <EditableField
+            label="Mac Style"
+            value={values.mac_style}
+            onChange={update('mac_style')}
+          />
           <ReadOnlyField label="Checksum Adjustment" value={data.checksum_adjustment} />
-          <EditableField label="Lowest Rec PPEM" value={values.lowest_rec_ppem} onChange={update('lowest_rec_ppem')} />
+          <EditableField
+            label="Lowest Rec PPEM"
+            value={values.lowest_rec_ppem}
+            onChange={update('lowest_rec_ppem')}
+          />
         </div>
 
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground mb-3">Bounding Box</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <h4 className="text-muted-foreground mb-3 text-sm font-medium">Bounding Box</h4>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <EditableField label="xMin" value={values.x_min} onChange={update('x_min')} />
             <EditableField label="yMin" value={values.y_min} onChange={update('y_min')} />
             <EditableField label="xMax" value={values.x_max} onChange={update('x_max')} />
@@ -163,16 +196,24 @@ export function HeadTable({ data, filePath, onSaved }: HeadTableProps) {
         </div>
 
         <div>
-          <h4 className="text-sm font-medium text-muted-foreground mb-3">Timestamps</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h4 className="text-muted-foreground mb-3 text-sm font-medium">Timestamps</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <EditableField label="Created" value={values.created} onChange={update('created')} />
             <EditableField label="Modified" value={values.modified} onChange={update('modified')} />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <EditableField label="Font Direction Hint" value={values.font_direction_hint} onChange={update('font_direction_hint')} />
-          <EditableField label="Index to Loc Format" value={values.index_to_loc_format} onChange={update('index_to_loc_format')} />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <EditableField
+            label="Font Direction Hint"
+            value={values.font_direction_hint}
+            onChange={update('font_direction_hint')}
+          />
+          <EditableField
+            label="Index to Loc Format"
+            value={values.index_to_loc_format}
+            onChange={update('index_to_loc_format')}
+          />
           <ReadOnlyField label="Glyph Data Format" value={data.glyph_data_format} />
         </div>
       </div>
