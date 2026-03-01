@@ -103,6 +103,8 @@ export function GlyphEditorTab({ tabState }: Props) {
     isComposite: state.isComposite,
     components: state.components,
     activeComponentPath: state.activeComponentPath,
+    isDirty: state.isDirty,
+    isSaving: state.isSaving,
   });
   // useLayoutEffect fires before paint so RAF callbacks always read fresh state
   useLayoutEffect(() => {
@@ -126,8 +128,38 @@ export function GlyphEditorTab({ tabState }: Props) {
       isComposite: state.isComposite,
       components: state.components,
       activeComponentPath: state.activeComponentPath,
+      isDirty: state.isDirty,
+      isSaving: state.isSaving,
     };
   }, [state]);
+
+  // Drag state for preview-height resize divider
+  const [previewDrag, setPreviewDrag] = useState<{
+    startY: number;
+    startHeight: number;
+    maxHeight: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!previewDrag) return;
+    const { startY, startHeight, maxHeight } = previewDrag;
+    const minHeight = 60;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaY = startY - e.clientY;
+      const newHeight = Math.min(maxHeight, Math.max(minHeight, startHeight + deltaY));
+      dispatch({ type: 'SET_PREVIEW_HEIGHT', previewHeight: newHeight });
+    };
+
+    const handleMouseUp = () => setPreviewDrag(null);
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [previewDrag, dispatch]);
 
   const [transformFeedback, setTransformFeedback] = useState<TransformFeedback>({
     isActive: false,
@@ -288,10 +320,13 @@ export function GlyphEditorTab({ tabState }: Props) {
         return;
       }
 
+      // Read all state through stateRef to avoid stale closure captures
+      const s = stateRef.current;
+
       // Ctrl/Cmd + S to save
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        if (state.isDirty && !state.isSaving) {
+        if (s.isDirty && !s.isSaving) {
           handleSave();
         }
         return;
@@ -311,8 +346,7 @@ export function GlyphEditorTab({ tabState }: Props) {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
         e.preventDefault();
-        const { paths, selection } = stateRef.current;
-        const clipboardData = computeClipboardData(paths, selection);
+        const clipboardData = computeClipboardData(s.paths, s.selection);
         setClipboard(clipboardData);
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
@@ -328,7 +362,8 @@ export function GlyphEditorTab({ tabState }: Props) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [dispatch, isFocused, state.isDirty, state.isSaving, handleSave]);
+    // stateRef is a stable ref — state values are read inside the handler via stateRef.current
+  }, [dispatch, isFocused, handleSave]);
 
   // Format tab breadcrumb
   const fileName = filePath.split(/[\\/]/).pop() ?? filePath;
@@ -414,28 +449,12 @@ export function GlyphEditorTab({ tabState }: Props) {
                     className="bg-border hover:bg-primary/50 h-1 shrink-0 cursor-ns-resize transition-colors"
                     onMouseDown={(e) => {
                       e.preventDefault();
-                      const startY = e.clientY;
-                      const startHeight = state.previewHeight;
                       const containerHeight = containerRef.current?.offsetHeight ?? 400;
-                      const maxHeight = containerHeight * 0.5;
-                      const minHeight = 60;
-
-                      const handleMouseMove = (moveEvent: MouseEvent) => {
-                        const deltaY = startY - moveEvent.clientY;
-                        const newHeight = Math.min(
-                          maxHeight,
-                          Math.max(minHeight, startHeight + deltaY)
-                        );
-                        dispatch({ type: 'SET_PREVIEW_HEIGHT', previewHeight: newHeight });
-                      };
-
-                      const handleMouseUp = () => {
-                        window.removeEventListener('mousemove', handleMouseMove);
-                        window.removeEventListener('mouseup', handleMouseUp);
-                      };
-
-                      window.addEventListener('mousemove', handleMouseMove);
-                      window.addEventListener('mouseup', handleMouseUp);
+                      setPreviewDrag({
+                        startY: e.clientY,
+                        startHeight: stateRef.current.previewHeight,
+                        maxHeight: containerHeight * 0.5,
+                      });
                     }}
                   />
                   <GlyphPreview

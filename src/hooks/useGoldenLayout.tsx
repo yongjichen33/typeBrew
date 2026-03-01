@@ -54,22 +54,27 @@ export function useGoldenLayout() {
         setIsEmpty(false);
         setActiveTab({ type: 'table', filePath: tabState.filePath, tableName: tabState.tableName });
 
-        glContainer.addEventListener('beforeComponentRelease', () => {
+        const handleTableFocus = () => {
+          setActiveTab({
+            type: 'table',
+            filePath: tabState.filePath,
+            tableName: tabState.tableName,
+          });
+        };
+
+        const handleTableRelease = () => {
           const r = reactRootsRef.current.get(key);
           if (r) {
             r.unmount();
             reactRootsRef.current.delete(key);
           }
           openTabsRef.current.delete(key);
-        });
+          glContainer.removeEventListener('beforeComponentRelease', handleTableRelease);
+          glContainer.removeEventListener('focus', handleTableFocus);
+        };
 
-        glContainer.addEventListener('focus', () => {
-          setActiveTab({
-            type: 'table',
-            filePath: tabState.filePath,
-            tableName: tabState.tableName,
-          });
-        });
+        glContainer.addEventListener('beforeComponentRelease', handleTableRelease);
+        glContainer.addEventListener('focus', handleTableFocus);
 
         return undefined;
       }
@@ -91,18 +96,23 @@ export function useGoldenLayout() {
         setIsEmpty(false);
         setActiveTab({ type: 'glyph', filePath: tabState.filePath, glyphId: tabState.glyphId });
 
-        glContainer.addEventListener('beforeComponentRelease', () => {
+        const handleGlyphFocus = () => {
+          setActiveTab({ type: 'glyph', filePath: tabState.filePath, glyphId: tabState.glyphId });
+        };
+
+        const handleGlyphRelease = () => {
           const r = reactRootsRef.current.get(key);
           if (r) {
             r.unmount();
             reactRootsRef.current.delete(key);
           }
           openTabsRef.current.delete(key);
-        });
+          glContainer.removeEventListener('beforeComponentRelease', handleGlyphRelease);
+          glContainer.removeEventListener('focus', handleGlyphFocus);
+        };
 
-        glContainer.addEventListener('focus', () => {
-          setActiveTab({ type: 'glyph', filePath: tabState.filePath, glyphId: tabState.glyphId });
-        });
+        glContainer.addEventListener('beforeComponentRelease', handleGlyphRelease);
+        glContainer.addEventListener('focus', handleGlyphFocus);
 
         return undefined;
       }
