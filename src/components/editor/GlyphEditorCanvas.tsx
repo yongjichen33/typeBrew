@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEditorRenderer } from '@/hooks/useEditorRenderer';
 import { useEditorInteraction } from '@/hooks/useEditorInteraction';
 import type {
@@ -145,43 +145,47 @@ export function GlyphEditorCanvas({
     connectPreview,
   ]);
 
-  const setRubberBand = (rb: RubberBand | null) => {
+  // Stable setter callbacks — useCallback with [] so useEditorInteraction's
+  // handler chain (getEventPos → onPointerDown/Move/Up/Wheel) isn't recreated
+  // on every render of GlyphEditorCanvas.
+  const setRubberBand = useCallback((rb: RubberBand | null) => {
     rubberBandRef.current = rb;
     extraRef.current = { ...extraRef.current, rubberBand: rb };
     setRubberBandState(rb);
-  };
-  const setMousePos = (pos: { x: number; y: number } | null) => {
+  }, []);
+  const setMousePos = useCallback((pos: { x: number; y: number } | null) => {
     mousePosRef.current = pos;
     extraRef.current = { ...extraRef.current, mousePos: pos };
     setMousePosState(pos);
-  };
-  const setPendingOffCurve = (pos: { x: number; y: number } | null) => {
+  }, []);
+  const setPendingOffCurve = useCallback((pos: { x: number; y: number } | null) => {
     pendingOffCurveRef.current = pos;
     extraRef.current = { ...extraRef.current, pendingOffCurve: pos };
     setPendingOffCurveState(pos);
-  };
-  const setHoveredPointId = (id: string | null) => {
+  }, []);
+  const setHoveredPointId = useCallback((id: string | null) => {
     hoveredPointIdRef.current = id;
     extraRef.current = { ...extraRef.current, hoveredPointId: id };
     setHoveredPointIdState(id);
-  };
-  const setHoveredSegmentId = (id: string | null) => {
+  }, []);
+  const setHoveredSegmentId = useCallback((id: string | null) => {
     hoveredSegmentIdRef.current = id;
     extraRef.current = { ...extraRef.current, hoveredSegmentId: id };
     setHoveredSegmentIdState(id);
-  };
-  const setDragPos = (pos: { x: number; y: number } | null) => {
+  }, []);
+  const setDragPos = useCallback((pos: { x: number; y: number } | null) => {
     dragPosRef.current = pos;
     extraRef.current = { ...extraRef.current, dragPos: pos };
     setDragPosState(pos);
-  };
-  const setConnectPreview = (
-    preview: { fromX: number; fromY: number; toX: number; toY: number } | null
-  ) => {
-    connectPreviewRef.current = preview;
-    extraRef.current = { ...extraRef.current, connectPreview: preview };
-    setConnectPreviewState(preview);
-  };
+  }, []);
+  const setConnectPreview = useCallback(
+    (preview: { fromX: number; fromY: number; toX: number; toY: number } | null) => {
+      connectPreviewRef.current = preview;
+      extraRef.current = { ...extraRef.current, connectPreview: preview };
+      setConnectPreviewState(preview);
+    },
+    []
+  );
 
   const { redraw, registerSurface } = useEditorRenderer(
     ck,
@@ -321,7 +325,7 @@ export function GlyphEditorCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const getCanvasRect = () => canvasRef.current?.getBoundingClientRect() ?? null;
+  const getCanvasRect = useCallback(() => canvasRef.current?.getBoundingClientRect() ?? null, []);
 
   const { onPointerDown, onPointerMove, onPointerUp, onWheel, onPointerLeave, getCursor } =
     useEditorInteraction({

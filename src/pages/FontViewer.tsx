@@ -69,20 +69,25 @@ export function FontViewer() {
 
   // Listen for "Open Font" menu event
   useEffect(() => {
-    const unlisten = listen('menu:open-font', async () => {
-      const newFonts = await openFontDialog();
-      if (newFonts.length > 0) {
-        setFonts((prev) => {
-          const existing = new Set(prev.map((f) => f.file_path));
-          const unique = newFonts.filter((f) => !existing.has(f.file_path));
-          return [...prev, ...unique];
-        });
-        setSelectedFilePath(newFonts[0].file_path);
-        setSelectedTable(null);
-      }
+    const unlisten = listen('menu:open-font', () => {
+      openFontDialog()
+        .then((newFonts) => {
+          if (newFonts.length > 0) {
+            setFonts((prev) => {
+              const existing = new Set(prev.map((f) => f.file_path));
+              const unique = newFonts.filter((f) => !existing.has(f.file_path));
+              return [...prev, ...unique];
+            });
+            setSelectedFilePath(newFonts[0].file_path);
+            setSelectedTable(null);
+          }
+        })
+        .catch((err: unknown) => console.error('Failed to open font:', err));
     });
     return () => {
-      unlisten.then((fn) => fn());
+      unlisten
+        .then((fn) => fn())
+        .catch((err: unknown) => console.error('Failed to unlisten menu event:', err));
     };
   }, []);
 

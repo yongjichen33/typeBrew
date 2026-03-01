@@ -89,6 +89,12 @@ export function GlyphGrid({
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);
   const hasMore = initialGlyphs.length < totalGlyphs;
+  // Keep a stable ref to the latest onLoadMore so the IntersectionObserver
+  // effect doesn't need it as a dep and won't disconnect/reconnect every render.
+  const onLoadMoreRef = useRef(onLoadMore);
+  useEffect(() => {
+    onLoadMoreRef.current = onLoadMore;
+  }, [onLoadMore]);
   const [glyphs, setGlyphs] = useState(initialGlyphs);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
@@ -116,7 +122,7 @@ export function GlyphGrid({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          onLoadMore();
+          onLoadMoreRef.current();
         }
       },
       { rootMargin: '200px' }
@@ -124,7 +130,9 @@ export function GlyphGrid({
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, onLoadMore]);
+    // onLoadMore intentionally omitted: latest value is always in onLoadMoreRef
+     
+  }, [hasMore]);
 
   useEffect(() => {
     const container = containerRef.current;
