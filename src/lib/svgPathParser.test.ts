@@ -251,6 +251,7 @@ describe('outlineDataToEditablePaths', () => {
     bounds: { x_min: 0, y_min: 0, x_max: 100, y_max: 200 },
     is_composite: false,
     component_glyph_ids: [],
+    components: [],
   });
 
   it('converts simple contour', () => {

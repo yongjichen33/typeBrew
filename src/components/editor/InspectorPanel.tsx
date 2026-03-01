@@ -12,6 +12,9 @@ import {
   ImageIcon,
   PenLine,
   Trash2,
+  ChevronRight,
+  ChevronDown,
+  Link2,
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type {
@@ -22,6 +25,7 @@ import type {
   EditorAction,
   Layer,
   ImageLayer,
+  ComponentInfo,
 } from '@/lib/editorTypes';
 import { computeClipboardData } from '@/hooks/useGlyphEditor';
 import { setClipboard } from '@/lib/glyphClipboard';
@@ -36,6 +40,9 @@ interface InspectorPanelProps {
   layers: Layer[];
   activeLayerId: string;
   focusedLayerId: string;
+  isComposite?: boolean;
+  components?: ComponentInfo[];
+  activeComponentPath?: number[];
 }
 
 interface Segment {
@@ -284,6 +291,75 @@ function InputField({
   );
 }
 
+function ComponentTree({
+  components,
+  activePath,
+  currentPath,
+  onActivate,
+}: {
+  components: ComponentInfo[];
+  activePath: number[];
+  currentPath: number[];
+  onActivate: (path: number[]) => void;
+}) {
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  return (
+    <div className="space-y-0.5">
+      {components.map((comp, i) => {
+        const itemPath = [...currentPath, i];
+        const isActive =
+          activePath.length === itemPath.length &&
+          itemPath.every((v, idx) => v === activePath[idx]);
+        const isExpanded = expanded.has(i);
+        return (
+          <div key={i}>
+            <div
+              className={[
+                'flex cursor-pointer items-center gap-1 rounded px-1 py-1 text-xs',
+                isActive ? 'bg-primary/10 text-primary' : 'hover:bg-muted',
+              ].join(' ')}
+              onClick={() => {
+                if (comp.isComposite) {
+                  setExpanded((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(i)) next.delete(i);
+                    else next.add(i);
+                    return next;
+                  });
+                } else {
+                  onActivate(itemPath);
+                }
+              }}
+            >
+              {comp.isComposite ? (
+                <span className="text-muted-foreground flex-shrink-0">
+                  {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                </span>
+              ) : (
+                <span className="w-2.5 flex-shrink-0" />
+              )}
+              <span className="text-muted-foreground flex-shrink-0">
+                {comp.isComposite ? <Link2 size={11} /> : <PenLine size={11} />}
+              </span>
+              <span className="flex-1 truncate font-mono text-[10px]">#{comp.glyphId}</span>
+            </div>
+            {comp.isComposite && isExpanded && comp.subComponents.length > 0 && (
+              <div className="border-muted ml-3 border-l pl-1">
+                <ComponentTree
+                  components={comp.subComponents}
+                  activePath={activePath}
+                  currentPath={itemPath}
+                  onActivate={onActivate}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function InspectorPanel({
   selection,
   paths,
@@ -291,6 +367,9 @@ export function InspectorPanel({
   transformFeedback,
   layers,
   focusedLayerId,
+  isComposite = false,
+  components = [],
+  activeComponentPath = [],
 }: InspectorPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [renamingLayerId, setRenamingLayerId] = useState<string | null>(null);
@@ -517,184 +596,269 @@ export function InspectorPanel({
         onChange={handleAddImageLayer}
       />
 
-      {/* Layers */}
-      <Section title="Layers">
-        <div className="mb-2 space-y-0.5">
-          {layers.map((layer) => (
-            <div key={layer.id}>
-              <div
-                className={[
-                  'flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-xs',
-                  layer.id === focusedLayerId ? 'bg-primary/10 text-primary' : 'hover:bg-muted',
-                ].join(' ')}
-                onClick={() => {
-                  if (layer.type === 'drawing')
-                    dispatch({ type: 'SET_ACTIVE_LAYER', layerId: layer.id });
-                  else dispatch({ type: 'SET_FOCUSED_LAYER', layerId: layer.id });
-                }}
-              >
-                <button
-                  className="text-muted-foreground hover:text-foreground flex-shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    dispatch({
-                      type: 'SET_LAYER_VISIBLE',
-                      layerId: layer.id,
-                      visible: !layer.visible,
-                    });
-                  }}
-                  title={layer.visible ? 'Hide layer' : 'Show layer'}
-                >
-                  {layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}
-                </button>
-                <span className="text-muted-foreground flex-shrink-0">
-                  {layer.type === 'drawing' ? <PenLine size={12} /> : <ImageIcon size={12} />}
-                </span>
-                {renamingLayerId === layer.id ? (
-                  <input
-                    type="text"
-                    defaultValue={layer.name}
-                    autoFocus
-                    className="bg-background border-primary min-w-0 flex-1 border-b px-0.5 py-0 text-xs outline-none"
-                    onBlur={(e) => {
-                      dispatch({ type: 'RENAME_LAYER', layerId: layer.id, name: e.target.value });
-                      setRenamingLayerId(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+      {/* Components (composite glyphs only) */}
+      {isComposite && (
+        <Section title="Components">
+          {components.length === 0 ? (
+            <p className="text-muted-foreground text-xs italic">No components</p>
+          ) : (
+            <ComponentTree
+              components={components}
+              activePath={activeComponentPath}
+              currentPath={[]}
+              onActivate={(path) => dispatch({ type: 'SET_ACTIVE_COMPONENT', path })}
+            />
+          )}
+          {activeComponentPath.length > 0 &&
+            (() => {
+              const activeComp = (() => {
+                let current = components;
+                let result: ComponentInfo | null = null;
+                for (const idx of activeComponentPath) {
+                  if (idx >= current.length) return null;
+                  result = current[idx];
+                  current = result.subComponents;
+                }
+                return result;
+              })();
+              if (!activeComp) return null;
+              return (
+                <div className="mt-2 space-y-0.5 border-t pt-2">
+                  <p className="text-muted-foreground mb-1 text-[10px]">
+                    Offset (Glyph #{activeComp.glyphId})
+                  </p>
+                  <div className="flex items-center justify-between py-0.5">
+                    <span className="text-muted-foreground text-xs">X</span>
+                    <input
+                      type="number"
+                      value={activeComp.xOffset}
+                      step={1}
+                      className="bg-background w-16 rounded border px-1.5 py-0.5 text-right font-mono text-xs"
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        if (isNaN(v)) return;
+                        const prev = activeComp.xOffset;
                         dispatch({
-                          type: 'RENAME_LAYER',
-                          layerId: layer.id,
-                          name: e.currentTarget.value,
+                          type: 'MOVE_COMPONENT_LIVE',
+                          path: activeComponentPath,
+                          dx: v - prev,
+                          dy: 0,
                         });
-                        setRenamingLayerId(null);
+                      }}
+                      onBlur={() =>
+                        dispatch({ type: 'COMMIT_COMPONENT_MOVE', path: activeComponentPath })
                       }
-                      if (e.key === 'Escape') setRenamingLayerId(null);
-                      e.stopPropagation();
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <span
-                    className="flex-1 truncate"
-                    onDoubleClick={() => {
-                      if (layer.id !== 'outline') setRenamingLayerId(layer.id);
-                    }}
-                  >
-                    {layer.name}
-                  </span>
-                )}
-                {layer.id !== 'outline' && (
+                    />
+                  </div>
+                  <div className="flex items-center justify-between py-0.5">
+                    <span className="text-muted-foreground text-xs">Y</span>
+                    <input
+                      type="number"
+                      value={activeComp.yOffset}
+                      step={1}
+                      className="bg-background w-16 rounded border px-1.5 py-0.5 text-right font-mono text-xs"
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        if (isNaN(v)) return;
+                        const prev = activeComp.yOffset;
+                        dispatch({
+                          type: 'MOVE_COMPONENT_LIVE',
+                          path: activeComponentPath,
+                          dx: 0,
+                          dy: v - prev,
+                        });
+                      }}
+                      onBlur={() =>
+                        dispatch({ type: 'COMMIT_COMPONENT_MOVE', path: activeComponentPath })
+                      }
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+        </Section>
+      )}
+
+      {/* Layers (non-composite glyphs only) */}
+      {!isComposite && (
+        <Section title="Layers">
+          <div className="mb-2 space-y-0.5">
+            {layers.map((layer) => (
+              <div key={layer.id}>
+                <div
+                  className={[
+                    'flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-xs',
+                    layer.id === focusedLayerId ? 'bg-primary/10 text-primary' : 'hover:bg-muted',
+                  ].join(' ')}
+                  onClick={() => {
+                    if (layer.type === 'drawing')
+                      dispatch({ type: 'SET_ACTIVE_LAYER', layerId: layer.id });
+                    else dispatch({ type: 'SET_FOCUSED_LAYER', layerId: layer.id });
+                  }}
+                >
                   <button
-                    className="text-muted-foreground hover:text-destructive flex-shrink-0"
+                    className="text-muted-foreground hover:text-foreground flex-shrink-0"
                     onClick={(e) => {
                       e.stopPropagation();
-                      dispatch({ type: 'REMOVE_LAYER', layerId: layer.id });
+                      dispatch({
+                        type: 'SET_LAYER_VISIBLE',
+                        layerId: layer.id,
+                        visible: !layer.visible,
+                      });
                     }}
-                    title="Remove layer"
+                    title={layer.visible ? 'Hide layer' : 'Show layer'}
                   >
-                    <Trash2 size={12} />
+                    {layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}
                   </button>
+                  <span className="text-muted-foreground flex-shrink-0">
+                    {layer.type === 'drawing' ? <PenLine size={12} /> : <ImageIcon size={12} />}
+                  </span>
+                  {renamingLayerId === layer.id ? (
+                    <input
+                      type="text"
+                      defaultValue={layer.name}
+                      autoFocus
+                      className="bg-background border-primary min-w-0 flex-1 border-b px-0.5 py-0 text-xs outline-none"
+                      onBlur={(e) => {
+                        dispatch({ type: 'RENAME_LAYER', layerId: layer.id, name: e.target.value });
+                        setRenamingLayerId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          dispatch({
+                            type: 'RENAME_LAYER',
+                            layerId: layer.id,
+                            name: e.currentTarget.value,
+                          });
+                          setRenamingLayerId(null);
+                        }
+                        if (e.key === 'Escape') setRenamingLayerId(null);
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span
+                      className="flex-1 truncate"
+                      onDoubleClick={() => {
+                        if (layer.id !== 'outline') setRenamingLayerId(layer.id);
+                      }}
+                    >
+                      {layer.name}
+                    </span>
+                  )}
+                  {layer.id !== 'outline' && (
+                    <button
+                      className="text-muted-foreground hover:text-destructive flex-shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        dispatch({ type: 'REMOVE_LAYER', layerId: layer.id });
+                      }}
+                      title="Remove layer"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Image layer settings (shown when focused) */}
+                {layer.id === focusedLayerId && layer.type === 'image' && activeImageLayer && (
+                  <div className="border-primary/20 mt-1 ml-2 space-y-0.5 border-l-2 pl-2">
+                    <InputField
+                      label="Opacity"
+                      value={Math.round(activeImageLayer.opacity * 100)}
+                      onChange={(v) =>
+                        dispatch({
+                          type: 'UPDATE_IMAGE_LAYER',
+                          layerId: layer.id,
+                          updates: { opacity: Math.max(0, Math.min(1, v / 100)) },
+                        })
+                      }
+                      unit="%"
+                      min={0}
+                      max={100}
+                    />
+                    <InputField
+                      label="Scale X"
+                      value={parseFloat(activeImageLayer.scaleX.toFixed(3))}
+                      onChange={(v) =>
+                        dispatch({
+                          type: 'UPDATE_IMAGE_LAYER',
+                          layerId: layer.id,
+                          updates: { scaleX: v },
+                        })
+                      }
+                      step={0.1}
+                    />
+                    <InputField
+                      label="Scale Y"
+                      value={parseFloat(activeImageLayer.scaleY.toFixed(3))}
+                      onChange={(v) =>
+                        dispatch({
+                          type: 'UPDATE_IMAGE_LAYER',
+                          layerId: layer.id,
+                          updates: { scaleY: v },
+                        })
+                      }
+                      step={0.1}
+                    />
+                    <InputField
+                      label="Rotation"
+                      value={parseFloat(activeImageLayer.rotation.toFixed(1))}
+                      onChange={(v) =>
+                        dispatch({
+                          type: 'UPDATE_IMAGE_LAYER',
+                          layerId: layer.id,
+                          updates: { rotation: v },
+                        })
+                      }
+                      unit="°"
+                    />
+                    <InputField
+                      label="Offset X"
+                      value={Math.round(activeImageLayer.offsetX)}
+                      onChange={(v) =>
+                        dispatch({
+                          type: 'UPDATE_IMAGE_LAYER',
+                          layerId: layer.id,
+                          updates: { offsetX: v },
+                        })
+                      }
+                    />
+                    <InputField
+                      label="Offset Y"
+                      value={Math.round(activeImageLayer.offsetY)}
+                      onChange={(v) =>
+                        dispatch({
+                          type: 'UPDATE_IMAGE_LAYER',
+                          layerId: layer.id,
+                          updates: { offsetY: v },
+                        })
+                      }
+                    />
+                  </div>
                 )}
               </div>
-
-              {/* Image layer settings (shown when focused) */}
-              {layer.id === focusedLayerId && layer.type === 'image' && activeImageLayer && (
-                <div className="border-primary/20 mt-1 ml-2 space-y-0.5 border-l-2 pl-2">
-                  <InputField
-                    label="Opacity"
-                    value={Math.round(activeImageLayer.opacity * 100)}
-                    onChange={(v) =>
-                      dispatch({
-                        type: 'UPDATE_IMAGE_LAYER',
-                        layerId: layer.id,
-                        updates: { opacity: Math.max(0, Math.min(1, v / 100)) },
-                      })
-                    }
-                    unit="%"
-                    min={0}
-                    max={100}
-                  />
-                  <InputField
-                    label="Scale X"
-                    value={parseFloat(activeImageLayer.scaleX.toFixed(3))}
-                    onChange={(v) =>
-                      dispatch({
-                        type: 'UPDATE_IMAGE_LAYER',
-                        layerId: layer.id,
-                        updates: { scaleX: v },
-                      })
-                    }
-                    step={0.1}
-                  />
-                  <InputField
-                    label="Scale Y"
-                    value={parseFloat(activeImageLayer.scaleY.toFixed(3))}
-                    onChange={(v) =>
-                      dispatch({
-                        type: 'UPDATE_IMAGE_LAYER',
-                        layerId: layer.id,
-                        updates: { scaleY: v },
-                      })
-                    }
-                    step={0.1}
-                  />
-                  <InputField
-                    label="Rotation"
-                    value={parseFloat(activeImageLayer.rotation.toFixed(1))}
-                    onChange={(v) =>
-                      dispatch({
-                        type: 'UPDATE_IMAGE_LAYER',
-                        layerId: layer.id,
-                        updates: { rotation: v },
-                      })
-                    }
-                    unit="°"
-                  />
-                  <InputField
-                    label="Offset X"
-                    value={Math.round(activeImageLayer.offsetX)}
-                    onChange={(v) =>
-                      dispatch({
-                        type: 'UPDATE_IMAGE_LAYER',
-                        layerId: layer.id,
-                        updates: { offsetX: v },
-                      })
-                    }
-                  />
-                  <InputField
-                    label="Offset Y"
-                    value={Math.round(activeImageLayer.offsetY)}
-                    onChange={(v) =>
-                      dispatch({
-                        type: 'UPDATE_IMAGE_LAYER',
-                        layerId: layer.id,
-                        updates: { offsetY: v },
-                      })
-                    }
-                  />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-1">
-          <button
-            onClick={handleAddDrawingLayer}
-            className="bg-muted hover:bg-muted/80 flex flex-1 items-center justify-center gap-1 rounded px-1.5 py-1 text-[10px]"
-            title="Add drawing layer"
-          >
-            <PenLine size={10} /> Drawing
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="bg-muted hover:bg-muted/80 flex flex-1 items-center justify-center gap-1 rounded px-1.5 py-1 text-[10px]"
-            title="Add image layer"
-          >
-            <ImageIcon size={10} /> Image
-          </button>
-        </div>
-      </Section>
+            ))}
+          </div>
+          <div className="flex gap-1">
+            <button
+              onClick={handleAddDrawingLayer}
+              className="bg-muted hover:bg-muted/80 flex flex-1 items-center justify-center gap-1 rounded px-1.5 py-1 text-[10px]"
+              title="Add drawing layer"
+            >
+              <PenLine size={10} /> Drawing
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-muted hover:bg-muted/80 flex flex-1 items-center justify-center gap-1 rounded px-1.5 py-1 text-[10px]"
+              title="Add image layer"
+            >
+              <ImageIcon size={10} /> Image
+            </button>
+          </div>
+        </Section>
+      )}
 
       {/* Transform Controls */}
       {showTransformBox && (

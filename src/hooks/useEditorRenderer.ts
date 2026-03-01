@@ -8,6 +8,7 @@ import type {
   Layer,
   DrawingLayer,
   ImageLayer,
+  ComponentInfo,
 } from '@/lib/editorTypes';
 
 // ---------- colour helpers ----------
@@ -1130,6 +1131,76 @@ function drawGhostPoint(
   gpaint.delete();
 }
 
+// ---------- composite rendering helpers ----------
+
+function translatePaths(paths: EditablePath[], dx: number, dy: number): EditablePath[] {
+  if (dx === 0 && dy === 0) return paths;
+  return paths.map((path) => ({
+    ...path,
+    commands: path.commands.map((cmd) => {
+      if (cmd.kind === 'M' || cmd.kind === 'L') {
+        return { ...cmd, point: { ...cmd.point, x: cmd.point.x + dx, y: cmd.point.y + dy } };
+      }
+      if (cmd.kind === 'Q') {
+        return {
+          ...cmd,
+          ctrl: { ...cmd.ctrl, x: cmd.ctrl.x + dx, y: cmd.ctrl.y + dy },
+          point: { ...cmd.point, x: cmd.point.x + dx, y: cmd.point.y + dy },
+        };
+      }
+      if (cmd.kind === 'C') {
+        return {
+          ...cmd,
+          ctrl1: { ...cmd.ctrl1, x: cmd.ctrl1.x + dx, y: cmd.ctrl1.y + dy },
+          ctrl2: { ...cmd.ctrl2, x: cmd.ctrl2.x + dx, y: cmd.ctrl2.y + dy },
+          point: { ...cmd.point, x: cmd.point.x + dx, y: cmd.point.y + dy },
+        };
+      }
+      return cmd;
+    }),
+  }));
+}
+
+function getAccumulatedOffset(
+  components: ComponentInfo[],
+  path: number[]
+): { dx: number; dy: number } {
+  let dx = 0,
+    dy = 0;
+  let current = components;
+  for (const idx of path) {
+    if (idx >= current.length) break;
+    dx += current[idx].xOffset;
+    dy += current[idx].yOffset;
+    current = current[idx].subComponents;
+  }
+  return { dx, dy };
+}
+
+function collectInactiveComponentPaths(
+  components: ComponentInfo[],
+  activePath: number[],
+  currentPath: number[],
+  accOffset: { dx: number; dy: number }
+): EditablePath[] {
+  const inactive: EditablePath[] = [];
+  for (let i = 0; i < components.length; i++) {
+    const comp = components[i];
+    const itemPath = [...currentPath, i];
+    const isActive =
+      activePath.length === itemPath.length && itemPath.every((v, idx) => v === activePath[idx]);
+    const compOffset = { dx: accOffset.dx + comp.xOffset, dy: accOffset.dy + comp.yOffset };
+    if (comp.isComposite) {
+      inactive.push(
+        ...collectInactiveComponentPaths(comp.subComponents, activePath, itemPath, compOffset)
+      );
+    } else if (!isActive) {
+      inactive.push(...translatePaths(comp.paths, compOffset.dx, compOffset.dy));
+    }
+  }
+  return inactive;
+}
+
 /** Hook that returns a `redraw` trigger bound to a surface ref. */
 export function useEditorRenderer(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1152,6 +1223,8 @@ export function useEditorRenderer(
     showTransformBox: boolean;
     showPixelGrid: boolean;
     isComposite: boolean;
+    components: ComponentInfo[];
+    activeComponentPath: number[];
   }>,
   metricsRef: React.MutableRefObject<FontMetrics | null>,
   extraRef: React.MutableRefObject<{
@@ -1193,15 +1266,42 @@ export function useEditorRenderer(
       const s = stateRef.current;
       const extra = extraRef.current;
       const skCanvas = surfaceRef.current.getCanvas();
-      const inactiveDrawingPaths = (s.layers ?? [])
-        .filter(
-          (l): l is DrawingLayer => l.type === 'drawing' && l.visible && l.id !== s.activeLayerId
-        )
-        .flatMap((l) => l.paths);
+
+      let activePaths = s.paths;
+      let inactiveDrawingPaths: EditablePath[];
+
+      if (s.isComposite && s.components && s.components.length > 0) {
+        if ((s.activeComponentPath ?? []).length > 0) {
+          // Translate active component paths by accumulated offset
+          const activeOffset = getAccumulatedOffset(s.components, s.activeComponentPath ?? []);
+          activePaths = translatePaths(s.paths, activeOffset.dx, activeOffset.dy);
+          // Collect inactive component paths (already translated)
+          inactiveDrawingPaths = collectInactiveComponentPaths(
+            s.components,
+            s.activeComponentPath ?? [],
+            [],
+            { dx: 0, dy: 0 }
+          );
+        } else {
+          // No component selected: show all components greyed out, no interactive handles
+          activePaths = [];
+          inactiveDrawingPaths = collectInactiveComponentPaths(s.components, [], [], {
+            dx: 0,
+            dy: 0,
+          });
+        }
+      } else {
+        inactiveDrawingPaths = (s.layers ?? [])
+          .filter(
+            (l): l is DrawingLayer => l.type === 'drawing' && l.visible && l.id !== s.activeLayerId
+          )
+          .flatMap((l) => l.paths);
+      }
+
       renderFrame(
         ck,
         skCanvas,
-        s.paths,
+        activePaths,
         metricsRef.current,
         s.viewTransform,
         s.selection,

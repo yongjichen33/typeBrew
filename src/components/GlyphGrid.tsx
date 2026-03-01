@@ -171,6 +171,7 @@ export function GlyphGrid({
                   bounds: undefined,
                   is_composite: false,
                   component_glyph_ids: [],
+                  components: [],
                 };
                 editorEventBus.emit({
                   filePath,

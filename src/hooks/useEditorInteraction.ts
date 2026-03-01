@@ -6,6 +6,7 @@ import type {
   RubberBand,
   Layer,
   ImageLayer,
+  ComponentInfo,
 } from '@/lib/editorTypes';
 import { collectAllPoints, clonePaths } from '@/lib/svgPathParser';
 import { getPoint } from '@/hooks/useGlyphEditor';
@@ -48,6 +49,23 @@ function hitTest(sx: number, sy: number, paths: EditablePath[], vt: ViewTransfor
   }
 
   return closestId;
+}
+
+/** Get accumulated x/y offset for a component path through the tree. */
+function getAccumulatedOffset(
+  components: ComponentInfo[],
+  path: number[]
+): { dx: number; dy: number } {
+  let dx = 0,
+    dy = 0;
+  let current = components;
+  for (const idx of path) {
+    if (!current[idx]) break;
+    dx += current[idx].xOffset;
+    dy += current[idx].yOffset;
+    current = current[idx].subComponents;
+  }
+  return { dx, dy };
 }
 
 /** Distance from point (px, py) to line segment (x1,y1)-(x2,y2) */
@@ -509,6 +527,8 @@ interface InteractionParams {
     focusedLayerId: string;
     showTransformBox: boolean;
     isComposite: boolean;
+    components: ComponentInfo[];
+    activeComponentPath: number[];
   }>;
   dispatch: (action: unknown) => void;
   setRubberBand: (rb: RubberBand | null) => void;
@@ -656,8 +676,17 @@ export function useEditorInteraction({
         return;
       }
 
-      // Composite glyphs are read-only — block all editing interactions
-      if (stateRef.current.isComposite) return;
+      // For composite glyphs, adjust hit-testing to account for active component offset
+      const { isComposite, components: stateComponents, activeComponentPath } = stateRef.current;
+
+      // No component selected: editing is disabled (pan/zoom still works above)
+      if (isComposite && activeComponentPath.length === 0) return;
+
+      let hitVt = vt;
+      if (isComposite && activeComponentPath.length > 0) {
+        const { dx, dy } = getAccumulatedOffset(stateComponents, activeComponentPath);
+        hitVt = { ...vt, originX: vt.originX + dx * vt.scale, originY: vt.originY - dy * vt.scale };
+      }
 
       // Node tool: select and drag points and segments
       if (toolMode === 'node') {
@@ -768,7 +797,7 @@ export function useEditorInteraction({
         }
 
         // Check for point hit → move (select + drag)
-        const hitPointId = hitTest(x, y, paths, vt);
+        const hitPointId = hitTest(x, y, paths, hitVt);
 
         if (hitPointId) {
           const fp = toFontSpace(x, y, vt);
@@ -790,7 +819,7 @@ export function useEditorInteraction({
           }
         } else {
           // Check for segment hit
-          const hitSegmentId = hitTestSegment(x, y, paths, vt);
+          const hitSegmentId = hitTestSegment(x, y, paths, hitVt);
 
           if (hitSegmentId) {
             // Segment was hit - select/deselect segment
@@ -825,7 +854,7 @@ export function useEditorInteraction({
       // Pen tool: draw bezier curves
       if (toolMode === 'pen') {
         // If clicking on an existing point, start a connect drag instead of placing a new point
-        const penHitPointId = hitTest(x, y, paths, vt);
+        const penHitPointId = hitTest(x, y, paths, hitVt);
         if (penHitPointId) {
           const fp = toFontSpace(x, y, vt);
           const sourcePoint = getPoint(paths, penHitPointId);
@@ -846,7 +875,7 @@ export function useEditorInteraction({
           return;
         }
 
-        const fp = toFontSpace(x, y, vt);
+        const fp = toFontSpace(x, y, hitVt);
         const { activePathId, isDrawingPath } = stateRef.current;
 
         // Check if active path still exists and has points
@@ -927,9 +956,26 @@ export function useEditorInteraction({
 
       setMousePos({ x, y });
 
-      if (stateRef.current.isComposite) {
+      const {
+        isComposite: mvComposite,
+        components: mvComponents,
+        activeComponentPath: mvActivePath,
+      } = stateRef.current;
+
+      // No component selected: suppress all hover/edit feedback
+      if (mvComposite && mvActivePath.length === 0) {
         redraw();
         return;
+      }
+
+      let mvHitVt = vt;
+      if (mvComposite && mvActivePath.length > 0) {
+        const { dx, dy } = getAccumulatedOffset(mvComponents, mvActivePath);
+        mvHitVt = {
+          ...vt,
+          originX: vt.originX + dx * vt.scale,
+          originY: vt.originY - dy * vt.scale,
+        };
       }
 
       if (!dragRef.current) {
@@ -972,8 +1018,8 @@ export function useEditorInteraction({
           } else {
             hoveredHandleRef.current = null;
             // Hover detection for points and segments
-            const hitPointId = hitTest(x, y, paths, vt);
-            const hitSegmentId = hitPointId ? null : hitTestSegment(x, y, paths, vt);
+            const hitPointId = hitTest(x, y, paths, mvHitVt);
+            const hitSegmentId = hitPointId ? null : hitTestSegment(x, y, paths, mvHitVt);
             setHoveredPointId(hitPointId);
             setHoveredSegmentId(hitSegmentId);
           }
@@ -1182,7 +1228,6 @@ export function useEditorInteraction({
         panRef.current = null;
         return;
       }
-      if (stateRef.current.isComposite) return;
       if (!dragRef.current) return;
       const drag = dragRef.current;
       dragRef.current = null;

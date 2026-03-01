@@ -11,7 +11,7 @@ import type {
   FontMetrics,
   DrawingLayer,
 } from '@/lib/editorTypes';
-import { clonePaths } from '@/lib/svgPathParser';
+import { clonePaths, getComponentAtPath, updateComponentAtPath } from '@/lib/svgPathParser';
 
 const MAX_UNDO = 50;
 
@@ -230,6 +230,8 @@ export function computeClipboardData(paths: EditablePath[], selection: Selection
 function reducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case 'SET_PATHS': {
+      const isComposite = action.isComposite ?? false;
+      const components = action.components ?? [];
       return {
         ...state,
         paths: action.paths,
@@ -237,9 +239,48 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         undoStack: [],
         redoStack: [],
         isDirty: false,
-        isComposite: action.isComposite ?? false,
+        isComposite,
         componentGlyphIds: action.componentGlyphIds ?? [],
+        components,
+        activeComponentPath: [],
       };
+    }
+
+    case 'SET_ACTIVE_COMPONENT': {
+      const comp = getComponentAtPath(state.components, action.path);
+      return {
+        ...state,
+        activeComponentPath: action.path,
+        paths: comp ? comp.paths : [],
+        selection: { pointIds: new Set(), segmentIds: new Set() },
+      };
+    }
+
+    case 'UPDATE_COMPONENT_PATHS': {
+      const newComponents = updateComponentAtPath(state.components, action.path, (c) => ({
+        ...c,
+        paths: action.paths,
+      }));
+      return {
+        ...state,
+        components: newComponents,
+        paths: action.paths,
+        isDirty: true,
+      };
+    }
+
+    case 'MOVE_COMPONENT_LIVE': {
+      const newComponents = updateComponentAtPath(state.components, action.path, (c) => ({
+        ...c,
+        xOffset: c.xOffset + action.dx,
+        yOffset: c.yOffset + action.dy,
+      }));
+      return { ...state, components: newComponents, isDirty: true };
+    }
+
+    case 'COMMIT_COMPONENT_MOVE': {
+      const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), clonePaths(state.paths)];
+      return { ...state, undoStack, redoStack: [] };
     }
 
     case 'MOVE_POINTS_LIVE': {
@@ -1422,6 +1463,8 @@ export function makeInitialState(vt: ViewTransform): EditorState {
     previewHeight: 100,
     isComposite: false,
     componentGlyphIds: [],
+    components: [],
+    activeComponentPath: [],
   };
 }
 

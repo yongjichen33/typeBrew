@@ -10,19 +10,19 @@ import {
   setFocusedGlyphId,
   useFocusedGlyphId,
 } from '@/lib/glyphClipboard';
-import { editablePathToSvg, outlineDataToEditablePaths } from '@/lib/svgPathParser';
+import {
+  editablePathToSvg,
+  outlineDataToEditablePaths,
+  buildComponentInfoTree,
+  flattenComponentOffsets,
+  getComponentAtPath,
+} from '@/lib/svgPathParser';
 import { editorEventBus } from '@/lib/editorEventBus';
 import { EditorToolbar } from './EditorToolbar';
 import { GlyphEditorCanvas } from './GlyphEditorCanvas';
 import { InspectorPanel } from './InspectorPanel';
 import { GlyphPreview } from './GlyphPreview';
-import { CompositeInfoBar } from './CompositeInfoBar';
-import type {
-  GlyphEditorTabState,
-  FontMetrics,
-  ViewTransform,
-  GlyphOutlineData,
-} from '@/lib/editorTypes';
+import type { GlyphEditorTabState, FontMetrics, ViewTransform } from '@/lib/editorTypes';
 
 export interface TransformFeedback {
   isActive: boolean;
@@ -101,6 +101,8 @@ export function GlyphEditorTab({ tabState }: Props) {
     previewInverted: state.previewInverted,
     previewHeight: state.previewHeight,
     isComposite: state.isComposite,
+    components: state.components,
+    activeComponentPath: state.activeComponentPath,
   });
   // useLayoutEffect fires before paint so RAF callbacks always read fresh state
   useLayoutEffect(() => {
@@ -122,6 +124,8 @@ export function GlyphEditorTab({ tabState }: Props) {
       previewInverted: state.previewInverted,
       previewHeight: state.previewHeight,
       isComposite: state.isComposite,
+      components: state.components,
+      activeComponentPath: state.activeComponentPath,
     };
   }, [state]);
 
@@ -138,13 +142,15 @@ export function GlyphEditorTab({ tabState }: Props) {
   useEffect(() => {
     if (!outlineData) return;
 
-    // Convert outline data to editable paths
-    const paths = outlineDataToEditablePaths(outlineData);
+    // Composite glyphs have no contours of their own; components carry the paths
+    const paths = outlineData.is_composite ? [] : outlineDataToEditablePaths(outlineData);
+    const components = buildComponentInfoTree(outlineData.components ?? []);
     dispatch({
       type: 'SET_PATHS',
       paths,
       isComposite: outlineData.is_composite,
       componentGlyphIds: outlineData.component_glyph_ids,
+      components,
     });
 
     // Fetch hhea for ascender/descender and OS/2 for xHeight/capHeight
@@ -210,55 +216,63 @@ export function GlyphEditorTab({ tabState }: Props) {
   const focusedId = useFocusedGlyphId();
   const isFocused = focusedId === glyphId;
 
-  // Open a component glyph in a new editor tab
-  const handleOpenComponent = useCallback(
-    async (componentGlyphId: number) => {
-      try {
-        const data = await invoke<GlyphOutlineData>('get_glyph_outline_data', {
-          filePath,
-          glyphId: componentGlyphId,
-        });
-        const tabState: GlyphEditorTabState = {
-          filePath,
-          tableName,
-          glyphId: componentGlyphId,
-          glyphName: data.glyph_name,
-          outlineData: data,
-          advanceWidth: data.advance_width,
-          boundsXMin: data.bounds?.x_min ?? 0,
-          boundsYMin: data.bounds?.y_min ?? 0,
-          boundsXMax: data.bounds?.x_max ?? 0,
-          boundsYMax: data.bounds?.y_max ?? 0,
-          unitsPerEm,
-        };
-        editorEventBus.emit(tabState);
-      } catch (error) {
-        toast.error(`Failed to open component glyph: ${error}`);
-      }
-    },
-    [filePath, tableName, unitsPerEm]
-  );
-
   // Save handler
   const handleSave = useCallback(async () => {
     if (state.isSaving) return;
     dispatch({ type: 'SET_SAVING', saving: true });
     try {
-      const svgPathOut = editablePathToSvg(state.paths);
-      await invoke('save_glyph_outline', {
-        filePath,
-        glyphId,
-        svgPath: svgPathOut,
-        tableName,
-      });
-      dispatch({ type: 'MARK_SAVED' });
-      editorEventBus.emitGlyphSaved({ filePath, glyphId, svgPath: svgPathOut });
-      toast.success('Glyph saved');
+      if (state.isComposite) {
+        // For composite glyphs: save active component outline + update offsets
+        const activeComp = getComponentAtPath(state.components, state.activeComponentPath);
+        if (activeComp && !activeComp.isComposite && state.paths.length > 0) {
+          const svgPathOut = editablePathToSvg(state.paths);
+          await invoke('save_glyph_outline', {
+            filePath,
+            glyphId: activeComp.glyphId,
+            svgPath: svgPathOut,
+            tableName,
+          });
+          editorEventBus.emitGlyphSaved({
+            filePath,
+            glyphId: activeComp.glyphId,
+            svgPath: svgPathOut,
+          });
+        }
+        // Always save composite offsets
+        await invoke('update_composite_offsets', {
+          filePath,
+          compositeGlyphId: glyphId,
+          components: flattenComponentOffsets(state.components),
+        });
+        dispatch({ type: 'MARK_SAVED' });
+        toast.success('Composite glyph saved');
+      } else {
+        const svgPathOut = editablePathToSvg(state.paths);
+        await invoke('save_glyph_outline', {
+          filePath,
+          glyphId,
+          svgPath: svgPathOut,
+          tableName,
+        });
+        dispatch({ type: 'MARK_SAVED' });
+        editorEventBus.emitGlyphSaved({ filePath, glyphId, svgPath: svgPathOut });
+        toast.success('Glyph saved');
+      }
     } catch (error) {
       dispatch({ type: 'SET_SAVING', saving: false });
       toast.error(`Failed to save glyph: ${error}`);
     }
-  }, [state.paths, state.isSaving, filePath, glyphId, tableName, dispatch]);
+  }, [
+    state.paths,
+    state.isSaving,
+    state.isComposite,
+    state.components,
+    state.activeComponentPath,
+    filePath,
+    glyphId,
+    tableName,
+    dispatch,
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -363,14 +377,6 @@ export function GlyphEditorTab({ tabState }: Props) {
         }
       />
 
-      {/* Composite info bar */}
-      {state.isComposite && (
-        <CompositeInfoBar
-          componentGlyphIds={state.componentGlyphIds}
-          onOpenComponent={handleOpenComponent}
-        />
-      )}
-
       {/* Canvas area with Inspector */}
       <div
         ref={containerRef}
@@ -450,6 +456,9 @@ export function GlyphEditorTab({ tabState }: Props) {
               layers={state.layers}
               activeLayerId={state.activeLayerId}
               focusedLayerId={state.focusedLayerId}
+              isComposite={state.isComposite}
+              components={state.components}
+              activeComponentPath={state.activeComponentPath}
             />
           </>
         )}

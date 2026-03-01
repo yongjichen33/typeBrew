@@ -112,6 +112,19 @@ export interface ClipboardData {
   }>;
 }
 
+/** A component of a composite glyph, with its own outline and positional offset. */
+export interface ComponentInfo {
+  glyphId: number;
+  xOffset: number;
+  yOffset: number;
+  /** Outline paths in font-space (Y-up). Empty for pure composite components. */
+  paths: EditablePath[];
+  /** True when this component is itself a composite. */
+  isComposite: boolean;
+  /** Recursively populated when isComposite is true. */
+  subComponents: ComponentInfo[];
+}
+
 export interface EditorState {
   paths: EditablePath[];
   selection: Selection;
@@ -138,10 +151,14 @@ export interface EditorState {
   previewInverted: boolean;
   /** Height of the preview panel in pixels. */
   previewHeight: number;
-  /** True if this glyph is a composite (references other glyphs). Read-only. */
+  /** True if this glyph is a composite (references other glyphs). */
   isComposite: boolean;
-  /** Glyph IDs of components (only non-empty when isComposite is true). */
+  /** Glyph IDs of top-level components (derived from components). */
   componentGlyphIds: number[];
+  /** Full component tree (only populated when isComposite is true). */
+  components: ComponentInfo[];
+  /** Path of indices through the component tree to the active component. [] = none active. */
+  activeComponentPath: number[];
 }
 
 // ---- Actions ----
@@ -152,7 +169,12 @@ export type EditorAction =
       paths: EditablePath[];
       isComposite?: boolean;
       componentGlyphIds?: number[];
+      components?: ComponentInfo[];
     }
+  | { type: 'SET_ACTIVE_COMPONENT'; path: number[] }
+  | { type: 'UPDATE_COMPONENT_PATHS'; path: number[]; paths: EditablePath[] }
+  | { type: 'MOVE_COMPONENT_LIVE'; path: number[]; dx: number; dy: number }
+  | { type: 'COMMIT_COMPONENT_MOVE'; path: number[] }
   | { type: 'MOVE_POINTS_LIVE'; deltas: Map<string, Vec2> }
   | { type: 'COMMIT_MOVE'; snapshot: EditablePath[] }
   | { type: 'TRANSFORM_POINTS_LIVE'; deltas: Map<string, Vec2> }
@@ -291,6 +313,14 @@ export interface GlyphContour {
   commands: GlyphOutlineCommandRaw[];
 }
 
+/** Raw component data as sent from the Rust backend (snake_case). */
+export interface BackendComponentOffset {
+  glyph_id: number;
+  x_offset: number;
+  y_offset: number;
+  outline?: GlyphOutlineData;
+}
+
 export interface GlyphOutlineData {
   glyph_id: number;
   glyph_name?: string;
@@ -304,6 +334,7 @@ export interface GlyphOutlineData {
   };
   is_composite: boolean;
   component_glyph_ids: number[];
+  components: BackendComponentOffset[];
 }
 
 // ---- State passed to GoldenLayout for a GlyphEditorTab ----

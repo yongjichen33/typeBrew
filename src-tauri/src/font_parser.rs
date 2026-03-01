@@ -66,6 +66,15 @@ pub struct GlyphBounds {
     pub y_max: f32,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ComponentOffset {
+    pub glyph_id: u32,
+    pub x_offset: f32,
+    pub y_offset: f32,
+    /// Recursively nested outline for this component (None if not yet resolved).
+    pub outline: Option<Box<GlyphOutlineData>>,
+}
+
 // Structured outline data for the glyph editor
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GlyphOutlineData {
@@ -76,6 +85,7 @@ pub struct GlyphOutlineData {
     pub bounds: Option<GlyphBounds>,
     pub is_composite: bool,
     pub component_glyph_ids: Vec<u32>,
+    pub components: Vec<ComponentOffset>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -222,6 +232,7 @@ impl OutlineDataPen {
         advance_width: f32,
         is_composite: bool,
         component_glyph_ids: Vec<u32>,
+        components: Vec<ComponentOffset>,
     ) -> GlyphOutlineData {
         GlyphOutlineData {
             glyph_id,
@@ -240,6 +251,7 @@ impl OutlineDataPen {
             },
             is_composite,
             component_glyph_ids,
+            components,
         }
     }
 }
@@ -452,14 +464,16 @@ pub fn get_glyph_outlines_binary(
     ))
 }
 
-fn parse_composite_component_ids(data: &[u8]) -> Vec<u32> {
+/// Parse composite glyph component records, extracting glyph IDs and x/y offsets.
+fn parse_composite_components(data: &[u8]) -> Vec<ComponentOffset> {
     const MORE_COMPONENTS: u16 = 0x0020;
     const ARG_1_AND_2_ARE_WORDS: u16 = 0x0001;
+    const ARGS_ARE_XY_VALUES: u16 = 0x0002;
     const WE_HAVE_A_SCALE: u16 = 0x0008;
     const WE_HAVE_AN_X_AND_Y_SCALE: u16 = 0x0040;
     const WE_HAVE_A_TWO_BY_TWO: u16 = 0x0080;
 
-    let mut ids = Vec::new();
+    let mut components = Vec::new();
     let mut pos = 0;
     loop {
         if pos + 4 > data.len() {
@@ -467,14 +481,33 @@ fn parse_composite_component_ids(data: &[u8]) -> Vec<u32> {
         }
         let flags = u16::from_be_bytes([data[pos], data[pos + 1]]);
         let component_glyph_id = u16::from_be_bytes([data[pos + 2], data[pos + 3]]);
-        ids.push(component_glyph_id as u32);
         pos += 4;
 
-        // Skip variable-size arguments
-        pos += if flags & ARG_1_AND_2_ARE_WORDS != 0 {
-            4
+        // Parse argument bytes (x/y offsets or point indices)
+        let (x_offset, y_offset) = if flags & ARG_1_AND_2_ARE_WORDS != 0 {
+            if pos + 4 > data.len() {
+                break;
+            }
+            let arg1 = i16::from_be_bytes([data[pos], data[pos + 1]]);
+            let arg2 = i16::from_be_bytes([data[pos + 2], data[pos + 3]]);
+            pos += 4;
+            if flags & ARGS_ARE_XY_VALUES != 0 {
+                (arg1 as f32, arg2 as f32)
+            } else {
+                (0.0_f32, 0.0_f32)
+            }
         } else {
-            2
+            if pos + 2 > data.len() {
+                break;
+            }
+            let arg1 = data[pos] as i8;
+            let arg2 = data[pos + 1] as i8;
+            pos += 2;
+            if flags & ARGS_ARE_XY_VALUES != 0 {
+                (arg1 as f32, arg2 as f32)
+            } else {
+                (0.0_f32, 0.0_f32)
+            }
         };
 
         // Skip optional transform data
@@ -486,14 +519,21 @@ fn parse_composite_component_ids(data: &[u8]) -> Vec<u32> {
             pos += 2;
         }
 
+        components.push(ComponentOffset {
+            glyph_id: component_glyph_id as u32,
+            x_offset,
+            y_offset,
+            outline: None,
+        });
+
         if flags & MORE_COMPONENTS == 0 {
             break;
         }
     }
-    ids
+    components
 }
 
-fn get_composite_info(font: &FontRef<'_>, glyph_id: u32) -> (bool, Vec<u32>) {
+fn get_composite_info(font: &FontRef<'_>, glyph_id: u32) -> (bool, Vec<ComponentOffset>) {
     use skrifa::raw::types::Tag;
 
     let glyf_bytes = match font.table_data(Tag::new(b"glyf")) {
@@ -542,29 +582,22 @@ fn get_composite_info(font: &FontRef<'_>, glyph_id: u32) -> (bool, Vec<u32>) {
     if glyph_start + 10 > glyf_bytes.len() {
         return (true, vec![]);
     }
-    let component_ids = parse_composite_component_ids(&glyf_bytes[glyph_start + 10..]);
-    (true, component_ids)
+    let components = parse_composite_components(&glyf_bytes[glyph_start + 10..]);
+    (true, components)
 }
 
-pub fn get_glyph_outline_data(
-    file_path: &str,
+/// Recursively build GlyphOutlineData, resolving component outlines for composites.
+fn build_glyph_outline_data_recursive(
+    bytes: &[u8],
     glyph_id: u32,
-    cache: &FontCache,
-) -> Result<GlyphOutlineData, String> {
-    // Ensure font is loaded
-    let bytes = cache
-        .get(file_path)
-        .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
-    if bytes.is_empty() {
-        return Err(format!("Failed to read font file: {}", file_path));
+    depth: u8,
+) -> Option<GlyphOutlineData> {
+    if depth > 5 {
+        return None;
     }
 
-    let font = FontRef::new(&bytes).map_err(|e| format!("Failed to parse font: {:?}", e))?;
+    let font = FontRef::new(bytes).ok()?;
 
-    // Glyph name will be passed from frontend (already available in batch data)
-    let glyph_name = None;
-
-    // Get advance width from hmtx table
     let advance_width = font
         .glyph_metrics(
             skrifa::instance::Size::unscaled(),
@@ -573,35 +606,58 @@ pub fn get_glyph_outline_data(
         .advance_width(GlyphId::from(glyph_id))
         .unwrap_or(0.0);
 
-    // Extract outline
     let outlines = font.outline_glyphs();
-    let outline = outlines
-        .get(GlyphId::from(glyph_id))
-        .ok_or_else(|| format!("Glyph {} not found", glyph_id))?;
+    let outline = outlines.get(GlyphId::from(glyph_id))?;
+
+    // Check composite status before drawing — composite glyphs have no contours
+    // of their own (skrifa's draw() would flatten all components, which we don't want).
+    let (is_composite, mut components) = get_composite_info(&font, glyph_id);
 
     let mut pen = OutlineDataPen::new();
-    let location = skrifa::instance::Location::default();
-    let settings = DrawSettings::unhinted(skrifa::instance::Size::unscaled(), &location);
-
-    outline
-        .draw(settings, &mut pen)
-        .map_err(|e| format!("Failed to draw glyph outline: {:?}", e))?;
-
-    // Don't forget the last contour
-    if !pen.current_contour.is_empty() {
-        let commands = std::mem::take(&mut pen.current_contour);
-        pen.contours.push(Contour { commands });
+    if !is_composite {
+        let location = skrifa::instance::Location::default();
+        let settings = DrawSettings::unhinted(skrifa::instance::Size::unscaled(), &location);
+        let _ = outline.draw(settings, &mut pen);
+        if !pen.current_contour.is_empty() {
+            let commands = std::mem::take(&mut pen.current_contour);
+            pen.contours.push(Contour { commands });
+        }
     }
 
-    let (is_composite, component_glyph_ids) = get_composite_info(&font, glyph_id);
+    // Recursively fill component outlines
+    if is_composite {
+        for comp in &mut components {
+            comp.outline =
+                build_glyph_outline_data_recursive(bytes, comp.glyph_id, depth + 1).map(Box::new);
+        }
+    }
 
-    Ok(pen.into_outline_data(
+    let component_glyph_ids: Vec<u32> = components.iter().map(|c| c.glyph_id).collect();
+
+    Some(pen.into_outline_data(
         glyph_id,
-        glyph_name,
+        None,
         advance_width,
         is_composite,
         component_glyph_ids,
+        components,
     ))
+}
+
+pub fn get_glyph_outline_data(
+    file_path: &str,
+    glyph_id: u32,
+    cache: &FontCache,
+) -> Result<GlyphOutlineData, String> {
+    let bytes = cache
+        .get(file_path)
+        .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
+    if bytes.is_empty() {
+        return Err(format!("Failed to read font file: {}", file_path));
+    }
+
+    build_glyph_outline_data_recursive(&bytes, glyph_id, 0)
+        .ok_or_else(|| format!("Glyph {} not found or failed to parse", glyph_id))
 }
 
 pub fn parse_font(file_path: &str, cache: &FontCache) -> Result<FontMetadata, String> {
@@ -1154,6 +1210,207 @@ pub fn update_name_table(
         .build();
 
     fs::write(file_path, &new_bytes).map_err(|e| format!("Failed to write font file: {}", e))?;
+
+    cache
+        .fonts
+        .lock()
+        .unwrap()
+        .insert(file_path.to_string(), new_bytes);
+    cache.outlines.lock().unwrap().remove(file_path);
+
+    Ok(())
+}
+
+// ── Composite offset update ───────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct CompositeOffsetUpdate {
+    // pub glyph_id: u32,
+    pub x_offset: f32,
+    pub y_offset: f32,
+}
+
+/// Rebuild a composite glyph's binary representation with updated x/y offsets.
+/// `updates` are matched positionally to component records in the original data.
+fn patch_composite_glyph_offsets(
+    glyph_data: &[u8],
+    updates: &[CompositeOffsetUpdate],
+) -> Result<Vec<u8>, String> {
+    const MORE_COMPONENTS: u16 = 0x0020;
+    const ARG_1_AND_2_ARE_WORDS: u16 = 0x0001;
+    const ARGS_ARE_XY_VALUES: u16 = 0x0002;
+    const WE_HAVE_A_SCALE: u16 = 0x0008;
+    const WE_HAVE_AN_X_AND_Y_SCALE: u16 = 0x0040;
+    const WE_HAVE_A_TWO_BY_TWO: u16 = 0x0080;
+
+    if glyph_data.len() < 10 {
+        return Err("Composite glyph data too short".into());
+    }
+
+    // Copy the 10-byte glyph header verbatim
+    let mut output = glyph_data[..10].to_vec();
+    let mut pos = 10;
+    let mut comp_index = 0usize;
+
+    loop {
+        if pos + 4 > glyph_data.len() {
+            break;
+        }
+        let flags = u16::from_be_bytes([glyph_data[pos], glyph_data[pos + 1]]);
+        let component_glyph_id = u16::from_be_bytes([glyph_data[pos + 2], glyph_data[pos + 3]]);
+        pos += 4;
+
+        // Parse existing args to get current offset (for fallback if no update)
+        let (cur_x, cur_y) = if flags & ARG_1_AND_2_ARE_WORDS != 0 {
+            if pos + 4 > glyph_data.len() {
+                return Err("Malformed composite glyph".into());
+            }
+            let arg1 = i16::from_be_bytes([glyph_data[pos], glyph_data[pos + 1]]);
+            let arg2 = i16::from_be_bytes([glyph_data[pos + 2], glyph_data[pos + 3]]);
+            pos += 4;
+            if flags & ARGS_ARE_XY_VALUES != 0 {
+                (arg1 as f32, arg2 as f32)
+            } else {
+                (0.0_f32, 0.0_f32)
+            }
+        } else {
+            if pos + 2 > glyph_data.len() {
+                return Err("Malformed composite glyph".into());
+            }
+            let arg1 = glyph_data[pos] as i8;
+            let arg2 = glyph_data[pos + 1] as i8;
+            pos += 2;
+            if flags & ARGS_ARE_XY_VALUES != 0 {
+                (arg1 as f32, arg2 as f32)
+            } else {
+                (0.0_f32, 0.0_f32)
+            }
+        };
+
+        // Use provided update or fall back to current values
+        let (new_x, new_y) = if let Some(update) = updates.get(comp_index) {
+            (update.x_offset, update.y_offset)
+        } else {
+            (cur_x, cur_y)
+        };
+
+        // Determine if word-size args are needed
+        let needs_words = !(-128.0..=127.0).contains(&new_x) || !(-128.0..=127.0).contains(&new_y);
+
+        let mut new_flags = flags | ARGS_ARE_XY_VALUES;
+        if needs_words {
+            new_flags |= ARG_1_AND_2_ARE_WORDS;
+        } else {
+            new_flags &= !ARG_1_AND_2_ARE_WORDS;
+        }
+
+        output.extend(new_flags.to_be_bytes());
+        output.extend(component_glyph_id.to_be_bytes());
+        if needs_words {
+            output.extend((new_x.round() as i16).to_be_bytes());
+            output.extend((new_y.round() as i16).to_be_bytes());
+        } else {
+            output.push(new_x.round() as i8 as u8);
+            output.push(new_y.round() as i8 as u8);
+        }
+
+        // Copy transform data verbatim
+        let transform_start = pos;
+        if flags & WE_HAVE_A_TWO_BY_TWO != 0 {
+            pos += 8;
+        } else if flags & WE_HAVE_AN_X_AND_Y_SCALE != 0 {
+            pos += 4;
+        } else if flags & WE_HAVE_A_SCALE != 0 {
+            pos += 2;
+        }
+        output.extend_from_slice(&glyph_data[transform_start..pos]);
+
+        comp_index += 1;
+
+        if flags & MORE_COMPONENTS == 0 {
+            // Copy any trailing instruction data
+            if pos < glyph_data.len() {
+                output.extend_from_slice(&glyph_data[pos..]);
+            }
+            break;
+        }
+    }
+
+    Ok(output)
+}
+
+pub fn update_composite_offsets(
+    file_path: &str,
+    composite_glyph_id: u32,
+    components: Vec<CompositeOffsetUpdate>,
+    cache: &FontCache,
+) -> Result<(), String> {
+    let bytes = cache
+        .get(file_path)
+        .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
+    if bytes.is_empty() {
+        return Err(format!("Failed to read font file: {}", file_path));
+    }
+
+    let font = RawFontRef::new(&bytes).map_err(|e| format!("Invalid font file: {:?}", e))?;
+    use skrifa::raw::types::Tag;
+    let head = font.head().map_err(|e| format!("head: {:?}", e))?;
+    let is_long = head.index_to_loc_format() != 0;
+    let num_glyphs = font
+        .maxp()
+        .map_err(|e| format!("maxp: {:?}", e))?
+        .num_glyphs() as usize;
+
+    let loca_data = font
+        .table_data(Tag::new(b"loca"))
+        .ok_or_else(|| "No loca table in font".to_string())?;
+    let glyf_data = font
+        .table_data(Tag::new(b"glyf"))
+        .ok_or_else(|| "No glyf table in font".to_string())?;
+
+    let glyf = glyf_data.as_bytes();
+    let offsets = parse_loca_offsets(loca_data.as_bytes(), num_glyphs + 1, is_long);
+    let glyph_id = composite_glyph_id as usize;
+
+    if glyph_id >= num_glyphs {
+        return Err(format!("Glyph ID {} out of range", composite_glyph_id));
+    }
+
+    let start = offsets[glyph_id] as usize;
+    let end = if glyph_id + 1 < offsets.len() {
+        offsets[glyph_id + 1] as usize
+    } else {
+        glyf.len()
+    };
+
+    if start >= end || end > glyf.len() {
+        return Err(format!(
+            "Glyph {} not found in glyf table",
+            composite_glyph_id
+        ));
+    }
+
+    let new_glyph_bytes = patch_composite_glyph_offsets(&glyf[start..end], &components)?;
+
+    let (new_glyf, new_loca) = rebuild_glyf_with_patch(
+        glyf,
+        &offsets,
+        glyph_id,
+        &new_glyph_bytes,
+        is_long,
+        num_glyphs,
+    )?;
+
+    use write_fonts::types::Tag as WTag;
+    use write_fonts::FontBuilder;
+
+    let new_bytes = FontBuilder::new()
+        .add_raw(WTag::new(b"glyf"), new_glyf)
+        .add_raw(WTag::new(b"loca"), new_loca)
+        .copy_missing_tables(font)
+        .build();
+
+    fs::write(file_path, &new_bytes).map_err(|e| format!("Failed to write font: {}", e))?;
 
     cache
         .fonts

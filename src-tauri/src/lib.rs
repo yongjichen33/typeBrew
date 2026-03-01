@@ -2,7 +2,8 @@
 mod font_parser;
 
 use font_parser::{
-    FontCache, GlyphOutlineData, HeadTableUpdate, HheaTableUpdate, MaxpTableUpdate, NameTableUpdate,
+    CompositeOffsetUpdate, FontCache, GlyphOutlineData, HeadTableUpdate, HheaTableUpdate,
+    MaxpTableUpdate, NameTableUpdate,
 };
 use tauri::ipc::Response;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
@@ -97,6 +98,16 @@ fn save_glyph_outline(
     font_parser::save_glyph_outline(&file_path, &args, &cache)
 }
 
+#[tauri::command]
+fn update_composite_offsets(
+    file_path: String,
+    composite_glyph_id: u32,
+    components: Vec<CompositeOffsetUpdate>,
+    cache: State<FontCache>,
+) -> Result<(), String> {
+    font_parser::update_composite_offsets(&file_path, composite_glyph_id, components, &cache)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize font cache
@@ -139,7 +150,8 @@ pub fn run() {
             update_hhea_table,
             update_maxp_table,
             update_name_table,
-            save_glyph_outline
+            save_glyph_outline,
+            update_composite_offsets
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

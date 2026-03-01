@@ -3,6 +3,8 @@ import type {
   EditablePoint,
   PathCommand,
   GlyphOutlineData,
+  BackendComponentOffset,
+  ComponentInfo,
   PointType,
 } from './editorTypes';
 
@@ -196,4 +198,64 @@ export function outlineDataToEditablePaths(outlineData: GlyphOutlineData): Edita
 
 function makePoint(x: number, y: number, type: PointType): EditablePoint {
   return { id: uid(), x, y, type };
+}
+
+/**
+ * Convert backend ComponentOffset[] (with recursively nested outlines) into
+ * the ComponentInfo[] tree used by the editor.
+ */
+export function buildComponentInfoTree(
+  backendComponents: BackendComponentOffset[]
+): ComponentInfo[] {
+  return backendComponents.map((c) => ({
+    glyphId: c.glyph_id,
+    xOffset: c.x_offset,
+    yOffset: c.y_offset,
+    paths: c.outline ? outlineDataToEditablePaths(c.outline) : [],
+    isComposite: c.outline?.is_composite ?? false,
+    subComponents: c.outline?.components ? buildComponentInfoTree(c.outline.components) : [],
+  }));
+}
+
+/** Walk a ComponentInfo tree following the given index path. */
+export function getComponentAtPath(
+  components: ComponentInfo[],
+  path: number[]
+): ComponentInfo | null {
+  let current = components;
+  let result: ComponentInfo | null = null;
+  for (const idx of path) {
+    if (idx < 0 || idx >= current.length) return null;
+    result = current[idx];
+    current = result.subComponents;
+  }
+  return result;
+}
+
+/** Immutably update a component at the given path using an updater function. */
+export function updateComponentAtPath(
+  components: ComponentInfo[],
+  path: number[],
+  updater: (c: ComponentInfo) => ComponentInfo
+): ComponentInfo[] {
+  if (path.length === 0) return components;
+  const [head, ...rest] = path;
+  return components.map((c, i) => {
+    if (i !== head) return c;
+    if (rest.length === 0) return updater(c);
+    return { ...c, subComponents: updateComponentAtPath(c.subComponents, rest, updater) };
+  });
+}
+
+/** Flatten the component tree into a flat array of { glyph_id, x_offset, y_offset }. */
+export function flattenComponentOffsets(
+  components: ComponentInfo[]
+): Array<{ glyph_id: number; x_offset: number; y_offset: number }> {
+  const result: Array<{ glyph_id: number; x_offset: number; y_offset: number }> = [];
+  for (const c of components) {
+    result.push({ glyph_id: c.glyphId, x_offset: c.xOffset, y_offset: c.yOffset });
+    // Note: only top-level components are stored in the composite glyph record.
+    // Sub-components are stored in each component's own glyph.
+  }
+  return result;
 }

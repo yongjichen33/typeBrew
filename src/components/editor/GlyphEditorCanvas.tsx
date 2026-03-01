@@ -9,6 +9,7 @@ import type {
   RubberBand,
   Layer,
   ImageLayer,
+  ComponentInfo,
 } from '@/lib/editorTypes';
 import type { TransformFeedback } from './GlyphEditorTab';
 
@@ -40,6 +41,8 @@ interface GlyphEditorCanvasProps {
     showTransformBox: boolean;
     showPixelGrid: boolean;
     isComposite: boolean;
+    components: ComponentInfo[];
+    activeComponentPath: number[];
   }>;
   showTransformBox: boolean;
   showPixelGrid: boolean;
