@@ -702,8 +702,18 @@ export function useEditorInteraction({
         // Check glyph transform box handles first (when showTransformBox is active)
         const { showTransformBox } = stateRef.current;
         if (showTransformBox && selection.pointIds.size > 1) {
-          const glyphBbox = computeSelectionBBox(paths, selection);
+          let glyphBbox = computeSelectionBBox(paths, selection);
           if (glyphBbox) {
+            // Adjust bbox for active component offset in composite glyph mode
+            if (isComposite && activeComponentPath.length > 0) {
+              const { dx, dy } = getAccumulatedOffset(stateComponents, activeComponentPath);
+              glyphBbox = {
+                minX: glyphBbox.minX + dx,
+                minY: glyphBbox.minY + dy,
+                maxX: glyphBbox.maxX + dx,
+                maxY: glyphBbox.maxY + dy,
+              };
+            }
             const handle = hitTestGlyphTransformHandle(x, y, glyphBbox, vt);
             if (handle !== null) {
               const fp = toFontSpace(x, y, vt);
@@ -986,8 +996,18 @@ export function useEditorInteraction({
           // Glyph transform box hover (check before image and point hover)
           const { showTransformBox: stb, selection: sel } = stateRef.current;
           if (stb && sel.pointIds.size > 1) {
-            const glyphBbox2 = computeSelectionBBox(paths, sel);
+            let glyphBbox2 = computeSelectionBBox(paths, sel);
             if (glyphBbox2) {
+              // Adjust bbox for active component offset in composite glyph mode
+              if (mvComposite && mvActivePath.length > 0) {
+                const { dx, dy } = getAccumulatedOffset(mvComponents, mvActivePath);
+                glyphBbox2 = {
+                  minX: glyphBbox2.minX + dx,
+                  minY: glyphBbox2.minY + dy,
+                  maxX: glyphBbox2.maxX + dx,
+                  maxY: glyphBbox2.maxY + dy,
+                };
+              }
               const handle = hitTestGlyphTransformHandle(x, y, glyphBbox2, vt);
               if (hoveredHandleRef.current !== handle) {
                 hoveredHandleRef.current = handle;
