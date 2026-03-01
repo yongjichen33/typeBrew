@@ -82,6 +82,8 @@ pub struct GlyphOutlineData {
     pub glyph_name: Option<String>,
     pub contours: Vec<Contour>,
     pub advance_width: f32,
+    /// Left side bearing from the hmtx table (font-space units).
+    pub lsb: f32,
     pub bounds: Option<GlyphBounds>,
     pub is_composite: bool,
     pub component_glyph_ids: Vec<u32>,
@@ -230,6 +232,7 @@ impl OutlineDataPen {
         glyph_id: u32,
         glyph_name: Option<String>,
         advance_width: f32,
+        lsb: f32,
         is_composite: bool,
         component_glyph_ids: Vec<u32>,
         components: Vec<ComponentOffset>,
@@ -239,6 +242,7 @@ impl OutlineDataPen {
             glyph_name,
             contours: self.contours,
             advance_width,
+            lsb,
             bounds: if self.x_min < self.x_max {
                 Some(GlyphBounds {
                     x_min: self.x_min,
@@ -586,6 +590,34 @@ fn get_composite_info(font: &FontRef<'_>, glyph_id: u32) -> (bool, Vec<Component
     (true, components)
 }
 
+/// Read the left side bearing for a glyph directly from the hmtx table.
+fn get_hmtx_lsb(font: &FontRef<'_>, glyph_id: u32) -> f32 {
+    use skrifa::raw::types::Tag;
+    let hmtx_data = match font.table_data(Tag::new(b"hmtx")) {
+        Some(d) => d.as_bytes().to_owned(),
+        None => return 0.0,
+    };
+    let num_h_metrics = match font.hhea() {
+        Ok(h) => h.number_of_h_metrics() as usize,
+        Err(_) => return 0.0,
+    };
+    if (glyph_id as usize) < num_h_metrics {
+        // metrics portion: (advance_width: u16, lsb: i16) per entry
+        let offset = glyph_id as usize * 4 + 2;
+        if offset + 2 <= hmtx_data.len() {
+            return i16::from_be_bytes([hmtx_data[offset], hmtx_data[offset + 1]]) as f32;
+        }
+    } else {
+        // lsb-only portion after the metrics entries
+        let lsb_index = glyph_id as usize - num_h_metrics;
+        let offset = num_h_metrics * 4 + lsb_index * 2;
+        if offset + 2 <= hmtx_data.len() {
+            return i16::from_be_bytes([hmtx_data[offset], hmtx_data[offset + 1]]) as f32;
+        }
+    }
+    0.0
+}
+
 /// Recursively build GlyphOutlineData, resolving component outlines for composites.
 fn build_glyph_outline_data_recursive(
     bytes: &[u8],
@@ -605,6 +637,8 @@ fn build_glyph_outline_data_recursive(
         )
         .advance_width(GlyphId::from(glyph_id))
         .unwrap_or(0.0);
+
+    let lsb = get_hmtx_lsb(&font, glyph_id);
 
     let outlines = font.outline_glyphs();
     let outline = outlines.get(GlyphId::from(glyph_id))?;
@@ -638,6 +672,7 @@ fn build_glyph_outline_data_recursive(
         glyph_id,
         None,
         advance_width,
+        lsb,
         is_composite,
         component_glyph_ids,
         components,

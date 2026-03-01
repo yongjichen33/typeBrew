@@ -10,6 +10,7 @@ import type {
   Selection,
   FontMetrics,
   DrawingLayer,
+  HistoryEntry,
 } from '@/lib/editorTypes';
 import { clonePaths, getComponentAtPath, updateComponentAtPath } from '@/lib/svgPathParser';
 
@@ -234,6 +235,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         activeComponentPath: action.path,
         paths: comp ? comp.paths : [],
         selection: { pointIds: new Set(), segmentIds: new Set() },
+        toolMode: 'node',
       };
     }
 
@@ -260,8 +262,20 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case 'COMMIT_COMPONENT_MOVE': {
-      const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), clonePaths(state.paths)];
+      const entry: HistoryEntry = {
+        paths: clonePaths(state.paths),
+        components: action.componentSnapshot,
+      };
+      const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), entry];
       return { ...state, undoStack, redoStack: [] };
+    }
+
+    case 'TOGGLE_COMPONENT_LOCK': {
+      const newComponents = updateComponentAtPath(state.components, action.path, (c) => ({
+        ...c,
+        locked: !c.locked,
+      }));
+      return { ...state, components: newComponents, undoStack: [], redoStack: [] };
     }
 
     case 'MOVE_POINTS_LIVE': {
@@ -402,7 +416,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         }),
       }));
 
-      const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), prev];
+      const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }];
       const showTransformBox = action.selection.pointIds.size > 1;
       return {
         ...state,
@@ -420,7 +434,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         if (p.id !== action.pathId) return p;
         return { ...p, commands: [...p.commands, action.command] };
       });
-      const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), prev];
+      const undoStack = [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }];
       return { ...state, paths: newPaths, undoStack, redoStack: [], isDirty: true };
     }
 
@@ -511,12 +525,18 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     case 'UNDO': {
       if (state.undoStack.length === 0) return state;
       const prev = state.undoStack[state.undoStack.length - 1];
-      const redoStack = [clonePaths(state.paths), ...state.redoStack];
+      const redoEntry: HistoryEntry = { paths: clonePaths(state.paths) };
+      if (prev.components !== undefined) {
+        redoEntry.components = JSON.parse(
+          JSON.stringify(state.components)
+        ) as typeof state.components;
+      }
       return {
         ...state,
-        paths: prev,
+        paths: prev.paths,
+        ...(prev.components !== undefined ? { components: prev.components } : {}),
         undoStack: state.undoStack.slice(0, -1),
-        redoStack,
+        redoStack: [redoEntry, ...state.redoStack],
         isDirty: true,
         selection: { pointIds: new Set(), segmentIds: new Set() },
         activePathId: null,
@@ -527,11 +547,17 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     case 'REDO': {
       if (state.redoStack.length === 0) return state;
       const next = state.redoStack[0];
-      const undoStack = [...state.undoStack, clonePaths(state.paths)];
+      const undoEntry: HistoryEntry = { paths: clonePaths(state.paths) };
+      if (next.components !== undefined) {
+        undoEntry.components = JSON.parse(
+          JSON.stringify(state.components)
+        ) as typeof state.components;
+      }
       return {
         ...state,
-        paths: next,
-        undoStack,
+        paths: next.paths,
+        ...(next.components !== undefined ? { components: next.components } : {}),
+        undoStack: [...state.undoStack, undoEntry],
         redoStack: state.redoStack.slice(1),
         isDirty: true,
         selection: { pointIds: new Set(), segmentIds: new Set() },
@@ -587,7 +613,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         paths: [...state.paths, action.path],
         activePathId: action.path.id,
         isDrawingPath: true,
-        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
         redoStack: [],
         isDirty: true,
       };
@@ -603,7 +629,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return {
         ...state,
         paths: newPaths,
-        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
         redoStack: [],
         isDirty: true,
       };
@@ -622,7 +648,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         paths: newPaths,
         isDrawingPath: false,
-        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
         redoStack: [],
         isDirty: true,
       };
@@ -671,7 +697,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         paths: newPaths,
         selection: { pointIds: new Set(), segmentIds: new Set() },
-        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
         redoStack: [],
         isDirty: true,
         activePathId: activePathStillExists ? state.activePathId : null,
@@ -716,7 +742,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return {
         ...state,
         paths: newPaths,
-        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
         redoStack: [],
         isDirty: true,
       };
@@ -736,7 +762,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return {
         ...state,
         paths: newPaths,
-        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
         redoStack: [],
         isDirty: true,
       };
@@ -771,7 +797,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         paths: newPaths,
         selection: { pointIds: new Set([point.id]), segmentIds: new Set() },
-        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
         redoStack: [],
         isDirty: true,
       };
@@ -930,7 +956,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return {
         ...state,
         paths: newPaths,
-        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
         redoStack: [],
         isDirty: true,
       };
@@ -1176,7 +1202,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         paths: [...state.paths, ...newPaths],
         selection: { pointIds: newPointIds, segmentIds: new Set() },
-        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
         redoStack: [],
         isDirty: true,
         showTransformBox: newPointIds.size > 1,
@@ -1227,7 +1253,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
           ...state,
           paths: newPaths,
           selection: { pointIds: new Set([newEndId]), segmentIds: new Set() },
-          undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+          undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
           redoStack: [],
           isDirty: true,
           showTransformBox: false,
@@ -1253,7 +1279,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         paths: [...basePaths, newPath],
         selection: { pointIds: new Set([fromId, toId]), segmentIds: new Set() },
-        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
         redoStack: [],
         isDirty: true,
         showTransformBox: false,
@@ -1303,7 +1329,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         return {
           ...state,
           paths: newPaths,
-          undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+          undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
           redoStack: [],
           isDirty: true,
           showTransformBox: false,
@@ -1343,7 +1369,7 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         paths: newPaths,
         selection: { pointIds: new Set(), segmentIds: new Set() },
-        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), prev],
+        undoStack: [...state.undoStack.slice(-MAX_UNDO + 1), { paths: prev }],
         redoStack: [],
         isDirty: true,
         showTransformBox: false,

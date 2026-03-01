@@ -400,12 +400,14 @@ describe('reducer', () => {
       state.selection.pointIds.add('m1');
 
       // Simulate a move
-      const snapshot: EditablePath[] = [
-        makePath('p1', [
-          { kind: 'M', point: makePoint('m1', 0, 0) },
-          { kind: 'L', point: makePoint('l1', 100, 0) },
-        ]),
-      ];
+      const snapshot = {
+        paths: [
+          makePath('p1', [
+            { kind: 'M', point: makePoint('m1', 0, 0) },
+            { kind: 'L', point: makePoint('l1', 100, 0) },
+          ]),
+        ],
+      };
 
       const movedState = reducer(state, { type: 'COMMIT_MOVE', snapshot });
       expect(movedState.undoStack.length).toBe(1);

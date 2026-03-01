@@ -36,6 +36,7 @@ interface EditorToolbarProps {
   onSetShowPreview: (show: boolean) => void;
   previewInverted: boolean;
   onSetPreviewInverted: (inverted: boolean) => void;
+  isLockedMode?: boolean;
 }
 
 function ToolButton({
@@ -97,6 +98,7 @@ export function EditorToolbar({
   onSetShowPreview,
   previewInverted,
   onSetPreviewInverted,
+  isLockedMode = false,
 }: EditorToolbarProps) {
   return (
     <div className="bg-muted/30 flex shrink-0 items-center gap-2 border-b px-3 py-1">
@@ -112,12 +114,14 @@ export function EditorToolbar({
           icon={<PenTool size={15} />}
           label="Pen Tool (P) - Draw Bezier curves"
           active={toolMode === 'pen'}
+          disabled={isLockedMode}
           onClick={() => onSetMode('pen')}
         />
         <ToolButton
           icon={<Scissors size={15} />}
           label="Knife (K) - Cut paths"
           active={toolMode === 'knife'}
+          disabled={isLockedMode}
           onClick={() => onSetMode('knife')}
         />
       </ToolGroup>

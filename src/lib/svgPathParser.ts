@@ -222,6 +222,9 @@ export function buildComponentInfoTree(
     paths: c.outline ? outlineDataToEditablePaths(c.outline) : [],
     isComposite: c.outline?.is_composite ?? false,
     subComponents: c.outline?.components ? buildComponentInfoTree(c.outline.components) : [],
+    locked: true,
+    naturalXMin: c.outline?.lsb ?? 0,
+    naturalYMin: c.outline?.bounds?.y_min ?? 0,
   }));
 }
 

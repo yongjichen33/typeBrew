@@ -123,6 +123,19 @@ export interface ComponentInfo {
   isComposite: boolean;
   /** Recursively populated when isComposite is true. */
   subComponents: ComponentInfo[];
+  /** true = position-only editing; false = full outline editing. Default: true. */
+  locked: boolean;
+  /** Left side bearing of this component glyph (from hmtx). Used for position display. */
+  naturalXMin: number;
+  /** Bottom edge (yMin) of this component glyph's outline bounding box. */
+  naturalYMin: number;
+}
+
+/** One entry in the undo/redo stack. component moves also snapshot the components tree. */
+export interface HistoryEntry {
+  paths: EditablePath[];
+  /** Present only for component-offset moves; absent for normal path edits. */
+  components?: ComponentInfo[];
 }
 
 export interface EditorState {
@@ -132,8 +145,8 @@ export interface EditorState {
   viewTransform: ViewTransform;
   isDirty: boolean;
   isSaving: boolean;
-  undoStack: EditablePath[][];
-  redoStack: EditablePath[][];
+  undoStack: HistoryEntry[];
+  redoStack: HistoryEntry[];
   showDirection: boolean;
   showCoordinates: boolean;
   activePathId: string | null;
@@ -171,11 +184,12 @@ export type EditorAction =
   | { type: 'SET_ACTIVE_COMPONENT'; path: number[] }
   | { type: 'UPDATE_COMPONENT_PATHS'; path: number[]; paths: EditablePath[] }
   | { type: 'MOVE_COMPONENT_LIVE'; path: number[]; dx: number; dy: number }
-  | { type: 'COMMIT_COMPONENT_MOVE'; path: number[] }
+  | { type: 'COMMIT_COMPONENT_MOVE'; path: number[]; componentSnapshot: ComponentInfo[] }
+  | { type: 'TOGGLE_COMPONENT_LOCK'; path: number[] }
   | { type: 'MOVE_POINTS_LIVE'; deltas: Map<string, Vec2> }
-  | { type: 'COMMIT_MOVE'; snapshot: EditablePath[] }
+  | { type: 'COMMIT_MOVE'; snapshot: HistoryEntry }
   | { type: 'TRANSFORM_POINTS_LIVE'; deltas: Map<string, Vec2> }
-  | { type: 'COMMIT_TRANSFORM'; snapshot: EditablePath[] }
+  | { type: 'COMMIT_TRANSFORM'; snapshot: HistoryEntry }
   | {
       type: 'APPLY_TRANSFORM';
       transform: {
@@ -323,6 +337,8 @@ export interface GlyphOutlineData {
   glyph_name?: string;
   contours: GlyphContour[];
   advance_width: number;
+  /** Left side bearing from hmtx table (font-space units). */
+  lsb?: number;
   bounds?: {
     x_min: number;
     y_min: number;

@@ -257,7 +257,7 @@ export function GlyphEditorTab({ tabState }: Props) {
       if (state.isComposite) {
         // For composite glyphs: save active component outline + update offsets
         const activeComp = getComponentAtPath(state.components, state.activeComponentPath);
-        if (activeComp && !activeComp.isComposite && state.paths.length > 0) {
+        if (activeComp && !activeComp.isComposite && !activeComp.locked && state.paths.length > 0) {
           const svgPathOut = editablePathToSvg(state.paths);
           await invoke('save_glyph_outline', {
             filePath,
@@ -383,35 +383,43 @@ export function GlyphEditorTab({ tabState }: Props) {
       </div>
 
       {/* Toolbar */}
-      <EditorToolbar
-        toolMode={state.toolMode}
-        onSetMode={(mode) => dispatch({ type: 'SET_TOOL_MODE', mode })}
-        canUndo={state.undoStack.length > 0}
-        canRedo={state.redoStack.length > 0}
-        onUndo={() => dispatch({ type: 'UNDO' })}
-        onRedo={() => dispatch({ type: 'REDO' })}
-        isDirty={state.isDirty}
-        isSaving={state.isSaving}
-        onSave={handleSave}
-        showDirection={state.showDirection}
-        onSetShowDirection={(showDirection) =>
-          dispatch({ type: 'SET_SHOW_DIRECTION', showDirection })
-        }
-        showCoordinates={state.showCoordinates}
-        onSetShowCoordinates={(showCoordinates) =>
-          dispatch({ type: 'SET_SHOW_COORDINATES', showCoordinates })
-        }
-        showPixelGrid={state.showPixelGrid}
-        onSetShowPixelGrid={(showPixelGrid) =>
-          dispatch({ type: 'SET_SHOW_PIXEL_GRID', showPixelGrid })
-        }
-        showPreview={state.showPreview}
-        onSetShowPreview={(showPreview) => dispatch({ type: 'SET_SHOW_PREVIEW', showPreview })}
-        previewInverted={state.previewInverted}
-        onSetPreviewInverted={(previewInverted) =>
-          dispatch({ type: 'SET_PREVIEW_INVERTED', previewInverted })
-        }
-      />
+      {(() => {
+        const activeComp = getComponentAtPath(state.components, state.activeComponentPath);
+        const isLockedMode =
+          state.isComposite && state.activeComponentPath.length > 0 && (activeComp?.locked ?? true);
+        return (
+          <EditorToolbar
+            toolMode={state.toolMode}
+            onSetMode={(mode) => dispatch({ type: 'SET_TOOL_MODE', mode })}
+            canUndo={state.undoStack.length > 0}
+            canRedo={state.redoStack.length > 0}
+            onUndo={() => dispatch({ type: 'UNDO' })}
+            onRedo={() => dispatch({ type: 'REDO' })}
+            isDirty={state.isDirty}
+            isSaving={state.isSaving}
+            onSave={handleSave}
+            showDirection={state.showDirection}
+            onSetShowDirection={(showDirection) =>
+              dispatch({ type: 'SET_SHOW_DIRECTION', showDirection })
+            }
+            showCoordinates={state.showCoordinates}
+            onSetShowCoordinates={(showCoordinates) =>
+              dispatch({ type: 'SET_SHOW_COORDINATES', showCoordinates })
+            }
+            showPixelGrid={state.showPixelGrid}
+            onSetShowPixelGrid={(showPixelGrid) =>
+              dispatch({ type: 'SET_SHOW_PIXEL_GRID', showPixelGrid })
+            }
+            showPreview={state.showPreview}
+            onSetShowPreview={(showPreview) => dispatch({ type: 'SET_SHOW_PREVIEW', showPreview })}
+            previewInverted={state.previewInverted}
+            onSetPreviewInverted={(previewInverted) =>
+              dispatch({ type: 'SET_PREVIEW_INVERTED', previewInverted })
+            }
+            isLockedMode={isLockedMode}
+          />
+        );
+      })()}
 
       {/* Canvas area with Inspector */}
       <div

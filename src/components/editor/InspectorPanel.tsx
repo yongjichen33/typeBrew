@@ -15,6 +15,8 @@ import {
   ChevronRight,
   ChevronDown,
   Link2,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type {
@@ -31,6 +33,8 @@ import { computeClipboardData } from '@/hooks/useGlyphEditor';
 import { setClipboard } from '@/lib/glyphClipboard';
 import { computeSelectionBBox } from '@/hooks/useEditorInteraction';
 import { getComponentAtPath } from '@/lib/svgPathParser';
+
+/** Minimum x and y of all points in a path array (font-space Y-up). */
 import type { TransformFeedback } from './GlyphEditorTab';
 
 interface InspectorPanelProps {
@@ -285,11 +289,13 @@ function ComponentTree({
   activePath,
   currentPath,
   onActivate,
+  onToggleLock,
 }: {
   components: ComponentInfo[];
   activePath: number[];
   currentPath: number[];
   onActivate: (path: number[]) => void;
+  onToggleLock: (path: number[]) => void;
 }) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   return (
@@ -331,6 +337,20 @@ function ComponentTree({
                 {comp.isComposite ? <Link2 size={11} /> : <PenLine size={11} />}
               </span>
               <span className="flex-1 truncate font-mono text-[10px]">#{comp.glyphId}</span>
+              <button
+                className="ml-auto flex-shrink-0 p-0.5 opacity-50 hover:opacity-100"
+                title={
+                  comp.locked
+                    ? 'Locked: position only. Click to unlock for outline editing.'
+                    : 'Unlocked: editing component outline. Click to lock.'
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleLock(itemPath);
+                }}
+              >
+                {comp.locked ? <Lock size={10} /> : <Unlock size={10} />}
+              </button>
             </div>
             {comp.isComposite && isExpanded && comp.subComponents.length > 0 && (
               <div className="border-muted ml-3 border-l pl-1">
@@ -339,6 +359,7 @@ function ComponentTree({
                   activePath={activePath}
                   currentPath={itemPath}
                   onActivate={onActivate}
+                  onToggleLock={onToggleLock}
                 />
               </div>
             )}
@@ -361,6 +382,7 @@ export function InspectorPanel({
   activeComponentPath = [],
 }: InspectorPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const compSnapshotRef = useRef<ComponentInfo[]>([]);
   const [renamingLayerId, setRenamingLayerId] = useState<string | null>(null);
 
   const handleAddImageLayer = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -598,37 +620,47 @@ export function InspectorPanel({
               activePath={activeComponentPath}
               currentPath={[]}
               onActivate={(path) => dispatch({ type: 'SET_ACTIVE_COMPONENT', path })}
+              onToggleLock={(path) => dispatch({ type: 'TOGGLE_COMPONENT_LOCK', path })}
             />
           )}
           {activeComponentPath.length > 0 &&
             (() => {
               const activeComp = getComponentAtPath(components, activeComponentPath);
               if (!activeComp) return null;
+              // Use naturalXMin (hmtx LSB) and naturalYMin (outline bounds) stored on the component.
+              const dispX = Math.round(activeComp.xOffset + activeComp.naturalXMin);
+              const dispY = Math.round(activeComp.yOffset + activeComp.naturalYMin);
               return (
                 <div className="mt-2 space-y-0.5 border-t pt-2">
                   <p className="text-muted-foreground mb-1 text-[10px]">
-                    Offset (Glyph #{activeComp.glyphId})
+                    Position (Glyph #{activeComp.glyphId})
                   </p>
                   <div className="flex items-center justify-between py-0.5">
                     <span className="text-muted-foreground text-xs">X</span>
                     <input
                       type="number"
-                      value={activeComp.xOffset}
+                      value={dispX}
                       step={1}
                       className="bg-background w-16 rounded border px-1.5 py-0.5 text-right font-mono text-xs"
+                      onFocus={() => {
+                        compSnapshotRef.current = JSON.parse(JSON.stringify(components));
+                      }}
                       onChange={(e) => {
                         const v = parseFloat(e.target.value);
                         if (isNaN(v)) return;
-                        const prev = activeComp.xOffset;
                         dispatch({
                           type: 'MOVE_COMPONENT_LIVE',
                           path: activeComponentPath,
-                          dx: v - prev,
+                          dx: v - dispX,
                           dy: 0,
                         });
                       }}
                       onBlur={() =>
-                        dispatch({ type: 'COMMIT_COMPONENT_MOVE', path: activeComponentPath })
+                        dispatch({
+                          type: 'COMMIT_COMPONENT_MOVE',
+                          path: activeComponentPath,
+                          componentSnapshot: compSnapshotRef.current,
+                        })
                       }
                     />
                   </div>
@@ -636,22 +668,28 @@ export function InspectorPanel({
                     <span className="text-muted-foreground text-xs">Y</span>
                     <input
                       type="number"
-                      value={activeComp.yOffset}
+                      value={dispY}
                       step={1}
                       className="bg-background w-16 rounded border px-1.5 py-0.5 text-right font-mono text-xs"
+                      onFocus={() => {
+                        compSnapshotRef.current = JSON.parse(JSON.stringify(components));
+                      }}
                       onChange={(e) => {
                         const v = parseFloat(e.target.value);
                         if (isNaN(v)) return;
-                        const prev = activeComp.yOffset;
                         dispatch({
                           type: 'MOVE_COMPONENT_LIVE',
                           path: activeComponentPath,
                           dx: 0,
-                          dy: v - prev,
+                          dy: v - dispY,
                         });
                       }}
                       onBlur={() =>
-                        dispatch({ type: 'COMMIT_COMPONENT_MOVE', path: activeComponentPath })
+                        dispatch({
+                          type: 'COMMIT_COMPONENT_MOVE',
+                          path: activeComponentPath,
+                          componentSnapshot: compSnapshotRef.current,
+                        })
                       }
                     />
                   </div>

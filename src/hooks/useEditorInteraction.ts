@@ -7,8 +7,9 @@ import type {
   Layer,
   ImageLayer,
   ComponentInfo,
+  HistoryEntry,
 } from '@/lib/editorTypes';
-import { collectAllPoints, clonePaths, getPoint } from '@/lib/svgPathParser';
+import { collectAllPoints, clonePaths, getPoint, getComponentAtPath } from '@/lib/svgPathParser';
 
 const HIT_RADIUS_PX = 8;
 const DRAG_THRESHOLD_PX = 4;
@@ -590,14 +591,17 @@ export function useEditorInteraction({
       | 'image-rotate'
       | 'image-scale'
       | 'glyph-transform'
-      | 'connect';
+      | 'connect'
+      | 'component-move';
     startFx: number;
     startFy: number;
     curFx: number;
     curFy: number;
     rbStartX: number;
     rbStartY: number;
-    snapshot: EditablePath[] | null;
+    snapshot: HistoryEntry | null;
+    /** Pre-move component tree snapshot for component-move undo. */
+    componentSnapshot?: ComponentInfo[];
     // Image drag fields
     imageLayerId?: string;
     imageHandleType?: TransformHandle;
@@ -649,9 +653,15 @@ export function useEditorInteraction({
   }
 
   const getCursor = useCallback((): string => {
+    if (dragRef.current?.type === 'component-move') return 'grabbing';
     if (dragRef.current?.type === 'image-move') return 'grabbing';
     if (dragRef.current?.type === 'glyph-transform' && dragRef.current.glyphHandle === 'move')
       return 'grabbing';
+    const { isComposite, components: cs, activeComponentPath: acp } = stateRef.current;
+    if (isComposite && acp.length > 0) {
+      const ac = getComponentAtPath(cs, acp);
+      if (ac?.locked) return 'grab';
+    }
     const handle = hoveredHandleRef.current;
     if (!handle) return 'default';
     if (handle === 'move') return 'grab';
@@ -661,7 +671,7 @@ export function useEditorInteraction({
     if (handle === 'tm' || handle === 'bm') return 'ns-resize';
     if (handle === 'lm' || handle === 'rm') return 'ew-resize';
     return 'default';
-  }, []);
+  }, [stateRef]);
 
   const getEventPos = useCallback(
     (e: PointerEvent | WheelEvent) => {
@@ -677,23 +687,42 @@ export function useEditorInteraction({
       const { x, y } = getEventPos(e);
       const { toolMode, paths, viewTransform: vt, selection } = stateRef.current;
 
-      // Middle mouse = pan
+      // Middle mouse = pan (always)
       if (e.button === 1) {
         initiatePan(e, x, y, vt);
         return;
       }
 
-      // Hand tool = pan
+      // Hand tool = pan (always — before composite guards so it works even with no component selected)
       if (toolMode === 'hand') {
         initiatePan(e, x, y, vt);
         return;
       }
 
-      // For composite glyphs, adjust hit-testing to account for active component offset
+      // Composite guards
       const { isComposite, components: stateComponents, activeComponentPath } = stateRef.current;
 
-      // No component selected: editing is disabled (pan/zoom still works above)
+      // No component selected: editing is disabled
       if (isComposite && activeComponentPath.length === 0) return;
+
+      // Locked component: dragging moves the component offset
+      const activeComp = getComponentAtPath(stateComponents, activeComponentPath);
+      if (isComposite && activeComp?.locked) {
+        const fp = toFontSpace(x, y, vt);
+        dragRef.current = {
+          type: 'component-move',
+          startFx: fp.x,
+          startFy: fp.y,
+          curFx: fp.x,
+          curFy: fp.y,
+          rbStartX: x,
+          rbStartY: y,
+          snapshot: null,
+          componentSnapshot: JSON.parse(JSON.stringify(stateComponents)) as ComponentInfo[],
+        };
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        return;
+      }
 
       const hitVt = adjustVtForComponent(vt, isComposite, activeComponentPath, stateComponents);
 
@@ -729,7 +758,7 @@ export function useEditorInteraction({
                 curFy: fp.y,
                 rbStartX: x,
                 rbStartY: y,
-                snapshot: clonePaths(paths),
+                snapshot: { paths: clonePaths(paths) },
                 glyphHandle: handle,
                 bboxAtStart: glyphBbox,
                 centerFx: cx,
@@ -828,7 +857,7 @@ export function useEditorInteraction({
             curFy: fp.y,
             rbStartX: x,
             rbStartY: y,
-            snapshot: clonePaths(paths),
+            snapshot: { paths: clonePaths(paths) },
           };
           (e.target as HTMLElement).setPointerCapture(e.pointerId);
           if (e.shiftKey || e.ctrlKey || e.metaKey) {
@@ -992,6 +1021,21 @@ export function useEditorInteraction({
       if (!dragRef.current) {
         if (toolMode === 'node') {
           const { paths } = stateRef.current;
+
+          // Locked component: suppress hover highlights — no editing allowed, skip O(n) hit tests
+          const activeCompForHover = getComponentAtPath(mvComponents, mvActivePath);
+          if (mvComposite && activeCompForHover?.locked) {
+            if (prevHoverRef.current.pointId !== null) {
+              setHoveredPointId(null);
+              prevHoverRef.current.pointId = null;
+            }
+            if (prevHoverRef.current.segmentId !== null) {
+              setHoveredSegmentId(null);
+              prevHoverRef.current.segmentId = null;
+            }
+            hoveredHandleRef.current = null;
+            return;
+          }
 
           // Glyph transform box hover (check before image and point hover)
           const { showTransformBox: stb, selection: sel } = stateRef.current;
@@ -1216,7 +1260,7 @@ export function useEditorInteraction({
           const sin = Math.sin(rad);
           const deltas = new Map<string, { x: number; y: number }>();
           for (const id of sel.pointIds) {
-            const snap = getPoint(drag.snapshot, id);
+            const snap = getPoint(drag.snapshot.paths, id);
             if (!snap) continue;
             const cur = getPoint(curPaths, id);
             if (!cur) continue;
@@ -1243,7 +1287,7 @@ export function useEditorInteraction({
           const scaleY = isHoriz ? 1 : Math.abs(startDyF) > 0.001 ? curDyF / startDyF : 1;
           const deltas = new Map<string, { x: number; y: number }>();
           for (const id of sel.pointIds) {
-            const snap = getPoint(drag.snapshot, id);
+            const snap = getPoint(drag.snapshot.paths, id);
             if (!snap) continue;
             const cur = getPoint(curPaths, id);
             if (!cur) continue;
@@ -1254,6 +1298,15 @@ export function useEditorInteraction({
           dispatch({ type: 'TRANSFORM_POINTS_LIVE', deltas });
           redraw();
         }
+      } else if (drag.type === 'component-move') {
+        const fp = toFontSpace(x, y, vt);
+        const dx = fp.x - drag.curFx;
+        const dy = fp.y - drag.curFy;
+        drag.curFx = fp.x;
+        drag.curFy = fp.y;
+        const { activeComponentPath: acp } = stateRef.current;
+        dispatch({ type: 'MOVE_COMPONENT_LIVE', path: acp, dx, dy });
+        redraw();
       } else {
         onTransformFeedback?.({
           isActive: false,
@@ -1328,6 +1381,14 @@ export function useEditorInteraction({
           }
         }
         setDragPos(null);
+        redraw();
+      } else if (drag.type === 'component-move') {
+        const { activeComponentPath: acp } = stateRef.current;
+        dispatch({
+          type: 'COMMIT_COMPONENT_MOVE',
+          path: acp,
+          componentSnapshot: drag.componentSnapshot ?? [],
+        });
         redraw();
       } else if (drag.type === 'connect') {
         setConnectPreview(null);
