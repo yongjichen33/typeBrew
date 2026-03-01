@@ -30,6 +30,7 @@ import type {
 import { computeClipboardData } from '@/hooks/useGlyphEditor';
 import { setClipboard } from '@/lib/glyphClipboard';
 import { computeSelectionBBox } from '@/hooks/useEditorInteraction';
+import { getComponentAtPath } from '@/lib/svgPathParser';
 import type { TransformFeedback } from './GlyphEditorTab';
 
 interface InspectorPanelProps {
@@ -57,62 +58,16 @@ interface Segment {
   ctrl2?: EditablePoint;
 }
 
-function getSelectedPoints(paths: EditablePath[], selection: Selection): EditablePoint[] {
+interface SelectionInfo {
+  points: EditablePoint[];
+  pathIds: string[];
+  segments: Segment[];
+}
+
+/** Single-pass collection of all selection data to avoid traversing paths 3×. */
+function getSelectionInfo(paths: EditablePath[], selection: Selection): SelectionInfo {
   const points: EditablePoint[] = [];
-  for (const path of paths) {
-    for (const cmd of path.commands) {
-      if (cmd.kind === 'M' || cmd.kind === 'L') {
-        if (selection.pointIds.has(cmd.point.id)) {
-          points.push(cmd.point);
-        }
-      } else if (cmd.kind === 'Q') {
-        if (selection.pointIds.has(cmd.ctrl.id)) {
-          points.push(cmd.ctrl);
-        }
-        if (selection.pointIds.has(cmd.point.id)) {
-          points.push(cmd.point);
-        }
-      } else if (cmd.kind === 'C') {
-        if (selection.pointIds.has(cmd.ctrl1.id)) {
-          points.push(cmd.ctrl1);
-        }
-        if (selection.pointIds.has(cmd.ctrl2.id)) {
-          points.push(cmd.ctrl2);
-        }
-        if (selection.pointIds.has(cmd.point.id)) {
-          points.push(cmd.point);
-        }
-      }
-    }
-  }
-  return points;
-}
-
-function getSelectedPathIds(paths: EditablePath[], selection: Selection): string[] {
-  const pathIds = new Set<string>();
-  for (const path of paths) {
-    for (const cmd of path.commands) {
-      if (cmd.kind === 'M' || cmd.kind === 'L') {
-        if (selection.pointIds.has(cmd.point.id)) pathIds.add(path.id);
-      } else if (cmd.kind === 'Q') {
-        if (selection.pointIds.has(cmd.ctrl.id) || selection.pointIds.has(cmd.point.id)) {
-          pathIds.add(path.id);
-        }
-      } else if (cmd.kind === 'C') {
-        if (
-          selection.pointIds.has(cmd.ctrl1.id) ||
-          selection.pointIds.has(cmd.ctrl2.id) ||
-          selection.pointIds.has(cmd.point.id)
-        ) {
-          pathIds.add(path.id);
-        }
-      }
-    }
-  }
-  return Array.from(pathIds);
-}
-
-function getSelectedSegments(paths: EditablePath[], selection: Selection): Segment[] {
+  const pathIdSet = new Set<string>();
   const segments: Segment[] = [];
 
   for (const path of paths) {
@@ -125,51 +80,85 @@ function getSelectedSegments(paths: EditablePath[], selection: Selection): Segme
       const cmd = cmds[i];
 
       if (cmd.kind === 'M') {
+        if (selection.pointIds.has(cmd.point.id)) {
+          points.push(cmd.point);
+          pathIdSet.add(path.id);
+        }
         lastOnCurve = cmd.point;
         firstOnCurve = cmd.point;
-      } else if (cmd.kind === 'L' && lastOnCurve) {
-        const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
-        if (selection.segmentIds.has(segmentId)) {
-          segments.push({
-            pathId: path.id,
-            startPointId: lastOnCurve.id,
-            endPointId: cmd.point.id,
-            startIndex: i,
-            kind: 'line',
-            startPoint: lastOnCurve,
-            endPoint: cmd.point,
-          });
+      } else if (cmd.kind === 'L') {
+        if (selection.pointIds.has(cmd.point.id)) {
+          points.push(cmd.point);
+          pathIdSet.add(path.id);
+        }
+        if (lastOnCurve) {
+          const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+          if (selection.segmentIds.has(segmentId)) {
+            segments.push({
+              pathId: path.id,
+              startPointId: lastOnCurve.id,
+              endPointId: cmd.point.id,
+              startIndex: i,
+              kind: 'line',
+              startPoint: lastOnCurve,
+              endPoint: cmd.point,
+            });
+          }
         }
         lastOnCurve = cmd.point;
-      } else if (cmd.kind === 'Q' && lastOnCurve) {
-        const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
-        if (selection.segmentIds.has(segmentId)) {
-          segments.push({
-            pathId: path.id,
-            startPointId: lastOnCurve.id,
-            endPointId: cmd.point.id,
-            startIndex: i,
-            kind: 'quad',
-            startPoint: lastOnCurve,
-            endPoint: cmd.point,
-            ctrl1: cmd.ctrl,
-          });
+      } else if (cmd.kind === 'Q') {
+        if (selection.pointIds.has(cmd.ctrl.id)) {
+          points.push(cmd.ctrl);
+          pathIdSet.add(path.id);
+        }
+        if (selection.pointIds.has(cmd.point.id)) {
+          points.push(cmd.point);
+          pathIdSet.add(path.id);
+        }
+        if (lastOnCurve) {
+          const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+          if (selection.segmentIds.has(segmentId)) {
+            segments.push({
+              pathId: path.id,
+              startPointId: lastOnCurve.id,
+              endPointId: cmd.point.id,
+              startIndex: i,
+              kind: 'quad',
+              startPoint: lastOnCurve,
+              endPoint: cmd.point,
+              ctrl1: cmd.ctrl,
+            });
+          }
         }
         lastOnCurve = cmd.point;
-      } else if (cmd.kind === 'C' && lastOnCurve) {
-        const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
-        if (selection.segmentIds.has(segmentId)) {
-          segments.push({
-            pathId: path.id,
-            startPointId: lastOnCurve.id,
-            endPointId: cmd.point.id,
-            startIndex: i,
-            kind: 'cubic',
-            startPoint: lastOnCurve,
-            endPoint: cmd.point,
-            ctrl1: cmd.ctrl1,
-            ctrl2: cmd.ctrl2,
-          });
+      } else if (cmd.kind === 'C') {
+        if (selection.pointIds.has(cmd.ctrl1.id)) {
+          points.push(cmd.ctrl1);
+          pathIdSet.add(path.id);
+        }
+        if (selection.pointIds.has(cmd.ctrl2.id)) {
+          points.push(cmd.ctrl2);
+          pathIdSet.add(path.id);
+        }
+        if (selection.pointIds.has(cmd.point.id)) {
+          points.push(cmd.point);
+          pathIdSet.add(path.id);
+        }
+        if (lastOnCurve) {
+          const segmentId = `${path.id}:${lastOnCurve.id}:${cmd.point.id}`;
+          if (selection.segmentIds.has(segmentId)) {
+            segments.push({
+              pathId: path.id,
+              startPointId: lastOnCurve.id,
+              endPointId: cmd.point.id,
+              startIndex: i,
+              kind: 'cubic',
+              startPoint: lastOnCurve,
+              endPoint: cmd.point,
+              ctrl1: cmd.ctrl1,
+              ctrl2: cmd.ctrl2,
+            });
+          }
         }
         lastOnCurve = cmd.point;
       }
@@ -192,7 +181,7 @@ function getSelectedSegments(paths: EditablePath[], selection: Selection): Segme
     }
   }
 
-  return segments;
+  return { points, pathIds: Array.from(pathIdSet), segments };
 }
 
 function isPathClosed(path: EditablePath): boolean {
@@ -413,11 +402,13 @@ export function InspectorPanel({
   const activeImageLayer = layers.find((l) => l.id === focusedLayerId && l.type === 'image') as
     | ImageLayer
     | undefined;
-  const selectedPoints = getSelectedPoints(paths, selection);
-  const selectedPathIds = getSelectedPathIds(paths, selection);
+  const {
+    points: selectedPoints,
+    pathIds: selectedPathIds,
+    segments: selectedSegments,
+  } = getSelectionInfo(paths, selection);
   const selectedPath =
     selectedPathIds.length === 1 ? paths.find((p) => p.id === selectedPathIds[0]) : null;
-  const selectedSegments = getSelectedSegments(paths, selection);
   const hasSegmentSelected = selectedSegments.length > 0;
   const hasCurveSegment = selectedSegments.some((s) => s.kind === 'quad' || s.kind === 'cubic');
 
@@ -611,16 +602,7 @@ export function InspectorPanel({
           )}
           {activeComponentPath.length > 0 &&
             (() => {
-              const activeComp = (() => {
-                let current = components;
-                let result: ComponentInfo | null = null;
-                for (const idx of activeComponentPath) {
-                  if (idx >= current.length) return null;
-                  result = current[idx];
-                  current = result.subComponents;
-                }
-                return result;
-              })();
+              const activeComp = getComponentAtPath(components, activeComponentPath);
               if (!activeComp) return null;
               return (
                 <div className="mt-2 space-y-0.5 border-t pt-2">

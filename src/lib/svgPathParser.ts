@@ -155,9 +155,17 @@ export function collectAllPoints(paths: EditablePath[]): EditablePoint[] {
   return pts;
 }
 
-/** Deep-clone paths (for undo stack). */
+/** Structural clone of paths (for undo stack). Avoids JSON round-trip overhead. */
 export function clonePaths(paths: EditablePath[]): EditablePath[] {
-  return JSON.parse(JSON.stringify(paths));
+  return paths.map((path) => ({
+    ...path,
+    commands: path.commands.map((cmd) => {
+      if (cmd.kind === 'Z') return cmd;
+      if (cmd.kind === 'M' || cmd.kind === 'L') return { ...cmd, point: { ...cmd.point } };
+      if (cmd.kind === 'Q') return { ...cmd, ctrl: { ...cmd.ctrl }, point: { ...cmd.point } };
+      return { ...cmd, ctrl1: { ...cmd.ctrl1 }, ctrl2: { ...cmd.ctrl2 }, point: { ...cmd.point } };
+    }),
+  }));
 }
 
 /** Convert GlyphOutlineData from backend to EditablePath[] for the editor. */
@@ -258,4 +266,23 @@ export function flattenComponentOffsets(
     // Sub-components are stored in each component's own glyph.
   }
   return result;
+}
+
+/** Find a point by ID across all paths. */
+export function getPoint(paths: EditablePath[], id: string): EditablePoint | null {
+  for (const path of paths) {
+    for (const cmd of path.commands) {
+      if (cmd.kind === 'M' || cmd.kind === 'L') {
+        if (cmd.point.id === id) return cmd.point;
+      } else if (cmd.kind === 'Q') {
+        if (cmd.ctrl.id === id) return cmd.ctrl;
+        if (cmd.point.id === id) return cmd.point;
+      } else if (cmd.kind === 'C') {
+        if (cmd.ctrl1.id === id) return cmd.ctrl1;
+        if (cmd.ctrl2.id === id) return cmd.ctrl2;
+        if (cmd.point.id === id) return cmd.point;
+      }
+    }
+  }
+  return null;
 }

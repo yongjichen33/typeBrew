@@ -10,10 +10,10 @@ export interface Vec2 {
 
 /** A single point in font-space (Y-up coordinate system). */
 export interface EditablePoint {
-  id: string;
+  readonly id: string;
   x: number;
   y: number;
-  type: PointType;
+  readonly type: PointType;
 }
 
 /** A single command in a contour path (font-space Y-up). */
@@ -79,9 +79,9 @@ export interface FontMetrics {
  *  screenY = originY - fontY * scale   (Y-flip)
  */
 export interface ViewTransform {
-  scale: number;
-  originX: number;
-  originY: number;
+  readonly scale: number;
+  readonly originX: number;
+  readonly originY: number;
 }
 
 /** Currently selected point IDs. */
@@ -153,8 +153,6 @@ export interface EditorState {
   previewHeight: number;
   /** True if this glyph is a composite (references other glyphs). */
   isComposite: boolean;
-  /** Glyph IDs of top-level components (derived from components). */
-  componentGlyphIds: number[];
   /** Full component tree (only populated when isComposite is true). */
   components: ComponentInfo[];
   /** Path of indices through the component tree to the active component. [] = none active. */
@@ -168,7 +166,6 @@ export type EditorAction =
       type: 'SET_PATHS';
       paths: EditablePath[];
       isComposite?: boolean;
-      componentGlyphIds?: number[];
       components?: ComponentInfo[];
     }
   | { type: 'SET_ACTIVE_COMPONENT'; path: number[] }

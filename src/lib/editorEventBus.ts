@@ -14,6 +14,9 @@ export const editorEventBus = {
     _handler = null;
   },
   emit(state: GlyphEditorTabState): void {
+    if (!_handler && import.meta.env.DEV) {
+      console.warn('editorEventBus.emit() called with no handler registered');
+    }
     _handler?.(state);
   },
   setGlyphSavedHandler(fn: GlyphSavedHandler): void {
@@ -23,6 +26,9 @@ export const editorEventBus = {
     _glyphSavedHandler = null;
   },
   emitGlyphSaved(data: { filePath: string; glyphId: number; svgPath: string }): void {
+    if (!_glyphSavedHandler && import.meta.env.DEV) {
+      console.warn('editorEventBus.emitGlyphSaved() called with no handler registered');
+    }
     _glyphSavedHandler?.(data);
   },
 };

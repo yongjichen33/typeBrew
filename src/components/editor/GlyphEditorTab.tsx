@@ -183,7 +183,6 @@ export function GlyphEditorTab({ tabState }: Props) {
       type: 'SET_PATHS',
       paths,
       isComposite: outlineData.is_composite,
-      componentGlyphIds: outlineData.component_glyph_ids,
       components,
     });
 

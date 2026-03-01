@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { TableContent } from '@/components/TableContent';
@@ -23,7 +23,6 @@ export function TableContentTab({ filePath, tableName }: TableContentTabProps) {
   const [glyphState, setGlyphState] = useState<GlyphState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const loadingMoreRef = useRef(false);
 
   const loadGlyphBatch = useCallback(
     async (offset: number) => {
@@ -66,10 +65,8 @@ export function TableContentTab({ filePath, tableName }: TableContentTabProps) {
   }, [filePath, tableName, loadGlyphBatch]);
 
   const handleLoadMore = useCallback(async () => {
-    if (!glyphState || loadingMoreRef.current) return;
-    if (glyphState.glyphs.length >= glyphState.totalGlyphs) return;
+    if (isLoadingMore || !glyphState || glyphState.glyphs.length >= glyphState.totalGlyphs) return;
 
-    loadingMoreRef.current = true;
     setIsLoadingMore(true);
     try {
       const data = await loadGlyphBatch(glyphState.glyphs.length);
@@ -85,9 +82,8 @@ export function TableContentTab({ filePath, tableName }: TableContentTabProps) {
       toast.error(`Failed to load more glyphs: ${error}`);
     } finally {
       setIsLoadingMore(false);
-      loadingMoreRef.current = false;
     }
-  }, [glyphState, loadGlyphBatch]);
+  }, [isLoadingMore, glyphState, loadGlyphBatch]);
 
   const handleTableUpdated = useCallback(async () => {
     if (OUTLINE_TABLES.includes(tableName)) return;

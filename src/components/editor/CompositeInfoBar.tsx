@@ -1,11 +1,13 @@
 import { Lock } from 'lucide-react';
+import type { ComponentInfo } from '@/lib/editorTypes';
 
 interface CompositeInfoBarProps {
-  componentGlyphIds: number[];
+  components: ComponentInfo[];
   onOpenComponent: (glyphId: number) => void;
 }
 
-export function CompositeInfoBar({ componentGlyphIds, onOpenComponent }: CompositeInfoBarProps) {
+export function CompositeInfoBar({ components, onOpenComponent }: CompositeInfoBarProps) {
+  const componentGlyphIds = components.map((c) => c.glyphId);
   return (
     <div className="flex shrink-0 items-center gap-3 border-b bg-amber-50 px-4 py-1.5 text-sm">
       <div className="flex shrink-0 items-center gap-1.5 font-medium text-amber-700">

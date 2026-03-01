@@ -322,8 +322,7 @@ export function GlyphEditorCanvas({
     });
     observer.observe(el);
     return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [redraw]);
 
   const getCanvasRect = useCallback(() => canvasRef.current?.getBoundingClientRect() ?? null, []);
 

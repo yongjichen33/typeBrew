@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useLayoutEffect, useRef } from 'react';
 import type {
   EditablePath,
   ViewTransform,
@@ -8,10 +8,10 @@ import type {
   ImageLayer,
   ComponentInfo,
 } from '@/lib/editorTypes';
-import { collectAllPoints, clonePaths } from '@/lib/svgPathParser';
-import { getPoint } from '@/hooks/useGlyphEditor';
+import { collectAllPoints, clonePaths, getPoint } from '@/lib/svgPathParser';
 
 const HIT_RADIUS_PX = 8;
+const DRAG_THRESHOLD_PX = 4;
 
 /** Convert screen (canvas) coordinates to font-space (Y-up). */
 function toFontSpace(sx: number, sy: number, vt: ViewTransform): { x: number; y: number } {
@@ -66,6 +66,18 @@ function getAccumulatedOffset(
     current = current[idx].subComponents;
   }
   return { dx, dy };
+}
+
+/** Adjust a ViewTransform to account for the active component's accumulated offset. */
+function adjustVtForComponent(
+  vt: ViewTransform,
+  isComposite: boolean,
+  path: number[],
+  components: ComponentInfo[]
+): ViewTransform {
+  if (!isComposite || path.length === 0) return vt;
+  const { dx, dy } = getAccumulatedOffset(components, path);
+  return { ...vt, originX: vt.originX + dx * vt.scale, originY: vt.originY - dy * vt.scale };
 }
 
 /** Distance from point (px, py) to line segment (x1,y1)-(x2,y2) */
@@ -622,6 +634,19 @@ export function useEditorInteraction({
 
   const pendingOffCurveRef = useRef<{ x: number; y: number } | null>(null);
   const hoveredHandleRef = useRef<TransformHandle>(null);
+  const prevHoverRef = useRef<{ pointId: string | null; segmentId: string | null }>({
+    pointId: null,
+    segmentId: null,
+  });
+  const redrawRef = useRef(redraw);
+  useLayoutEffect(() => {
+    redrawRef.current = redraw;
+  }, [redraw]);
+
+  function initiatePan(e: PointerEvent, x: number, y: number, vt: ViewTransform) {
+    panRef.current = { startOriginX: vt.originX, startOriginY: vt.originY, startX: x, startY: y };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
 
   const getCursor = useCallback((): string => {
     if (dragRef.current?.type === 'image-move') return 'grabbing';
@@ -654,25 +679,13 @@ export function useEditorInteraction({
 
       // Middle mouse = pan
       if (e.button === 1) {
-        panRef.current = {
-          startOriginX: vt.originX,
-          startOriginY: vt.originY,
-          startX: x,
-          startY: y,
-        };
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        initiatePan(e, x, y, vt);
         return;
       }
 
       // Hand tool = pan
       if (toolMode === 'hand') {
-        panRef.current = {
-          startOriginX: vt.originX,
-          startOriginY: vt.originY,
-          startX: x,
-          startY: y,
-        };
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        initiatePan(e, x, y, vt);
         return;
       }
 
@@ -682,11 +695,7 @@ export function useEditorInteraction({
       // No component selected: editing is disabled (pan/zoom still works above)
       if (isComposite && activeComponentPath.length === 0) return;
 
-      let hitVt = vt;
-      if (isComposite && activeComponentPath.length > 0) {
-        const { dx, dy } = getAccumulatedOffset(stateComponents, activeComponentPath);
-        hitVt = { ...vt, originX: vt.originX + dx * vt.scale, originY: vt.originY - dy * vt.scale };
-      }
+      const hitVt = adjustVtForComponent(vt, isComposite, activeComponentPath, stateComponents);
 
       // Node tool: select and drag points and segments
       if (toolMode === 'node') {
@@ -933,10 +942,10 @@ export function useEditorInteraction({
             });
           }
         }
-        redraw();
+        redrawRef.current();
       }
     },
-    [stateRef, dispatch, getEventPos, setPendingOffCurve, redraw]
+    [stateRef, dispatch, getEventPos, setPendingOffCurve]
   );
 
   const onPointerMove = useCallback(
@@ -968,15 +977,7 @@ export function useEditorInteraction({
         return;
       }
 
-      let mvHitVt = vt;
-      if (mvComposite && mvActivePath.length > 0) {
-        const { dx, dy } = getAccumulatedOffset(mvComponents, mvActivePath);
-        mvHitVt = {
-          ...vt,
-          originX: vt.originX + dx * vt.scale,
-          originY: vt.originY - dy * vt.scale,
-        };
-      }
+      const mvHitVt = adjustVtForComponent(vt, mvComposite, mvActivePath, mvComponents);
 
       if (!dragRef.current) {
         if (toolMode === 'node') {
@@ -993,8 +994,14 @@ export function useEditorInteraction({
                 redraw();
               }
               if (handle !== null) {
-                setHoveredPointId(null);
-                setHoveredSegmentId(null);
+                if (null !== prevHoverRef.current.pointId) {
+                  setHoveredPointId(null);
+                  prevHoverRef.current.pointId = null;
+                }
+                if (null !== prevHoverRef.current.segmentId) {
+                  setHoveredSegmentId(null);
+                  prevHoverRef.current.segmentId = null;
+                }
                 return;
               }
             }
@@ -1013,20 +1020,38 @@ export function useEditorInteraction({
               hoveredHandleRef.current = hitHandle;
               redraw();
             }
-            setHoveredPointId(null);
-            setHoveredSegmentId(null);
+            if (null !== prevHoverRef.current.pointId) {
+              setHoveredPointId(null);
+              prevHoverRef.current.pointId = null;
+            }
+            if (null !== prevHoverRef.current.segmentId) {
+              setHoveredSegmentId(null);
+              prevHoverRef.current.segmentId = null;
+            }
           } else {
             hoveredHandleRef.current = null;
             // Hover detection for points and segments
             const hitPointId = hitTest(x, y, paths, mvHitVt);
             const hitSegmentId = hitPointId ? null : hitTestSegment(x, y, paths, mvHitVt);
-            setHoveredPointId(hitPointId);
-            setHoveredSegmentId(hitSegmentId);
+            if (hitPointId !== prevHoverRef.current.pointId) {
+              setHoveredPointId(hitPointId);
+              prevHoverRef.current.pointId = hitPointId;
+            }
+            if (hitSegmentId !== prevHoverRef.current.segmentId) {
+              setHoveredSegmentId(hitSegmentId);
+              prevHoverRef.current.segmentId = hitSegmentId;
+            }
           }
         } else {
           hoveredHandleRef.current = null;
-          setHoveredPointId(null);
-          setHoveredSegmentId(null);
+          if (null !== prevHoverRef.current.pointId) {
+            setHoveredPointId(null);
+            prevHoverRef.current.pointId = null;
+          }
+          if (null !== prevHoverRef.current.segmentId) {
+            setHoveredSegmentId(null);
+            prevHoverRef.current.segmentId = null;
+          }
         }
         if (toolMode === 'draw' || toolMode === 'select') redraw();
         return;
@@ -1038,7 +1063,6 @@ export function useEditorInteraction({
         const fp = toFontSpace(x, y, vt);
         // Gate movement behind a minimum drag distance to prevent jitter from
         // accidentally shifting points during Ctrl+Click or any quick click.
-        const DRAG_THRESHOLD_PX = 4;
         const screenDx = x - drag.rbStartX;
         const screenDy = y - drag.rbStartY;
         if (
@@ -1108,16 +1132,33 @@ export function useEditorInteraction({
         const sdx = x - drag.rbStartX;
         const sdy = y - drag.rbStartY;
         const init = drag.imageInitial;
+        const HANDLE_SCALE_DIR: Partial<
+          Record<NonNullable<TransformHandle>, { x: number; y: number }>
+        > = {
+          lm: { x: -1, y: 0 },
+          tl: { x: -1, y: -1 },
+          bl: { x: -1, y: 1 },
+          rm: { x: 1, y: 0 },
+          tr: { x: 1, y: -1 },
+          br: { x: 1, y: 1 },
+          tm: { x: 0, y: -1 },
+          bm: { x: 0, y: 1 },
+        };
+        const dir = handle ? HANDLE_SCALE_DIR[handle] : undefined;
         let newScaleX = init.scaleX;
         let newScaleY = init.scaleY;
-        if (handle === 'lm' || handle === 'tl' || handle === 'bl')
-          newScaleX = drag.imageHalfW > 0 ? init.scaleX * (1 - sdx / drag.imageHalfW) : init.scaleX;
-        if (handle === 'rm' || handle === 'tr' || handle === 'br')
-          newScaleX = drag.imageHalfW > 0 ? init.scaleX * (1 + sdx / drag.imageHalfW) : init.scaleX;
-        if (handle === 'tm' || handle === 'tl' || handle === 'tr')
-          newScaleY = drag.imageHalfH > 0 ? init.scaleY * (1 - sdy / drag.imageHalfH) : init.scaleY;
-        if (handle === 'bm' || handle === 'bl' || handle === 'br')
-          newScaleY = drag.imageHalfH > 0 ? init.scaleY * (1 + sdy / drag.imageHalfH) : init.scaleY;
+        if (dir) {
+          if (dir.x !== 0)
+            newScaleX =
+              drag.imageHalfW > 0
+                ? init.scaleX * (1 + (dir.x * sdx) / drag.imageHalfW)
+                : init.scaleX;
+          if (dir.y !== 0)
+            newScaleY =
+              drag.imageHalfH > 0
+                ? init.scaleY * (1 + (dir.y * sdy) / drag.imageHalfH)
+                : init.scaleY;
+        }
         dispatch({
           type: 'UPDATE_IMAGE_LAYER',
           layerId: drag.imageLayerId,
@@ -1279,7 +1320,6 @@ export function useEditorInteraction({
         // Only act when there was meaningful drag movement
         const screenDx = x - drag.rbStartX;
         const screenDy = y - drag.rbStartY;
-        const DRAG_THRESHOLD_PX = 4;
         if (Math.sqrt(screenDx * screenDx + screenDy * screenDy) < DRAG_THRESHOLD_PX) {
           redraw();
           return;

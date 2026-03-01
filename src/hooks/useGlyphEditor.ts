@@ -52,24 +52,6 @@ function applyPointDelta(
   }));
 }
 
-function getPoint(paths: EditablePath[], id: string): EditablePoint | null {
-  for (const path of paths) {
-    for (const cmd of path.commands) {
-      if ((cmd.kind === 'M' || cmd.kind === 'L') && cmd.point.id === id) return cmd.point;
-      if (cmd.kind === 'Q') {
-        if (cmd.ctrl.id === id) return cmd.ctrl;
-        if (cmd.point.id === id) return cmd.point;
-      }
-      if (cmd.kind === 'C') {
-        if (cmd.ctrl1.id === id) return cmd.ctrl1;
-        if (cmd.ctrl2.id === id) return cmd.ctrl2;
-        if (cmd.point.id === id) return cmd.point;
-      }
-    }
-  }
-  return null;
-}
-
 /** Returns the on-curve endpoint of a path command, or null for Z. */
 function cmdEndpoint(cmd: PathCommand): EditablePoint | null {
   if (cmd.kind === 'M' || cmd.kind === 'L') return cmd.point;
@@ -240,7 +222,6 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         redoStack: [],
         isDirty: false,
         isComposite,
-        componentGlyphIds: action.componentGlyphIds ?? [],
         components,
         activeComponentPath: [],
       };
@@ -702,7 +683,35 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       const prev = clonePaths(state.paths);
       const newPaths = state.paths.map((p) => {
         if (p.id !== action.pathId) return p;
-        return p;
+        const cmds = p.commands.filter((c) => c.kind !== 'Z');
+        if (cmds.length === 0) return p;
+        const reversed: PathCommand[] = [];
+        reversed.push(cmds[0]);
+        for (let i = cmds.length - 1; i >= 1; i--) {
+          const cmd = cmds[i];
+          const prevCmd = cmds[i - 1];
+          if (cmd.kind === 'L') {
+            reversed.push({ kind: 'L' as const, point: prevCmd.point });
+          } else if (cmd.kind === 'Q') {
+            reversed.push({
+              kind: 'Q' as const,
+              ctrl: cmd.point,
+              point: prevCmd.point,
+            });
+          } else if (cmd.kind === 'C') {
+            reversed.push({
+              kind: 'C' as const,
+              ctrl1: cmd.point,
+              ctrl2: cmd.ctrl1,
+              point: prevCmd.point,
+            });
+          }
+        }
+        const lastCmd = cmds[cmds.length - 1];
+        if (lastCmd.kind !== 'M') {
+          reversed.push({ kind: 'Z' as const });
+        }
+        return { ...p, commands: reversed };
       });
       return {
         ...state,
@@ -1462,7 +1471,6 @@ export function makeInitialState(vt: ViewTransform): EditorState {
     previewInverted: false,
     previewHeight: 100,
     isComposite: false,
-    componentGlyphIds: [],
     components: [],
     activeComponentPath: [],
   };
@@ -1472,4 +1480,4 @@ export function useGlyphEditor(initialVt: ViewTransform) {
   return useReducer(reducer, initialVt, makeInitialState);
 }
 
-export { getPoint, reducer };
+export { reducer };

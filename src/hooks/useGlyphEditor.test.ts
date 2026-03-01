@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { makeInitialState, getPoint, computeClipboardData, reducer } from './useGlyphEditor';
+import { makeInitialState, computeClipboardData, reducer } from './useGlyphEditor';
+import { getPoint } from '@/lib/svgPathParser';
 import type { EditablePath, Selection, EditorAction } from '@/lib/editorTypes';
 
 describe('makeInitialState', () => {
@@ -30,7 +31,6 @@ describe('makeInitialState', () => {
     expect(state.previewInverted).toBe(false);
     expect(state.previewHeight).toBe(100);
     expect(state.isComposite).toBe(false);
-    expect(state.componentGlyphIds).toEqual([]);
   });
 
   it('uses provided view transform', () => {

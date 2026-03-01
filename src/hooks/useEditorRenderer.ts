@@ -1243,17 +1243,24 @@ export function useEditorRenderer(
 ) {
   const pendingRef = useRef(false);
   const surfaceIdRef = useRef(0);
+  const rafIdRef = useRef<number | null>(null);
 
   const redraw = useCallback(() => {
     if (!ck || !surfaceRef.current || !surfaceValidRef.current) return;
     if (pendingRef.current) return;
+
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+    }
+
     pendingRef.current = true;
 
     const currentSurfaceId = surfaceIdRef.current;
     // Use browser RAF instead of surface.requestAnimationFrame to avoid
     // "Cannot pass deleted object as a pointer of type Surface" errors that
     // occur when the CanvasKit surface is deleted while a native RAF is pending.
-    requestAnimationFrame(() => {
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
       if (
         !surfaceValidRef.current ||
         surfaceIdRef.current !== currentSurfaceId ||

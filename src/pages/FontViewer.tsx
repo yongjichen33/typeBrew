@@ -109,7 +109,7 @@ export function FontViewer() {
   }, [fonts, sortAscending]);
 
   // Get all font file paths for expand/collapse all
-  const allFontPaths = useMemo(() => fonts.map((f) => f.file_path), [fonts]);
+  const allFontPaths = fonts.map((f) => f.file_path);
 
   // Derive allExpanded state from actual expandedIds
   const allExpanded = useMemo(
