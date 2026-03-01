@@ -82,7 +82,6 @@ pub struct GlyphOutlineData {
     pub glyph_name: Option<String>,
     pub contours: Vec<Contour>,
     pub advance_width: f32,
-    /// Left side bearing from the hmtx table (font-space units).
     pub lsb: f32,
     pub bounds: Option<GlyphBounds>,
     pub is_composite: bool,
@@ -227,6 +226,7 @@ impl OutlineDataPen {
         self.y_max = self.y_max.max(y);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn into_outline_data(
         self,
         glyph_id: u32,
