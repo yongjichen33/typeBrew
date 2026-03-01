@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEditorRenderer } from '@/hooks/useEditorRenderer';
 import { useEditorInteraction } from '@/hooks/useEditorInteraction';
 import type {
@@ -26,7 +26,7 @@ interface GlyphEditorCanvasProps {
   layers: Layer[];
   activeLayerId: string;
   dispatch: (action: unknown) => void;
-  stateRef: React.MutableRefObject<{
+  stateRef: React.RefObject<{
     paths: EditablePath[];
     selection: Selection;
     toolMode: string;
@@ -219,8 +219,8 @@ export function GlyphEditorCanvas({
             redraw();
           }
         })
-        .catch(() => {
-          /* ignore decode errors */
+        .catch((err: unknown) => {
+          console.warn(`Failed to decode image layer ${layer.id}:`, err);
         });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -344,47 +344,48 @@ export function GlyphEditorCanvas({
       imageCacheRef,
     });
 
-  const coordLabels = showCoordinates
-    ? paths.flatMap((path) =>
-        path.commands.flatMap((cmd) => {
-          const labels: Array<{
-            id: string;
-            label: string;
-            sx: number;
-            sy: number;
-            color: string;
-          }> = [];
-          const { originX, originY, scale } = viewTransform;
+  const coordLabels = useMemo(() => {
+    if (!showCoordinates) return [];
+    return paths.flatMap((path) =>
+      path.commands.flatMap((cmd) => {
+        const labels: Array<{
+          id: string;
+          label: string;
+          sx: number;
+          sy: number;
+          color: string;
+        }> = [];
+        const { originX, originY, scale } = viewTransform;
 
-          const addLabel = (pt: { id: string; x: number; y: number }, color: string) => {
-            const sx = originX + pt.x * scale;
-            const sy = originY - pt.y * scale;
-            labels.push({
-              id: pt.id,
-              label: `${Math.round(pt.x)}, ${Math.round(pt.y)}`,
-              sx,
-              sy,
-              color,
-            });
-          };
+        const addLabel = (pt: { id: string; x: number; y: number }, color: string) => {
+          const sx = originX + pt.x * scale;
+          const sy = originY - pt.y * scale;
+          labels.push({
+            id: pt.id,
+            label: `${Math.round(pt.x)}, ${Math.round(pt.y)}`,
+            sx,
+            sy,
+            color,
+          });
+        };
 
-          if (cmd.kind === 'M' || cmd.kind === 'L') {
-            addLabel(cmd.point, 'rgb(30,30,30)');
-          } else if (cmd.kind === 'Q') {
-            addLabel(cmd.ctrl, 'rgb(65,105,225)');
-            addLabel(cmd.point, 'rgb(30,30,30)');
-          } else if (cmd.kind === 'C') {
-            addLabel(cmd.ctrl1, 'rgb(65,105,225)');
-            addLabel(cmd.ctrl2, 'rgb(65,105,225)');
-            addLabel(cmd.point, 'rgb(30,30,30)');
-          }
-          return labels;
-        })
-      )
-    : [];
+        if (cmd.kind === 'M' || cmd.kind === 'L') {
+          addLabel(cmd.point, 'rgb(30,30,30)');
+        } else if (cmd.kind === 'Q') {
+          addLabel(cmd.ctrl, 'rgb(65,105,225)');
+          addLabel(cmd.point, 'rgb(30,30,30)');
+        } else if (cmd.kind === 'C') {
+          addLabel(cmd.ctrl1, 'rgb(65,105,225)');
+          addLabel(cmd.ctrl2, 'rgb(65,105,225)');
+          addLabel(cmd.point, 'rgb(30,30,30)');
+        }
+        return labels;
+      })
+    );
+  }, [showCoordinates, paths, viewTransform]);
 
   // Metric line labels (HTML overlay, since CanvasKit has no bundled fonts)
-  const metricLabels = (() => {
+  const metricLabels = useMemo(() => {
     const labels: Array<{
       key: string;
       label: string;
@@ -408,7 +409,7 @@ export function GlyphEditorCanvas({
     if (metrics.capHeight) addH(metrics.capHeight, 'Cap height', 'rgb(120,120,120)');
 
     return labels;
-  })();
+  }, [viewTransform, metrics, canvasSize.h]);
 
   return (
     <div ref={containerRef} className="relative min-h-0 w-full flex-1 overflow-hidden bg-white">

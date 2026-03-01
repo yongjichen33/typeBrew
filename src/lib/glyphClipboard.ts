@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState, useEffect } from 'react';
 import type { ClipboardData } from './editorTypes';
 
 let globalClipboard: ClipboardData = { points: [], segments: [] };
@@ -32,9 +32,9 @@ export function subscribe(fn: () => void): () => void {
 }
 
 export function useGlyphClipboard(): ClipboardData {
-  const [clipboard, setClipboardState] = React.useState(getClipboard);
+  const [clipboard, setClipboardState] = useState(getClipboard);
 
-  React.useEffect(() => {
+  useEffect(() => {
     return subscribe(() => setClipboardState(getClipboard()));
   }, []);
 
@@ -56,9 +56,9 @@ export function subscribeFocus(fn: (id: number | null) => void): () => void {
 }
 
 export function useFocusedGlyphId(): number | null {
-  const [id, setId] = React.useState(getFocusedGlyphId);
+  const [id, setId] = useState(getFocusedGlyphId);
 
-  React.useEffect(() => {
+  useEffect(() => {
     return subscribeFocus(setId);
   }, []);
 

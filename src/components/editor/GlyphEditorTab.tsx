@@ -55,6 +55,9 @@ function computeInitialVt(metrics: FontMetrics, canvasW: number, canvasH: number
   };
 }
 
+// Module-level constant — avoids allocating a new object on every render.
+const DEFAULT_VT: ViewTransform = { scale: 0.3, originX: 100, originY: 400 };
+
 interface Props {
   tabState: GlyphEditorTabState;
 }
@@ -79,8 +82,7 @@ export function GlyphEditorTab({ tabState }: Props) {
   // Initial metrics from glyph data; ascender/descender fetched from hhea
   const [metrics, setMetrics] = useState<FontMetrics | null>(null);
 
-  const defaultVt: ViewTransform = { scale: 0.3, originX: 100, originY: 400 };
-  const [state, dispatch] = useGlyphEditor(defaultVt);
+  const [state, dispatch] = useGlyphEditor(DEFAULT_VT);
 
   // Keep a stable ref for interaction hooks
   const stateRef = useRef({
