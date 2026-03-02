@@ -2022,14 +2022,17 @@ pub fn check_font_hinting(file_path: &str, cache: &FontCache) -> Result<HintingI
         .get(file_path)
         .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
     if bytes.is_empty() {
-        return Ok(HintingInfo { is_hinted: false, hint_format: None });
+        return Ok(HintingInfo {
+            is_hinted: false,
+            hint_format: None,
+        });
     }
     let font = FontRef::new(&bytes).map_err(|e| format!("{:?}", e))?;
 
     // TrueType: any of fpgm / prep / cvt_ exists and is non-empty
     let has_tt = [b"fpgm", b"prep", b"cvt "].iter().any(|tag| {
         use skrifa::raw::types::Tag;
-        font.table_data(Tag::new(*tag))
+        font.table_data(Tag::new(tag))
             .map(|d| !d.as_bytes().is_empty())
             .unwrap_or(false)
     });
@@ -2051,7 +2054,10 @@ pub fn check_font_hinting(file_path: &str, cache: &FontCache) -> Result<HintingI
         }
     }
 
-    Ok(HintingInfo { is_hinted: false, hint_format: None })
+    Ok(HintingInfo {
+        is_hinted: false,
+        hint_format: None,
+    })
 }
 
 fn draw_hinted_glyph_svgs(

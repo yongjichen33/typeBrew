@@ -13,7 +13,6 @@ import {
   Eye,
   EyeOff,
   Contrast,
-  Ruler,
   ScanEye,
 } from 'lucide-react';
 import type { ToolMode } from '@/lib/editorTypes';
