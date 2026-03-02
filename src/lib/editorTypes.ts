@@ -170,6 +170,12 @@ export interface EditorState {
   components: ComponentInfo[];
   /** Path of indices through the component tree to the active component. [] = none active. */
   activeComponentPath: number[];
+  /** True if the font contains hinting data (TrueType or CFF). */
+  isHinted: boolean;
+  /** The hinting format detected: 'truetype', 'cff', or null. */
+  hintFormat: 'truetype' | 'cff' | null;
+  /** True when the hinting preview panel is shown. */
+  showHinting: boolean;
 }
 
 // ---- Actions ----
@@ -270,7 +276,9 @@ export type EditorAction =
       type: 'CONNECT_PATH_ENDPOINTS';
       sourcePathId: string;
       targetPointId: string;
-    };
+    }
+  | { type: 'SET_HINTING_INFO'; isHinted: boolean; hintFormat: 'truetype' | 'cff' | null }
+  | { type: 'SET_SHOW_HINTING'; showHinting: boolean };
 
 // ---- Context value ----
 

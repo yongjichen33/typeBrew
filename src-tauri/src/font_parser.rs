@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use skrifa::outline::{DrawSettings, OutlinePen};
+use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, OutlinePen, Target};
 use skrifa::raw::{FontRef as RawFontRef, TableProvider};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::collections::HashMap;
@@ -56,6 +56,12 @@ pub struct GlyphOutline {
     pub svg_path: String,
     pub advance_width: f32,
     pub bounds: Option<GlyphBounds>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct HintingInfo {
+    pub is_hinted: bool,
+    pub hint_format: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -2009,6 +2015,92 @@ pub fn save_glyph_outline(
     cache.outlines.lock().unwrap().remove(file_path);
 
     Ok(())
+}
+
+pub fn check_font_hinting(file_path: &str, cache: &FontCache) -> Result<HintingInfo, String> {
+    let bytes = cache
+        .get(file_path)
+        .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
+    if bytes.is_empty() {
+        return Ok(HintingInfo { is_hinted: false, hint_format: None });
+    }
+    let font = FontRef::new(&bytes).map_err(|e| format!("{:?}", e))?;
+
+    // TrueType: any of fpgm / prep / cvt_ exists and is non-empty
+    let has_tt = [b"fpgm", b"prep", b"cvt "].iter().any(|tag| {
+        use skrifa::raw::types::Tag;
+        font.table_data(Tag::new(*tag))
+            .map(|d| !d.as_bytes().is_empty())
+            .unwrap_or(false)
+    });
+    if has_tt {
+        return Ok(HintingInfo {
+            is_hinted: true,
+            hint_format: Some("truetype".into()),
+        });
+    }
+
+    // CFF: presence of "CFF " table (PostScript fonts embed hint data in Private Dict)
+    {
+        use skrifa::raw::types::Tag;
+        if font.table_data(Tag::new(b"CFF ")).is_some() {
+            return Ok(HintingInfo {
+                is_hinted: true,
+                hint_format: Some("cff".into()),
+            });
+        }
+    }
+
+    Ok(HintingInfo { is_hinted: false, hint_format: None })
+}
+
+fn draw_hinted_glyph_svgs(
+    bytes: &[u8],
+    glyph_id: u32,
+    px_sizes: &[f32],
+) -> Result<Vec<String>, String> {
+    let font = FontRef::new(bytes).map_err(|e| format!("{:?}", e))?;
+    let outlines = font.outline_glyphs();
+    let glyph = outlines
+        .get(GlyphId::from(glyph_id))
+        .ok_or_else(|| "Glyph not found".to_string())?;
+
+    let options = HintingOptions {
+        engine: Engine::Interpreter,
+        target: Target::Mono,
+    };
+
+    let mut results = Vec::new();
+    for &ppem in px_sizes {
+        let instance = HintingInstance::new(
+            &outlines,
+            skrifa::instance::Size::new(ppem),
+            skrifa::instance::LocationRef::default(),
+            options.clone(),
+        )
+        .map_err(|e| format!("Hint init {}px: {:?}", ppem, e))?;
+
+        let settings = DrawSettings::hinted(&instance, false);
+        let mut pen = SvgPathPen::new();
+        let _ = glyph.draw(settings, &mut pen);
+        results.push(pen.into_path());
+    }
+    Ok(results)
+}
+
+pub fn get_hinted_glyph_outlines(
+    file_path: &str,
+    glyph_id: u32,
+    px_sizes: Vec<f32>,
+    cache: &FontCache,
+) -> Result<Vec<String>, String> {
+    let bytes = cache
+        .get(file_path)
+        .unwrap_or_else(|| fs::read(file_path).unwrap_or_default());
+    if bytes.is_empty() {
+        return Err(format!("Failed to read font file: {}", file_path));
+    }
+    draw_hinted_glyph_svgs(&bytes, glyph_id, &px_sizes)
 }
 
 #[cfg(test)]

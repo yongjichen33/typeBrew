@@ -1469,6 +1469,12 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         ),
       };
 
+    case 'SET_HINTING_INFO':
+      return { ...state, isHinted: action.isHinted, hintFormat: action.hintFormat };
+
+    case 'SET_SHOW_HINTING':
+      return { ...state, showHinting: action.showHinting };
+
     default:
       return state;
   }
@@ -1499,6 +1505,9 @@ export function makeInitialState(vt: ViewTransform): EditorState {
     isComposite: false,
     components: [],
     activeComponentPath: [],
+    isHinted: false,
+    hintFormat: null,
+    showHinting: false,
   };
 }
 

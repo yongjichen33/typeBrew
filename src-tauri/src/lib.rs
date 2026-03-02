@@ -99,6 +99,24 @@ fn save_glyph_outline(
 }
 
 #[tauri::command]
+fn check_font_hinting(
+    file_path: String,
+    cache: State<FontCache>,
+) -> Result<font_parser::HintingInfo, String> {
+    font_parser::check_font_hinting(&file_path, &cache)
+}
+
+#[tauri::command]
+fn get_hinted_glyph_outlines(
+    file_path: String,
+    glyph_id: u32,
+    px_sizes: Vec<f32>,
+    cache: State<FontCache>,
+) -> Result<Vec<String>, String> {
+    font_parser::get_hinted_glyph_outlines(&file_path, glyph_id, px_sizes, &cache)
+}
+
+#[tauri::command]
 fn update_composite_offsets(
     file_path: String,
     composite_glyph_id: u32,
@@ -151,7 +169,9 @@ pub fn run() {
             update_maxp_table,
             update_name_table,
             save_glyph_outline,
-            update_composite_offsets
+            update_composite_offsets,
+            check_font_hinting,
+            get_hinted_glyph_outlines
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

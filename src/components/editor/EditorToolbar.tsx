@@ -13,6 +13,8 @@ import {
   Eye,
   EyeOff,
   Contrast,
+  Ruler,
+  ScanEye,
 } from 'lucide-react';
 import type { ToolMode } from '@/lib/editorTypes';
 
@@ -37,6 +39,9 @@ interface EditorToolbarProps {
   previewInverted: boolean;
   onSetPreviewInverted: (inverted: boolean) => void;
   isLockedMode?: boolean;
+  isHinted: boolean;
+  showHinting: boolean;
+  onSetShowHinting: (show: boolean) => void;
 }
 
 function ToolButton({
@@ -99,6 +104,9 @@ export function EditorToolbar({
   previewInverted,
   onSetPreviewInverted,
   isLockedMode = false,
+  isHinted,
+  showHinting,
+  onSetShowHinting,
 }: EditorToolbarProps) {
   return (
     <div className="bg-muted/30 flex shrink-0 items-center gap-2 border-b px-3 py-1">
@@ -160,6 +168,14 @@ export function EditorToolbar({
             label={previewInverted ? 'White on black' : 'Black on white'}
             active={previewInverted}
             onClick={() => onSetPreviewInverted(!previewInverted)}
+          />
+        )}
+        {isHinted && (
+          <ToolButton
+            icon={<ScanEye size={15} />}
+            label={showHinting ? 'Hide hinting preview' : 'Show hinting preview'}
+            active={showHinting}
+            onClick={() => onSetShowHinting(!showHinting)}
           />
         )}
       </ToolGroup>

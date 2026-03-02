@@ -22,6 +22,7 @@ import { EditorToolbar } from './EditorToolbar';
 import { GlyphEditorCanvas } from './GlyphEditorCanvas';
 import { InspectorPanel } from './InspectorPanel';
 import { GlyphPreview } from './GlyphPreview';
+import { HintingPreviewPanel } from './HintingPreviewPanel';
 import type { GlyphEditorTabState, FontMetrics, ViewTransform } from '@/lib/editorTypes';
 
 export interface TransformFeedback {
@@ -185,6 +186,17 @@ export function GlyphEditorTab({ tabState }: Props) {
       isComposite: outlineData.is_composite,
       components,
     });
+
+    // Fetch hinting info
+    invoke<{ is_hinted: boolean; hint_format: string | null }>('check_font_hinting', { filePath })
+      .then((info) =>
+        dispatch({
+          type: 'SET_HINTING_INFO',
+          isHinted: info.is_hinted,
+          hintFormat: info.hint_format as 'truetype' | 'cff' | null,
+        })
+      )
+      .catch(() => {});
 
     // Fetch hhea for ascender/descender and OS/2 for xHeight/capHeight
     Promise.all([
@@ -417,6 +429,9 @@ export function GlyphEditorTab({ tabState }: Props) {
               dispatch({ type: 'SET_PREVIEW_INVERTED', previewInverted })
             }
             isLockedMode={isLockedMode}
+            isHinted={state.isHinted}
+            showHinting={state.showHinting}
+            onSetShowHinting={(showHinting) => dispatch({ type: 'SET_SHOW_HINTING', showHinting })}
           />
         );
       })()}
@@ -476,6 +491,9 @@ export function GlyphEditorTab({ tabState }: Props) {
                 </>
               )}
             </div>
+            {state.showHinting && (
+              <HintingPreviewPanel filePath={filePath} glyphId={glyphId} metrics={metrics} />
+            )}
             <InspectorPanel
               selection={state.selection}
               paths={state.paths}
