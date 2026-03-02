@@ -597,7 +597,7 @@ export function InspectorPanel({
   );
 
   return (
-    <div className="bg-muted/20 w-56 shrink-0 overflow-y-auto border-l p-3">
+    <div className="bg-muted/20 w-44 shrink-0 overflow-y-auto border-l p-3 md:w-52 lg:w-56">
       <h3 className="mb-3 text-sm font-medium">Inspector</h3>
 
       {/* Hidden file input for image upload */}
